@@ -275,9 +275,16 @@ async function main() {
   console.log(`Buyer ID:  ${truncate(buyerId, 20)}`);
   console.log(`Seller ID: ${truncate(sellerId, 20)}`);
 
-  // Create receipt store
+  // Create receipt store with demo-mode-specific file
+  function getReceiptsFilePath(demoMode: string | undefined): string {
+    const baseName = demoMode 
+      ? `demo_receipts_${demoMode === "price-too-high" ? "price_too_high" : demoMode}.jsonl`
+      : "demo_receipts.jsonl";
+    return path.join(process.cwd(), baseName);
+  }
+
   const store = new ReceiptStore({
-    jsonlPath: path.join(process.cwd(), "demo_receipts.jsonl"),
+    jsonlPath: getReceiptsFilePath(demoMode),
   });
   store.loadFromJsonl();
 
