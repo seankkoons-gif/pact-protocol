@@ -10,6 +10,7 @@ import { computeCommitHash } from "../exchange/commit";
 import { StreamingExchange } from "../exchange/streaming";
 import { createReceipt } from "../exchange/receipt";
 import { priceStats, agentScore } from "../reputation/compute";
+import { agentScoreV2, type AgentScoreV2Context } from "../reputation/scoreV2";
 import { routeExecution } from "../router/route";
 import type { ReceiptStore } from "../reputation/store";
 import type { ProviderDirectory, ProviderRecord } from "../directory/types";
@@ -303,7 +304,12 @@ export async function acquire(params: {
       credentials.push({ type: "verified", issuer });
     });
 
-    const sellerReputation = store ? (() => {
+    // Track credential verification status for V2 scoring
+    let credentialPresent = false;
+    let credentialClaims: AgentScoreV2Context["credentialClaims"] = undefined;
+
+    // Compute initial reputation for identity check (V1, will be recomputed later for utility if V2 enabled)
+    let sellerReputation = store ? (() => {
       const score = agentScore(providerPubkey, store.list({ agentId: providerPubkey }));
       return score.reputation;
     })() : 0.5;
@@ -424,6 +430,17 @@ export async function acquire(params: {
             } : undefined
           );
           continue;
+        }
+        
+        // Credential verified successfully - mark for V2 scoring
+        credentialPresent = true;
+        const matchedCapability = capabilities.find((cap: any) => cap.intentType === input.intentType);
+        if (matchedCapability) {
+          credentialClaims = {
+            credentials: matchedCapability.credentials || [],
+            region: matchedCapability.region || provider.region,
+            modes: matchedCapability.modes || [],
+          };
         }
         
         // Credential verified successfully (no decision log entry for success, only failures)
@@ -614,6 +631,17 @@ export async function acquire(params: {
     // Provider passed all checks - count as eligible
     if (explain) {
       explain.providers_eligible = (explain.providers_eligible || 0) + 1;
+    }
+
+    // Recompute reputation for utility calculation (V2 if enabled and credential verified, otherwise keep V1)
+    if (store && input.useReputationV2 && credentialPresent) {
+      // Use V2 scoring with credential context for utility calculation
+      const scoreV2 = agentScoreV2(providerPubkey, store.list({ agentId: providerPubkey }), {
+        credentialPresent: true,
+        credentialClaims,
+        intentType: input.intentType,
+      });
+      sellerReputation = scoreV2.reputation;
     }
 
     // Compute utility score (lower is better)

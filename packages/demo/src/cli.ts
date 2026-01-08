@@ -528,6 +528,7 @@ async function main() {
       modeOverride: overrideMode,
       buyerStopAfterTicks: buyerStopAfter,
       explain: explainLevel,
+      useReputationV2: true, // Enable credential-aware, volume-weighted reputation (v1.5.3+)
     },
     buyerKeyPair,
     sellerKeyPair,

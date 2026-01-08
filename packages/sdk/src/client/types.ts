@@ -10,6 +10,8 @@ export type AcquireInput = {
   buyerStopAfterTicks?: number; // only used in streaming tests
   // Optional explain level
   explain?: "none" | "coarse" | "full";
+  // Optional reputation scoring version (v1.5.3+)
+  useReputationV2?: boolean; // Use credential-aware, volume-weighted reputation scoring
   // Optional identity/verification (v1: for policy enforcement)
   identity?: {
     buyer?: {

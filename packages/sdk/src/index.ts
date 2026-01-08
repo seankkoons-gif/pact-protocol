@@ -29,7 +29,9 @@ export * from "./exchange/streaming";
 // Reputation
 export { ReceiptStore } from "./reputation/store";
 export { receiptValue, priceStats, referencePriceP50, agentScore } from "./reputation/compute";
+export { agentScoreV2 } from "./reputation/scoreV2";
 export type { AgentScore, PriceStats } from "./reputation/types";
+export type { AgentScoreV2, AgentScoreV2Context } from "./reputation/scoreV2";
 
 // Router
 export * from "./router/index";
