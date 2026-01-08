@@ -17,6 +17,16 @@ function createDefaultPolicy(overrides?: Partial<PactPolicy>): PactPolicy {
     mode: "balanced",
     created_at_ms: now,
     updated_at_ms: now,
+    base: {
+      kya: {
+        trust: {
+          require_trusted_issuer: false,
+          trusted_issuers: ["self"],
+          issuer_weights: { "self": 0.2 },
+          min_trust_score: 0.0,
+        },
+      },
+    },
     time: {
       max_clock_skew_ms: 5000,
       require_expires_at: false,

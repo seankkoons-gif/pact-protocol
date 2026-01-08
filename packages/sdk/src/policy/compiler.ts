@@ -8,6 +8,7 @@ export function compilePolicy(policy: PactPolicy): CompiledPolicy {
   const compiled: CompiledPolicy = {
     base: policy,
     perIntent: {},
+    trustConfig: policy.base.kya.trust,
   };
 
   // Compute per-intent constraints by merging counterparty.intent_specific overrides

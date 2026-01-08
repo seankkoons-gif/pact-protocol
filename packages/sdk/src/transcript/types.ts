@@ -43,6 +43,8 @@ export type TranscriptV1 = {
         modes?: string[];
       }>;
     };
+    trust_score?: number;
+    trust_tier?: "untrusted" | "low" | "trusted";
   }>;
   
   // Quote fetching results per provider

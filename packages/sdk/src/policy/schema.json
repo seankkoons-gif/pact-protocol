@@ -11,6 +11,7 @@
       "mode",
       "created_at_ms",
       "updated_at_ms",
+      "base",
       "time",
       "admission",
       "negotiation",
@@ -32,6 +33,44 @@
       },
       "created_at_ms": { "type": "integer", "minimum": 0 },
       "updated_at_ms": { "type": "integer", "minimum": 0 },
+  
+      "base": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kya"],
+        "properties": {
+          "kya": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["trust"],
+            "properties": {
+              "trust": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "require_trusted_issuer",
+                  "trusted_issuers",
+                  "issuer_weights",
+                  "min_trust_score"
+                ],
+                "properties": {
+                  "require_trusted_issuer": { "type": "boolean" },
+                  "trusted_issuers": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": { "type": "string", "minLength": 1 }
+                  },
+                  "issuer_weights": {
+                    "type": "object",
+                    "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 }
+                  },
+                  "min_trust_score": { "type": "number", "minimum": 0, "maximum": 1 }
+                }
+              }
+            }
+          }
+        }
+      },
   
       "time": {
         "type": "object",

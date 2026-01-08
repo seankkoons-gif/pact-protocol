@@ -15,6 +15,7 @@ export type AgentScoreV2Context = {
     modes?: string[];
   };
   intentType?: string;
+  trustScore?: number; // Trust score from credential trust scoring (0-1)
 };
 
 export type AgentScoreV2 = {
@@ -173,8 +174,12 @@ export function agentScoreV2(
 
   // 6. Credential bonus: small boost if credential is present and verified
   // Only apply if reputation is not already at maximum (to ensure boost is visible)
+  // Multiply by trust_score if available (from credential trust scoring)
   if (context?.credentialPresent && reputation < 1.0) {
-    reputation = Math.min(1.0, reputation * 1.05); // 5% boost, capped at 1.0
+    const trustScore = (context as any).trustScore ?? 1.0; // Default to 1.0 if not provided
+    const baseBoost = 1.05; // 5% boost
+    // Apply trust score multiplier: trust_score of 0.5 means half the boost, 1.0 means full boost
+    reputation = Math.min(1.0, reputation * (1 + (baseBoost - 1) * trustScore));
   }
 
   // 7. Clamp to [0, 1]

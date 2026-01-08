@@ -4,6 +4,19 @@ export type { SettlementMode };
 export type NegotiationPhase = "identity" | "intent" | "negotiation" | "lock" | "exchange" | "resolution";
 export type PolicyMode = "best_price" | "balanced" | "fastest" | "trusted_only";
 
+export interface KyaTrustConfig {
+  require_trusted_issuer: boolean;
+  trusted_issuers: string[];
+  issuer_weights: Record<string, number>;
+  min_trust_score: number;
+}
+
+export interface BaseConstraints {
+  kya: {
+    trust: KyaTrustConfig;
+  };
+}
+
 export interface TimeConstraints {
   max_clock_skew_ms: number;
   require_expires_at: boolean;
@@ -204,6 +217,7 @@ export interface PactPolicy {
   mode: PolicyMode;
   created_at_ms: number;
   updated_at_ms: number;
+  base: BaseConstraints;
   time: TimeConstraints;
   admission: AdmissionConstraints;
   negotiation: NegotiationConstraints;
@@ -235,6 +249,7 @@ export interface CompiledPolicy {
     min_ms: number;
     max_ms: number;
   };
+  trustConfig?: KyaTrustConfig;
 }
 
 export type FailureCode =

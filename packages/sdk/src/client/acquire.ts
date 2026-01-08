@@ -21,6 +21,7 @@ import type { SettlementMode, CommitMessage, RevealMessage } from "../protocol/t
 import type { SignedEnvelope } from "../protocol/envelope";
 import type { TranscriptV1 } from "../transcript/types";
 import { TranscriptStore } from "../transcript/store";
+import { computeCredentialTrustScore } from "../kya/trust";
 
 const round8 = (x: number) => Math.round(x * 1e8) / 1e8;
 
@@ -479,6 +480,80 @@ export async function acquire(params: {
           };
         }
         
+        // Compute trust score
+        const trustConfig = compiled.trustConfig!;
+        const trustResult = computeCredentialTrustScore({
+          credential: {
+            issuer: credentialMsg.issuer || "self",
+            claims: matchedCapability?.credentials || [],
+            region: matchedCapability?.region || provider.region,
+            modes: matchedCapability?.modes || [],
+          },
+          claims: matchedCapability?.credentials || [],
+          requestContext: {
+            region: (input.constraints as any)?.region,
+            settlementMode: chosenMode,
+          },
+          policyTrustConfig: trustConfig,
+        });
+        
+        // Check trust requirements
+        if (trustConfig.require_trusted_issuer && !trustConfig.trusted_issuers.includes(trustResult.issuer)) {
+          const code = "PROVIDER_ISSUER_UNTRUSTED" as DecisionCode;
+          failureCodes.push(code);
+          pushDecision(
+            provider,
+            "identity",
+            false,
+            code,
+            `Issuer "${trustResult.issuer}" not in trusted issuers list`,
+            explainLevel === "full" ? {
+              issuer: trustResult.issuer,
+              trusted_issuers: trustConfig.trusted_issuers,
+            } : undefined
+          );
+          continue;
+        }
+        
+        if (trustResult.trust_score < trustConfig.min_trust_score) {
+          const code = "PROVIDER_CREDENTIAL_LOW_TRUST" as DecisionCode;
+          failureCodes.push(code);
+          pushDecision(
+            provider,
+            "identity",
+            false,
+            code,
+            `Credential trust score ${trustResult.trust_score.toFixed(3)} below minimum ${trustConfig.min_trust_score}`,
+            explainLevel === "full" ? {
+              trust_score: trustResult.trust_score,
+              min_trust_score: trustConfig.min_trust_score,
+              tier: trustResult.tier,
+              reasons: trustResult.reasons,
+            } : undefined
+          );
+          continue;
+        }
+        
+        // Provider eligible - log trust score for full explain
+        if (explainLevel === "full") {
+          pushDecision(
+            provider,
+            "identity",
+            true,
+            "PROVIDER_CREDENTIAL_TRUST_SCORE",
+            `Credential trust score: ${trustResult.trust_score.toFixed(3)} (${trustResult.tier})`,
+            {
+              trust_score: trustResult.trust_score,
+              tier: trustResult.tier,
+              issuer: trustResult.issuer,
+              reasons: trustResult.reasons,
+            }
+          );
+        }
+        
+        // Store trust score in evaluation context (for selection and reputation)
+        (provider as any)._trustScore = trustResult.trust_score;
+        
         // Collect successful credential check for transcript
         if (transcriptData) {
           transcriptData.credential_checks!.push({
@@ -490,6 +565,8 @@ export async function acquire(params: {
               expires_at_ms: credentialMsg.expires_at_ms,
               capabilities: capabilities,
             },
+            trust_score: trustResult.trust_score,
+            trust_tier: trustResult.tier,
           });
         }
         
@@ -729,20 +806,27 @@ export async function acquire(params: {
     // Recompute reputation for utility calculation (V2 if enabled and credential verified, otherwise keep V1)
     if (store && input.useReputationV2 && credentialPresent) {
       // Use V2 scoring with credential context for utility calculation
+      const trustScore = (provider as any)._trustScore || 0;
       const scoreV2 = agentScoreV2(providerPubkey, store.list({ agentId: providerPubkey }), {
         credentialPresent: true,
         credentialClaims,
         intentType: input.intentType,
-      });
+        trustScore, // Pass trust score to reputation v2
+      } as any);
       sellerReputation = scoreV2.reputation;
     }
 
     // Compute utility score (lower is better)
     // utility = price + 0.00000001 * latency_ms + 0.001 * failureRate - 0.000001 * reputation
+    // Add small trust score bonus (proportional to trust_score, e.g. +0.02 * trust_score)
+    // This influences tie-breaks but doesn't dominate price/latency
+    const trustScore = (provider as any)._trustScore || 0;
+    const trustBonus = -0.02 * trustScore; // Negative because lower utility is better
     const utility = askPrice +
       0.00000001 * latencyMs +
       0.001 * 0 - // failure_rate
-      0.000001 * sellerReputation;
+      0.000001 * sellerReputation +
+      trustBonus;
 
     evaluations.push({
       provider,
