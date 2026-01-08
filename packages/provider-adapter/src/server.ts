@@ -1,22 +1,12 @@
 /**
- * Provider Server - Development/Demo Only
+ * Provider Server
  * 
- * ⚠️  DEV-ONLY IDENTITY: This server uses a deterministic keypair derived from
- *     a fixed seed string for development and testing convenience.
- * 
- *     The default seed "pact-provider-default-seed-v1" produces the same
- *     sellerId across restarts, allowing registry entries to remain valid
- *     during development.
- * 
- * ⚠️  NOT FOR PRODUCTION: This deterministic identity is NOT suitable for
- *     production use. Production providers MUST:
- *     - Use cryptographically secure random keypairs
- *     - Store keypairs securely (hardware security modules, key management systems)
- *     - Never use predictable or hardcoded seeds
- *     - Follow proper KYA (Know Your Agent) identity management practices
- * 
- *     Deterministic identities violate security best practices and should
- *     never be used in environments where identity verification matters.
+ * Identity Loading:
+ * - Supports loading keypairs from env vars (PACT_PROVIDER_SECRET_KEY_B58),
+ *   keypair files (PACT_PROVIDER_KEYPAIR_FILE), or explicit dev seed
+ *   (PACT_DEV_IDENTITY_SEED).
+ * - Falls back to ephemeral keypairs if no identity is configured.
+ * - Only prints DEV-ONLY warning when deterministic dev seed is used.
  */
 
 import http from "node:http";
@@ -73,6 +63,29 @@ export function startProviderServer(
         const sellerPubkeyB58 = sellerId; // sellerId is already pubkey b58
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ ok: true, sellerId, seller_pubkey_b58: sellerPubkeyB58 }));
+        return;
+      }
+
+      // Credential endpoint (GET)
+      if (req.method === "GET" && req.url?.startsWith("/credential")) {
+        const url = new URL(req.url, `http://${req.headers.host}`);
+        const intent = url.searchParams.get("intent") || undefined;
+        
+        // Default capabilities (can be extended via env/config)
+        const capabilities = [
+          {
+            intentType: "weather.data",
+            modes: ["hash_reveal", "streaming"] as ("hash_reveal" | "streaming")[],
+            region: "us-east",
+            credentials: ["sla_verified"],
+          },
+        ];
+        
+        const credentialReq = { intent };
+        const { handleCredential } = await import("./handlers");
+        const response = await handleCredential(credentialReq, sellerKeyPair, sellerId, nowMs, capabilities);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(response));
         return;
       }
 
@@ -150,40 +163,32 @@ export function startProviderServer(
 
 // Main entry point when run directly
 if (process.argv[1]?.includes("server.ts")) {
-  const nacl = await import("tweetnacl");
-  const bs58 = await import("bs58");
   const minimist = await import("minimist");
-  const { createHash } = await import("node:crypto");
+  const { loadProviderKeypair } = await import("./keypair");
   
   const raw = process.argv.slice(2).filter((x) => x !== "--");
   const args = minimist.default(raw, {
-    string: ["seed"],
-    alias: { p: "port", s: "seed" },
+    alias: { p: "port" },
   });
 
   const port = typeof args.port === "number" ? args.port : (args.port ? parseInt(String(args.port), 10) : 7777);
   
-  // ⚠️  DEV-ONLY: Deterministic keypair generation for development/testing
-  //     This is NOT suitable for production use. See file-level comment above.
-  const seed = args.seed || "pact-provider-default-seed-v1";
-  const seedHash = createHash("sha256").update(seed).digest(); // 32 bytes
-  
-  // Generate deterministic keypair from seed
-  // Same seed → same keypair → same sellerId every run
-  const keyPair = nacl.default.sign.keyPair.fromSeed(seedHash);
-  
-  const sellerId = bs58.default.encode(Buffer.from(keyPair.publicKey));
+  // Load keypair using precedence: env secret > keypair file > dev seed (opt-in) > ephemeral
+  const { keypair, sellerId, mode, warning } = await loadProviderKeypair();
 
   const server = startProviderServer({
     port,
-    sellerKeyPair: keyPair,
+    sellerKeyPair: keypair,
     sellerId,
   });
 
-  const url = `http://127.0.0.1:${port}`;
+  const url = server.url;
   console.log(`[Provider Server] sellerId: ${sellerId}`);
   console.log(`[Provider Server] Started on ${url}`);
-  console.log(`[Provider Server] ⚠️  WARNING: Using DEV-ONLY deterministic identity (NOT for production)`);
+  console.log(`[Provider Server] Identity mode: ${mode}`);
+  if (warning) {
+    console.log(`[Provider Server] ${warning}`);
+  }
   console.log(`[Provider Server] Press Ctrl+C to stop`);
 }
 

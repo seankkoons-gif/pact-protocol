@@ -303,6 +303,78 @@ describe("Provider Server", () => {
     expect(verifyEnvelope(data.envelope)).toBe(true);
   });
 
+  it("should handle GET /credential and return signed credential envelope", async () => {
+    const keyPair = nacl.sign.keyPair();
+    const sellerId = bs58.encode(Buffer.from(keyPair.publicKey));
+    
+    server = startProviderServer({
+      port: 0,
+      sellerKeyPair: keyPair,
+      sellerId,
+    });
+    
+    const response = await fetch(`${server.url}/credential?intent=weather.data`);
+    expect(response.ok).toBe(true);
+    const data = await response.json();
+    expect(data.envelope).toBeDefined();
+    expect(data.envelope.envelope_version).toBe("pact-envelope/1.0");
+    expect(data.envelope.signer_public_key_b58).toBe(sellerId);
+    
+    // Verify envelope signature
+    const isValid = verifyEnvelope(data.envelope);
+    expect(isValid).toBe(true);
+    
+    // Verify credential message structure
+    const credentialMsg = data.envelope.message;
+    expect(credentialMsg.protocol_version).toBe("pact/1.0");
+    expect(credentialMsg.credential_version).toBe("1");
+    expect(credentialMsg.provider_pubkey_b58).toBe(sellerId);
+    expect(credentialMsg.capabilities).toBeDefined();
+    expect(Array.isArray(credentialMsg.capabilities)).toBe(true);
+    
+    // Verify capability for weather.data
+    const weatherCapability = credentialMsg.capabilities.find((cap: any) => cap.intentType === "weather.data");
+    expect(weatherCapability).toBeDefined();
+    expect(weatherCapability.modes).toContain("hash_reveal");
+    expect(weatherCapability.modes).toContain("streaming");
+  });
+
+  it("should handle GET /credential and return signed credential envelope", async () => {
+    const keyPair = nacl.sign.keyPair();
+    const sellerId = bs58.encode(Buffer.from(keyPair.publicKey));
+    
+    server = startProviderServer({
+      port: 0,
+      sellerKeyPair: keyPair,
+      sellerId,
+    });
+    
+    const response = await fetch(`${server.url}/credential?intent=weather.data`);
+    expect(response.ok).toBe(true);
+    const data = await response.json();
+    expect(data.envelope).toBeDefined();
+    expect(data.envelope.envelope_version).toBe("pact-envelope/1.0");
+    expect(data.envelope.signer_public_key_b58).toBe(sellerId);
+    
+    // Verify envelope signature
+    const isValid = verifyEnvelope(data.envelope);
+    expect(isValid).toBe(true);
+    
+    // Verify credential message structure
+    const credentialMsg = data.envelope.message;
+    expect(credentialMsg.protocol_version).toBe("pact/1.0");
+    expect(credentialMsg.credential_version).toBe("1");
+    expect(credentialMsg.provider_pubkey_b58).toBe(sellerId);
+    expect(credentialMsg.capabilities).toBeDefined();
+    expect(Array.isArray(credentialMsg.capabilities)).toBe(true);
+    
+    // Verify capability for weather.data
+    const weatherCapability = credentialMsg.capabilities.find((cap: any) => cap.intentType === "weather.data");
+    expect(weatherCapability).toBeDefined();
+    expect(weatherCapability.modes).toContain("hash_reveal");
+    expect(weatherCapability.modes).toContain("streaming");
+  });
+
   it("should handle POST /stream/chunk with seq=1 and return deterministic chunk", async () => {
     const keyPair = nacl.sign.keyPair();
     const sellerId = bs58.encode(Buffer.from(keyPair.publicKey));

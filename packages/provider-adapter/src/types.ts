@@ -65,3 +65,11 @@ export interface StreamChunkResponse {
   envelope: SignedEnvelope; // Signed STREAM_CHUNK envelope
 }
 
+export interface ProviderCredentialRequest {
+  intent?: string; // Optional: filter by intent type
+}
+
+export interface ProviderCredentialResponse {
+  envelope: SignedEnvelope; // Signed credential envelope
+}
+

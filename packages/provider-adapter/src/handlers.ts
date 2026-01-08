@@ -7,11 +7,13 @@ import type {
   RevealResponse,
   StreamChunkRequest,
   StreamChunkResponse,
+  ProviderCredentialRequest,
+  ProviderCredentialResponse,
   SignedEnvelope,
 } from "./types";
-import type { Keypair } from "@pact/sdk";
+import type { Keypair, CredentialMessage } from "@pact/sdk";
 import { signEnvelope } from "@pact/sdk";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 function computeCommitHash(payloadB64: string, nonceB64: string): string {
   const combined = payloadB64 + nonceB64;
@@ -175,6 +177,47 @@ export async function handleStreamChunk(
   
   // Sign the STREAM_CHUNK envelope
   const envelope = await signEnvelope(chunkMsg, sellerKeyPair, sentAtMs);
+  
+  return {
+    envelope,
+  };
+}
+
+export async function handleCredential(
+  req: ProviderCredentialRequest,
+  sellerKeyPair: Keypair,
+  sellerId: string, // pubkey b58
+  nowMs: () => number,
+  capabilities: Array<{ intentType: string; modes: ("hash_reveal" | "streaming")[]; region?: string; credentials?: string[] }>
+): Promise<ProviderCredentialResponse> {
+  const issuedAtMs = nowMs();
+  const expiresAtMs = issuedAtMs + (365 * 24 * 60 * 60 * 1000); // 1 year validity
+  
+  // Generate credential ID
+  const credentialId = Buffer.from(randomBytes(16)).toString("base64");
+  const nonce = Buffer.from(randomBytes(16)).toString("base64");
+  
+  // Filter capabilities by intent if requested
+  let relevantCapabilities = capabilities;
+  if (req.intent) {
+    relevantCapabilities = capabilities.filter(cap => cap.intentType === req.intent);
+  }
+  
+  // Build credential message
+  const credentialMsg: CredentialMessage = {
+    protocol_version: "pact/1.0",
+    credential_version: "1",
+    credential_id: credentialId,
+    provider_pubkey_b58: sellerId,
+    issuer: "self", // Self-signed for v1
+    issued_at_ms: issuedAtMs,
+    expires_at_ms: expiresAtMs,
+    capabilities: relevantCapabilities,
+    nonce,
+  };
+  
+  // Sign the credential envelope
+  const envelope = await signEnvelope(credentialMsg, sellerKeyPair, issuedAtMs);
   
   return {
     envelope,
