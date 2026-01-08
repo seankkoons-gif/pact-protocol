@@ -13,6 +13,7 @@
     "check:specs": "node scripts/check-specs.mjs",
     "demo": "pnpm -C packages/demo demo",
     "provider:serve": "pnpm -C packages/provider-adapter start",
+    "provider:serve:demo": "PACT_DEV_IDENTITY_SEED=pact-provider-default-seed-v1 pnpm -C packages/provider-adapter start",
     "provider:register": "pnpm -C packages/provider-adapter registry:register",
     "provider:list": "pnpm -C packages/provider-adapter registry:list",
     "demo:buy": "pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse",

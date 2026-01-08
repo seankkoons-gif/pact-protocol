@@ -248,6 +248,57 @@ pnpm provider:list -- --intent weather.data
 
 ---
 
+## Provider Identity Modes
+
+PACT v1.5 introduces flexible provider identity management for production deployments while maintaining backward compatibility.
+
+### Identity Loading Precedence
+
+Provider identity is determined in the following order (first available wins):
+
+1. **`PACT_PROVIDER_SECRET_KEY_B58`** (environment variable)
+   - Base58-encoded 64-byte Ed25519 secret key
+   - Highest precedence for production deployments
+   - Example: `export PACT_PROVIDER_SECRET_KEY_B58="<base58_secret_key>"`
+
+2. **`PACT_PROVIDER_KEYPAIR_FILE`** (environment variable)
+   - Path to JSON file containing `secretKeyB58` (and optionally `publicKeyB58`)
+   - Example: `export PACT_PROVIDER_KEYPAIR_FILE="/path/to/keypair.json"`
+
+3. **`PACT_DEV_IDENTITY_SEED`** (environment variable - explicit opt-in)
+   - Deterministic dev identity seed (must be explicitly set)
+   - **Warning**: Only for development/testing
+   - Example: `export PACT_DEV_IDENTITY_SEED="my-dev-seed"`
+   - Used by `provider:serve:demo` script with seed `pact-provider-default-seed-v1`
+
+4. **Ephemeral keypair** (fallback)
+   - Random keypair generated on each server start
+   - No warning (acceptable for testing/demos)
+   - Identity changes on each restart
+
+### Running Demo Provider with Deterministic Identity
+
+For demos and testing, use the `provider:serve:demo` script which uses a deterministic seed:
+
+```bash
+pnpm provider:serve:demo
+```
+
+This ensures the provider's `sellerId` is consistent across runs, making it easy to register once and reuse.
+
+### HTTP Provider Credential Verification
+
+In v1.5, HTTP providers present a signed credential that `acquire()` automatically verifies before marking the provider eligible. The credential verification checks:
+
+- **Signature validity**: Credential envelope signature must be valid
+- **Signer match**: Credential signer must match provider's directory `pubkey_b58`
+- **Expiration**: Credential must not be expired
+- **Capability**: Credential must support the requested intent type
+
+If verification fails, the provider is rejected with `PROVIDER_CREDENTIAL_INVALID`. For backward compatibility, providers without a credential endpoint (404 response) are allowed to proceed (graceful degradation).
+
+---
+
 ## Basic Usage
 
 ### Importing the SDK

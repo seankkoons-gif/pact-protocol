@@ -104,6 +104,74 @@ The following **must always hold** in PACT v1.0:
 
 ---
 
+## Know Your Agent (KYA)
+
+PACT v1.0+ includes identity verification mechanisms to ensure providers are who they claim to be.
+
+### Signer Verification
+
+All provider messages (quotes, commits, reveals, stream chunks) must be signed, and the signer's public key must match the provider's `pubkey_b58` in the directory. This is enforced at the protocol level (see Protocol Invariant #2).
+
+### Provider Credentials (v1.5+)
+
+v1.5 adds credential-based identity verification for HTTP providers, enabling buyers to verify provider capabilities before negotiation begins.
+
+#### Credential Format
+
+Credentials are signed capability attestations presented as signed envelopes:
+
+```typescript
+{
+  protocol_version: "pact/1.0",
+  credential_version: "1",
+  credential_id: string;              // Unique identifier
+  provider_pubkey_b58: string;        // Provider's public key
+  issuer: string;                     // For v1.5, allows "self" for self-signed
+  issued_at_ms: number;
+  expires_at_ms: number;
+  capabilities: Array<{
+    intentType: string;               // e.g., "weather.data"
+    modes: ("hash_reveal" | "streaming")[];
+    region?: string;
+    credentials?: string[];            // e.g., ["sla_verified"]
+  }>;
+  nonce: string;                      // Random nonce
+}
+```
+
+#### Credential Verification Steps
+
+For HTTP providers, `acquire()` automatically fetches and verifies credentials:
+
+1. **Fetch credential**: `GET /credential?intent=<intentType>` returns a signed envelope
+2. **Verify signature**: Credential envelope signature must be valid (Ed25519)
+3. **Verify signer match**: Credential signer must match provider's directory `pubkey_b58`
+4. **Check expiration**: Credential must not be expired (`expires_at_ms >= now`)
+5. **Verify capability**: Credential must support the requested intent type
+
+If any step fails, the provider is marked ineligible with `PROVIDER_CREDENTIAL_INVALID`.
+
+#### Graceful Degradation
+
+For backward compatibility with v1.0 providers:
+- **404 Not Found**: Credential endpoint missing → Provider is allowed (legacy support)
+- **Other errors**: Credential fetch/parse errors → Provider is marked ineligible
+
+#### Explain Codes for Credential Failures
+
+When credential verification fails, the explain log includes:
+
+- `PROVIDER_CREDENTIAL_INVALID`: Credential verification failed
+  - Signature verification failed
+  - Signer doesn't match provider pubkey
+  - Credential expired
+  - Credential doesn't support requested intent type
+  - Credential fetch/parse error (non-404)
+
+These codes appear in the `explain.log` when `explain !== "none"`, allowing buyers to understand why providers were rejected.
+
+---
+
 ## Receipt Schema
 
 A buyer **always** receives a Receipt after settlement completes (or fails). The receipt schema is:
