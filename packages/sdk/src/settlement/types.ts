@@ -26,17 +26,25 @@ export interface SettlementIntent {
 export interface SettlementHandle {
   handle_id: string;
   intent_id: string;
-  status: "prepared" | "committed" | "aborted";
+  status: "prepared" | "committed" | "aborted" | "pending"; // v1.7.2+: pending for async operations
   locked_amount: number;
   created_at_ms: number;
   meta?: Record<string, unknown>;
+  // v1.7.2+: async operation tracking
+  attempts?: number;
+  last_attempt_ms?: number;
 }
 
 export interface SettlementResult {
   ok: boolean;
-  status: "prepared" | "committed" | "aborted";
+  status: "prepared" | "committed" | "aborted" | "pending" | "failed"; // v1.7.2+: pending and failed for async
   paid_amount: number;
   handle_id: string;
   meta?: Record<string, unknown>;
+  // v1.7.2+: async operation tracking
+  attempts?: number;
+  last_attempt_ms?: number;
+  failure_code?: string;
+  failure_reason?: string;
 }
 

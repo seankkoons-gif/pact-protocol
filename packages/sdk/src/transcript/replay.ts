@@ -348,6 +348,54 @@ export async function replayTranscript(
         });
         summary.settlement_lifecycle_failed++;
       }
+    } else if (lifecycle.status === "pending") {
+      // v1.7.2+: If pending, check if there's a final resolution
+      // If pending exists without final resolution, add non-fatal failure
+      const hasFinalResolution = lifecycle.settlement_events?.some(
+        (e) => e.status === "committed" || e.status === "failed" || e.status === "aborted"
+      );
+      
+      if (!hasFinalResolution) {
+        failures.push({
+          code: "SETTLEMENT_PENDING_UNRESOLVED",
+          reason: "Settlement status is 'pending' but no final resolution found in events",
+          context: {
+            status: lifecycle.status,
+            events_count: lifecycle.settlement_events?.length || 0,
+          },
+        });
+        // Non-fatal: don't increment settlement_lifecycle_failed (or increment separately)
+        // For now, we'll count it but not fail the entire replay
+      }
+      
+      // Validate that if final status is committed, there was a prepare
+      const hasPrepare = lifecycle.settlement_events?.some((e) => e.op === "prepare");
+      if (!hasPrepare && lifecycle.status !== "pending") {
+        failures.push({
+          code: "SETTLEMENT_LIFECYCLE_INVALID",
+          reason: "Settlement committed but no prepare event found",
+          context: {
+            status: lifecycle.status,
+          },
+        });
+        summary.settlement_lifecycle_failed++;
+      }
+    } else if (lifecycle.status === "failed") {
+      // v1.7.2+: If failed, failure_code and failure_reason should be present
+      if (!lifecycle.failure_code || !lifecycle.failure_reason) {
+        failures.push({
+          code: "SETTLEMENT_LIFECYCLE_INVALID",
+          reason: "Settlement status is 'failed' but failure_code or failure_reason is missing",
+          context: {
+            status: lifecycle.status,
+            has_failure_code: !!lifecycle.failure_code,
+            has_failure_reason: !!lifecycle.failure_reason,
+          },
+        });
+        summary.settlement_lifecycle_failed++;
+      } else {
+        summary.settlement_lifecycle_verified++;
+      }
     }
     
     // Validate errors array if present

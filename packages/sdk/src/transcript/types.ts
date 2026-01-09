@@ -112,15 +112,27 @@ export type TranscriptV1 = {
   
   // Settlement lifecycle metadata (v1.6.3+)
   settlement_lifecycle?: {
-    provider?: string; // "mock" | "external"
+    provider?: string; // "mock" | "external" | "stripe_like"
     idempotency_key?: string; // Idempotency key from input.settlement.idempotency_key
     handle_id?: string; // Settlement handle ID from prepare()
-    status?: "prepared" | "committed" | "aborted"; // Lifecycle status
+    status?: "prepared" | "committed" | "aborted" | "pending" | "failed"; // Lifecycle status (v1.7.2+: pending, failed)
     prepared_at_ms?: number; // Timestamp when prepare() was called
     committed_at_ms?: number; // Timestamp when commit() was called
     aborted_at_ms?: number; // Timestamp when abort() was called
     paid_amount?: number; // Amount paid (from commit result)
     errors?: Array<{ code: string; reason: string }>; // Lifecycle errors
+    // v1.7.2+: async operation tracking
+    attempts?: number;
+    last_attempt_ms?: number;
+    failure_code?: string;
+    failure_reason?: string;
+    // v1.7.2+: settlement events timeline
+    settlement_events?: Array<{
+      ts_ms: number;
+      op: "prepare" | "commit" | "poll" | "abort";
+      status: "prepared" | "committed" | "aborted" | "pending" | "failed";
+      meta?: Record<string, unknown>;
+    }>;
   };
 };
 

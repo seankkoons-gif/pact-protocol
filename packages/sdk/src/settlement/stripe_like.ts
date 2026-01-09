@@ -18,13 +18,28 @@ import { MockSettlementProvider } from "./mock";
 import * as crypto from "crypto";
 import bs58 from "bs58";
 
+export interface StripeLikeSettlementProviderConfig {
+  asyncCommit?: boolean; // v1.7.2+: enable async commit (default: false)
+  commitDelayTicks?: number; // v1.7.2+: number of poll calls before commit resolves (default: 3)
+  failCommit?: boolean; // v1.7.2+: if true, poll resolves to failed instead of committed (default: false)
+}
+
 export class StripeLikeSettlementProvider implements SettlementProvider {
   private mockProvider: MockSettlementProvider;
   private handles = new Map<string, SettlementHandle>();
   private captureIds = new Map<string, string>(); // handle_id -> capture_id
+  private config: StripeLikeSettlementProviderConfig;
+  // v1.7.2+: track pending commits (handle_id -> poll count)
+  private pendingCommits = new Map<string, { pollCount: number; last_attempt_ms?: number; committedAtMs?: number; failedAtMs?: number }>();
 
-  constructor() {
+  constructor(config?: StripeLikeSettlementProviderConfig) {
     this.mockProvider = new MockSettlementProvider();
+    this.config = {
+      asyncCommit: false,
+      commitDelayTicks: 3,
+      failCommit: false,
+      ...config,
+    };
   }
 
   // ============================================================================
@@ -204,6 +219,19 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
 
     // Can only commit from "prepared" status
     if (handle.status !== "prepared") {
+      // If already pending, return pending result (idempotent)
+      if (handle.status === "pending") {
+        const pendingState = this.pendingCommits.get(handle_id);
+        return {
+          ok: false,
+          status: "pending",
+          paid_amount: 0,
+          handle_id: handle.handle_id,
+          attempts: pendingState?.pollCount || 0,
+          last_attempt_ms: pendingState?.pollCount ? Date.now() : undefined,
+          meta: handle.meta,
+        };
+      }
       throw new Error(`Cannot capture handle in status "${handle.status}"`);
     }
 
@@ -215,7 +243,24 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
       throw new Error(`Handle missing from/to information (should be stored in meta during prepare)`);
     }
 
-    // Capture: Transfer locked funds from buyer to seller
+    // v1.7.2+: Async commit behavior
+    if (this.config.asyncCommit) {
+      // Mark as pending (do NOT transfer funds yet)
+      handle.status = "pending";
+      this.pendingCommits.set(handle_id, { pollCount: 0 });
+      
+      return {
+        ok: false,
+        status: "pending",
+        paid_amount: 0,
+        handle_id: handle.handle_id,
+        attempts: 0,
+        last_attempt_ms: Date.now(),
+        meta: handle.meta,
+      };
+    }
+
+    // Synchronous commit: Transfer locked funds from buyer to seller immediately
     // First release locked (unlock decreases locked, increases balance)
     this.mockProvider.unlock(intentFrom, handle.locked_amount);
     // Then debit from buyer and credit to seller (transfer)
@@ -266,9 +311,14 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
       throw new Error(`Cannot void authorization after capture (handle already committed)`);
     }
 
-    // Can only abort from "prepared" status
-    if (handle.status !== "prepared") {
+    // Can abort from "prepared" or "pending" status (v1.7.2+)
+    if (handle.status !== "prepared" && handle.status !== "pending") {
       throw new Error(`Cannot void handle in status "${handle.status}"`);
+    }
+
+    // If pending, clear pending state
+    if (handle.status === "pending") {
+      this.pendingCommits.delete(handle_id);
     }
 
     // Get from from handle.meta
@@ -287,6 +337,146 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
     if (reason) {
       handle.meta = { ...handle.meta, void_reason: reason };
     }
+  }
+
+  /**
+   * Poll settlement status for async operations (v1.7.2+).
+   * Resolves pending commits after delay or returns current status.
+   */
+  async poll(handle_id: string): Promise<SettlementResult> {
+    const handle = this.handles.get(handle_id);
+    if (!handle) {
+      throw new Error(`Settlement handle not found: ${handle_id}`);
+    }
+
+    // If already committed, return committed result (idempotent)
+    if (handle.status === "committed") {
+      const capture_id = this.captureIds.get(handle_id) || this.generateCaptureId(handle_id);
+      return {
+        ok: true,
+        status: "committed",
+        paid_amount: handle.locked_amount,
+        handle_id: handle.handle_id,
+        meta: {
+          ...handle.meta,
+          capture_id,
+          payment_intent_id: handle.meta?.auth_id || handle.meta?.payment_intent_id,
+        },
+      };
+    }
+
+    // Get pending state if exists
+    const pendingState = this.pendingCommits.get(handle_id);
+    
+    // If handle has failed state (tracked in pendingCommits), return failed result (idempotent)
+    if (pendingState?.failedAtMs) {
+      return {
+        ok: false,
+        status: "failed",
+        paid_amount: 0,
+        handle_id: handle.handle_id,
+        attempts: pendingState.pollCount || 0,
+        last_attempt_ms: pendingState.failedAtMs,
+        failure_code: "SETTLEMENT_FAILED",
+        failure_reason: "Settlement failed during async processing",
+        meta: handle.meta,
+      };
+    }
+
+    // If pending, check if delay has elapsed
+    if (handle.status === "pending") {
+      if (!pendingState) {
+        // Should not happen, but handle gracefully
+        return {
+          ok: false,
+          status: "pending",
+          paid_amount: 0,
+          handle_id: handle.handle_id,
+          meta: handle.meta,
+        };
+      }
+
+      // Increment poll count
+      pendingState.pollCount = (pendingState.pollCount || 0) + 1;
+      pendingState.last_attempt_ms = Date.now();
+
+      // Check if delay has elapsed
+      const delayTicks = this.config.commitDelayTicks || 3;
+      if (pendingState.pollCount >= delayTicks) {
+        // Resolve pending commit
+        const intentFrom = (handle.meta?.from as string) || "";
+        const intentTo = (handle.meta?.to as string) || "";
+
+        if (!intentFrom || !intentTo) {
+          throw new Error(`Handle missing from/to information`);
+        }
+
+        if (this.config.failCommit) {
+          // Resolve to failed: release locked funds, do NOT pay seller
+          this.mockProvider.unlock(intentFrom, handle.locked_amount);
+          // Keep handle status as "pending" but mark as failed in pendingCommits
+          pendingState.failedAtMs = Date.now();
+          this.pendingCommits.set(handle_id, pendingState); // Update state
+          
+          return {
+            ok: false,
+            status: "failed",
+            paid_amount: 0,
+            handle_id: handle.handle_id,
+            attempts: pendingState.pollCount,
+            last_attempt_ms: pendingState.failedAtMs,
+            failure_code: "SETTLEMENT_FAILED",
+            failure_reason: "Settlement failed during async processing",
+            meta: handle.meta,
+          };
+        } else {
+          // Resolve to committed: transfer funds (only once)
+          this.mockProvider.unlock(intentFrom, handle.locked_amount);
+          this.mockProvider.debit(intentFrom, handle.locked_amount);
+          this.mockProvider.credit(intentTo, handle.locked_amount);
+
+          const capture_id = this.generateCaptureId(handle_id);
+          this.captureIds.set(handle_id, capture_id);
+          handle.status = "committed";
+          pendingState.committedAtMs = Date.now();
+          this.pendingCommits.delete(handle_id); // Clean up
+
+          return {
+            ok: true,
+            status: "committed",
+            paid_amount: handle.locked_amount,
+            handle_id: handle.handle_id,
+            attempts: pendingState.pollCount,
+            last_attempt_ms: pendingState.committedAtMs,
+            meta: {
+              ...handle.meta,
+              capture_id,
+              payment_intent_id: handle.meta?.auth_id || handle.meta?.payment_intent_id,
+            },
+          };
+        }
+      } else {
+        // Still pending
+        return {
+          ok: false,
+          status: "pending",
+          paid_amount: 0,
+          handle_id: handle.handle_id,
+          attempts: pendingState.pollCount,
+          last_attempt_ms: pendingState.last_attempt_ms,
+          meta: handle.meta,
+        };
+      }
+    }
+
+    // For other statuses (prepared, aborted), return current status
+    return {
+      ok: handle.status === "prepared",
+      status: handle.status as "prepared" | "aborted",
+      paid_amount: 0,
+      handle_id: handle.handle_id,
+      meta: handle.meta,
+    };
   }
 
   // ============================================================================

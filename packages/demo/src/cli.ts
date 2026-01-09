@@ -279,6 +279,9 @@ async function main() {
     ? (rawSettlementProvider[rawSettlementProvider.length - 1] as "mock" | "external" | "stripe_like")
     : (rawSettlementProvider as "mock" | "external" | "stripe_like" | undefined);
   
+  // v1.7.2+: Optional async flag for stripe_like (default: false, synchronous)
+  const stripeAsync = !!args.stripeAsync || !!args["stripe-async"];
+  
   // Note: For bad-reveal demo, the provider server must be started with
   // PACT_DEV_BAD_REVEAL=1 environment variable set, as the provider server
   // runs in a separate process and reads its own environment.
@@ -346,9 +349,20 @@ async function main() {
   let settlement: SettlementProvider;
   if (settlementProvider) {
     // Create provider via factory when flag is set
-    settlement = createSettlementProvider({
+    const providerConfig: { provider: "mock" | "external" | "stripe_like"; params?: Record<string, unknown> } = {
       provider: settlementProvider,
-    });
+    };
+    
+    // v1.7.2+: If stripe_like and stripeAsync flag is set, enable async behavior
+    if (settlementProvider === "stripe_like" && stripeAsync) {
+      providerConfig.params = {
+        asyncCommit: true,
+        commitDelayTicks: 3, // Default delay
+        failCommit: false,
+      };
+    }
+    
+    settlement = createSettlementProvider(providerConfig);
   } else {
     // Default to mock provider (backward compatible)
     settlement = new MockSettlementProvider();

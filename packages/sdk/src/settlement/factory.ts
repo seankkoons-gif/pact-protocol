@@ -8,7 +8,7 @@
 import type { SettlementProvider } from "./provider";
 import { MockSettlementProvider } from "./mock";
 import { ExternalSettlementProvider, type ExternalSettlementProviderConfig } from "./external";
-import { StripeLikeSettlementProvider } from "./stripe_like";
+import { StripeLikeSettlementProvider, type StripeLikeSettlementProviderConfig } from "./stripe_like";
 
 export interface SettlementProviderConfig {
   provider: "mock" | "external" | "stripe_like";
@@ -28,8 +28,17 @@ export function createSettlementProvider(config: SettlementProviderConfig): Sett
     case "mock":
       return new MockSettlementProvider();
     
-    case "stripe_like":
-      return new StripeLikeSettlementProvider();
+    case "stripe_like": {
+      // v1.7.2+: Support async config via params
+      const asyncConfig: StripeLikeSettlementProviderConfig | undefined = config.params
+        ? {
+            asyncCommit: config.params.asyncCommit === true,
+            commitDelayTicks: typeof config.params.commitDelayTicks === "number" ? config.params.commitDelayTicks : undefined,
+            failCommit: config.params.failCommit === true,
+          }
+        : undefined;
+      return new StripeLikeSettlementProvider(asyncConfig);
+    }
     
     case "external": {
       // External provider requires params with at least 'rail'

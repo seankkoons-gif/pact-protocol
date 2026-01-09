@@ -234,6 +234,20 @@ export interface SettlementProvider {
    * - Safe to call multiple times (idempotent)
    */
   abort(handle_id: string, reason?: string): Promise<void>;
+
+  /**
+   * Poll settlement status for async operations (v1.7.2+).
+   * Checks if a pending settlement has been resolved (committed or failed).
+   * 
+   * @param handle_id Settlement handle identifier
+   * @returns Settlement result with current status (pending, committed, or failed)
+   * @throws Error if handle not found
+   * 
+   * Idempotency: Repeated calls return the same result once resolved.
+   * 
+   * Default implementation: Throws NotImplemented (providers that don't support async can ignore).
+   */
+  poll?(handle_id: string): Promise<SettlementResult>;
 }
 
 

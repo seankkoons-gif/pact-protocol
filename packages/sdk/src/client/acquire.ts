@@ -76,6 +76,52 @@ export async function acquire(params: {
     }
   };
 
+  // Helper to record settlement lifecycle event (v1.7.2+)
+  const recordLifecycleEvent = (
+    op: "prepare" | "commit" | "poll" | "abort",
+    status: "prepared" | "committed" | "aborted" | "pending" | "failed",
+    meta?: Record<string, unknown>
+  ) => {
+    if (transcriptData?.settlement_lifecycle) {
+      if (!transcriptData.settlement_lifecycle.settlement_events) {
+        transcriptData.settlement_lifecycle.settlement_events = [];
+      }
+      transcriptData.settlement_lifecycle.settlement_events.push({
+        ts_ms: nowFn ? nowFn() : Date.now(),
+        op,
+        status,
+        meta,
+      });
+      // Update current status
+      transcriptData.settlement_lifecycle.status = status;
+      // Update timestamps based on operation
+      const now = nowFn ? nowFn() : Date.now();
+      if (op === "prepare" && status === "prepared") {
+        transcriptData.settlement_lifecycle.prepared_at_ms = now;
+        transcriptData.settlement_lifecycle.handle_id = meta?.handle_id as string;
+      } else if (op === "commit" && status === "committed") {
+        transcriptData.settlement_lifecycle.committed_at_ms = now;
+        transcriptData.settlement_lifecycle.paid_amount = meta?.paid_amount as number;
+      } else if (op === "commit" && status === "pending") {
+        // Pending commit - record attempts
+        transcriptData.settlement_lifecycle.attempts = meta?.attempts as number;
+        transcriptData.settlement_lifecycle.last_attempt_ms = meta?.last_attempt_ms as number;
+      } else if (op === "poll" && status === "committed") {
+        transcriptData.settlement_lifecycle.committed_at_ms = now;
+        transcriptData.settlement_lifecycle.paid_amount = meta?.paid_amount as number;
+        transcriptData.settlement_lifecycle.attempts = meta?.attempts as number;
+        transcriptData.settlement_lifecycle.last_attempt_ms = meta?.last_attempt_ms as number;
+      } else if (op === "poll" && status === "failed") {
+        transcriptData.settlement_lifecycle.failure_code = meta?.failure_code as string;
+        transcriptData.settlement_lifecycle.failure_reason = meta?.failure_reason as string;
+        transcriptData.settlement_lifecycle.attempts = meta?.attempts as number;
+        transcriptData.settlement_lifecycle.last_attempt_ms = meta?.last_attempt_ms as number;
+      } else if (op === "abort" && status === "aborted") {
+        transcriptData.settlement_lifecycle.aborted_at_ms = now;
+      }
+    }
+  };
+
   // Settlement provider selection (v1.6.2+)
   // If caller passes settlement instance explicitly, that wins (backward compatibility).
   // Else if input.settlement.provider is provided, create provider via factory.
@@ -2091,10 +2137,20 @@ export async function acquire(params: {
     // Finalize settlement lifecycle metadata (v1.6.3+)
     if (transcriptData.settlement_lifecycle) {
       // If successful, record committed status and paid amount from receipt
+      // v1.7.2+: Preserve pending status if async settlement is in progress
       if (receipt && receipt.fulfilled) {
-        transcriptData.settlement_lifecycle.status = "committed";
-        transcriptData.settlement_lifecycle.committed_at_ms = receipt.timestamp_ms || (nowFn ? nowFn() : Date.now());
-        transcriptData.settlement_lifecycle.paid_amount = receipt.paid_amount || (receipt as any).agreed_price || 0;
+        // Only update if not already set to pending (preserve async status)
+        if (!transcriptData.settlement_lifecycle.status || 
+            (transcriptData.settlement_lifecycle.status !== "pending" && 
+             transcriptData.settlement_lifecycle.status !== "failed")) {
+          transcriptData.settlement_lifecycle.status = "committed";
+        }
+        if (!transcriptData.settlement_lifecycle.committed_at_ms) {
+          transcriptData.settlement_lifecycle.committed_at_ms = receipt.timestamp_ms || (nowFn ? nowFn() : Date.now());
+        }
+        if (!transcriptData.settlement_lifecycle.paid_amount) {
+          transcriptData.settlement_lifecycle.paid_amount = receipt.paid_amount || (receipt as any).agreed_price || 0;
+        }
       }
     }
     

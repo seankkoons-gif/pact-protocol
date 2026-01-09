@@ -339,5 +339,52 @@ export class MockSettlementProvider implements SettlementProvider {
       handle.meta = { ...handle.meta, abort_reason: reason };
     }
   }
+
+  /**
+   * Poll settlement status (v1.7.2+).
+   * For MockSettlementProvider, returns current status immediately (synchronous).
+   */
+  async poll(handle_id: string): Promise<SettlementResult> {
+    const handle = this.handles.get(handle_id);
+    if (!handle) {
+      throw new Error(`Settlement handle not found: ${handle_id}`);
+    }
+
+    // Return current status (mock is synchronous, so status is always final)
+    if (handle.status === "committed") {
+      return {
+        ok: true,
+        status: "committed",
+        paid_amount: handle.locked_amount,
+        handle_id: handle.handle_id,
+        meta: handle.meta,
+      };
+    } else if (handle.status === "aborted") {
+      return {
+        ok: false,
+        status: "aborted",
+        paid_amount: 0,
+        handle_id: handle.handle_id,
+        meta: handle.meta,
+      };
+    } else if (handle.status === "prepared") {
+      return {
+        ok: true,
+        status: "prepared",
+        paid_amount: 0,
+        handle_id: handle.handle_id,
+        meta: handle.meta,
+      };
+    } else {
+      // pending or other status
+      return {
+        ok: false,
+        status: handle.status as "pending" | "failed",
+        paid_amount: 0,
+        handle_id: handle.handle_id,
+        meta: handle.meta,
+      };
+    }
+  }
 }
 
