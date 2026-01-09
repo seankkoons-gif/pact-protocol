@@ -21,7 +21,7 @@ export type AcquireInput = {
   requireCredential?: boolean; // Override policy require_credential
   // Optional settlement provider selection (v1.6.2+)
   settlement?: {
-    provider?: "mock" | "external";
+    provider?: "mock" | "external" | "stripe_like"; // v1.7.1+: stripe_like for Stripe-like semantics
     params?: Record<string, unknown>; // Parameters for external provider (e.g., { rail: "stripe", network: "testnet" })
     idempotency_key?: string; // Optional idempotency key for settlement lifecycle
   };

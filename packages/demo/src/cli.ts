@@ -9,6 +9,7 @@ import {
   verifyEnvelope,
   computeCommitHash,
   MockSettlementProvider,
+  createSettlementProvider,
   ReceiptStore,
   referencePriceP50,
   priceStats,
@@ -18,6 +19,7 @@ import {
   InMemoryProviderDirectory,
   JsonlProviderDirectory,
   type AcquireExplain,
+  type SettlementProvider,
 } from "@pact/sdk";
 import { startProviderServer } from "@pact/provider-adapter";
 import nacl from "tweetnacl";
@@ -271,6 +273,12 @@ async function main() {
   
   const requireCredential = !!args.requireCredential || !!args["require-credential"];
   
+  // Settlement provider selection (v1.7.1+)
+  const rawSettlementProvider = args.settlementProvider || args["settlement-provider"];
+  const settlementProvider = Array.isArray(rawSettlementProvider)
+    ? (rawSettlementProvider[rawSettlementProvider.length - 1] as "mock" | "external" | "stripe_like")
+    : (rawSettlementProvider as "mock" | "external" | "stripe_like" | undefined);
+  
   // Note: For bad-reveal demo, the provider server must be started with
   // PACT_DEV_BAD_REVEAL=1 environment variable set, as the provider server
   // runs in a separate process and reads its own environment.
@@ -334,8 +342,19 @@ async function main() {
     console.log(`  streaming.cutoff_on_violation: ${compiled.base.settlement.streaming.cutoff_on_violation}`);
   }
 
-  // Create settlement provider
-  const settlement = new MockSettlementProvider();
+  // Create settlement provider based on CLI flag (v1.7.1+)
+  let settlement: SettlementProvider;
+  if (settlementProvider) {
+    // Create provider via factory when flag is set
+    settlement = createSettlementProvider({
+      provider: settlementProvider,
+    });
+  } else {
+    // Default to mock provider (backward compatible)
+    settlement = new MockSettlementProvider();
+  }
+
+  // Credit buyer and seller on the chosen provider instance
   settlement.credit(buyerId, 1.0);
   settlement.credit(sellerId, 0.1);
   
@@ -550,6 +569,8 @@ async function main() {
       ...(minTrustTier ? { minTrustTier } : {}),
       ...(minTrustScore !== undefined ? { minTrustScore } : {}),
       ...(requireCredential ? { requireCredential: true } : {}),
+      // Note: Settlement provider is passed as explicit 'settlement' parameter below
+      // (explicit instance wins over input.settlement.provider)
     },
     buyerKeyPair,
     sellerKeyPair,
