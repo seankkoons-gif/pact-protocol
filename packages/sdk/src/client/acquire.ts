@@ -116,6 +116,16 @@ export async function acquire(params: {
         transcriptData.settlement_lifecycle.failure_reason = meta?.failure_reason as string;
         transcriptData.settlement_lifecycle.attempts = meta?.attempts as number;
         transcriptData.settlement_lifecycle.last_attempt_ms = meta?.last_attempt_ms as number;
+      } else if (op === "commit" && status === "failed") {
+        // Handle commit failures (when commit returns failed status directly)
+        transcriptData.settlement_lifecycle.failure_code = meta?.failure_code as string;
+        transcriptData.settlement_lifecycle.failure_reason = meta?.failure_reason as string;
+        if (meta?.attempts !== undefined) {
+          transcriptData.settlement_lifecycle.attempts = meta.attempts as number;
+        }
+        if (meta?.last_attempt_ms !== undefined) {
+          transcriptData.settlement_lifecycle.last_attempt_ms = meta.last_attempt_ms as number;
+        }
       } else if (op === "abort" && status === "aborted") {
         transcriptData.settlement_lifecycle.aborted_at_ms = now;
       }
@@ -128,26 +138,19 @@ export async function acquire(params: {
   // Else use existing default behavior (mock already being passed by demo).
   let settlement: SettlementProvider;
   try {
-    if (input.settlement?.provider) {
-      // Create provider via factory (input config takes precedence over explicit parameter)
+    if (explicitSettlement) {
+      // Explicit instance wins (backward compatibility)
+      settlement = explicitSettlement;
+    } else if (input.settlement?.provider) {
+      // Create provider via factory (only if no explicit instance provided)
       settlement = createSettlementProvider({
         provider: input.settlement.provider,
         params: input.settlement.params,
         idempotency_key: input.settlement.idempotency_key,
       });
-      // For mock provider, copy balances from explicit settlement if it exists and is also a mock
-      if (input.settlement.provider === "mock" && explicitSettlement) {
-        try {
-          if (explicitSettlement instanceof MockSettlementProvider && settlement instanceof MockSettlementProvider) {
-            settlement.copyFrom(explicitSettlement);
-          }
-        } catch (e: any) {
-          // Silently fail if copying doesn't work (e.g., not MockSettlementProvider)
-        }
-      }
     } else {
-      // Use explicit settlement parameter (backward compatible default)
-      settlement = explicitSettlement;
+      // Fallback: should not happen in practice, but provide error
+      throw new Error("No settlement provider provided: either pass 'settlement' parameter or set 'input.settlement.provider'");
     }
   } catch (error: any) {
     // Handle factory creation errors (e.g., invalid config)
@@ -1175,6 +1178,9 @@ export async function acquire(params: {
     settlement,
     buyerAgentId: buyerId,
     sellerAgentId: selectedProviderPubkey, // Use selected provider's pubkey
+    // v1.7.2+: Settlement lifecycle configuration
+    settlementIdempotencyKey: input.settlement?.idempotency_key,
+    settlementAutoPollMs: input.settlement?.auto_poll_ms,
   });
 
   // 8.5) Check buyer identity (if policy requires it)
@@ -1451,6 +1457,15 @@ export async function acquire(params: {
   const acceptEnvelope = await signEnvelope(acceptMsg, buyerKeyPair);
   const acceptResult = await session.accept(acceptEnvelope);
   if (!acceptResult.ok) {
+    // Record settlement lifecycle failure (v1.7.2+)
+    // When commit returns pending and auto_poll is enabled, failure happens during poll
+    if (acceptResult.code === "SETTLEMENT_FAILED" && transcriptData?.settlement_lifecycle) {
+      recordLifecycleEvent("poll", "failed", {
+        failure_code: acceptResult.code,
+        failure_reason: acceptResult.reason || "Settlement failed during async processing",
+      });
+    }
+    
     if (explain) {
       explain.regime = plan.regime;
       explain.settlement = chosenMode;
@@ -1464,6 +1479,22 @@ export async function acquire(params: {
         explainLevel === "full" ? { code: acceptResult.code } : undefined
       );
     }
+    
+    // Save transcript for settlement failure (v1.7.2+)
+    let transcriptPath: string | undefined;
+    if (saveTranscript && transcriptData) {
+      transcriptData.intent_id = intentId;
+      transcriptData.explain = explain || undefined;
+      transcriptData.outcome = {
+        ok: false,
+        code: acceptResult.code,
+        reason: acceptResult.reason || "ACCEPT failed",
+      };
+      
+      const transcriptStore = new TranscriptStore(input.transcriptDir);
+      transcriptPath = await transcriptStore.writeTranscript(intentId, transcriptData as TranscriptV1);
+    }
+    
     return {
       ok: false,
       plan: {
@@ -1474,6 +1505,7 @@ export async function acquire(params: {
       reason: acceptResult.reason || "ACCEPT failed",
       offers_eligible: evaluations.length,
       ...(explain ? { explain } : {}),
+      ...(transcriptPath ? { transcriptPath } : {}),
     };
   }
 

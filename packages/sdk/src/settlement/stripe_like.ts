@@ -251,7 +251,7 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
       
       return {
         ok: false,
-        status: "pending",
+        status: "pending" as const,
         paid_amount: 0,
         handle_id: handle.handle_id,
         attempts: 0,
@@ -457,6 +457,9 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
         }
       } else {
         // Still pending
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'stripe_like.ts:487',message:'poll() returning pending (delay not elapsed)',data:{handle_id,pollCount:pendingState.pollCount,delayTicks:this.config.commitDelayTicks||3},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
         return {
           ok: false,
           status: "pending",

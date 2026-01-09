@@ -19,6 +19,7 @@ import { verifyEnvelope, parseEnvelope, parseMessage } from "../protocol/index";
 import { SessionStatus, TerminalOutcome, SessionResult } from "./state";
 import { ProtocolViolationError, PolicyViolationError, TimeoutError } from "./errors";
 import type { SettlementProvider } from "../settlement/index";
+import type { SettlementHandle, SettlementResult } from "../settlement/types";
 import { createAgreement, type Agreement } from "../exchange/agreement";
 import { createReceipt, type Receipt } from "../exchange/receipt";
 import { verifyReveal } from "../exchange/commit";
@@ -47,6 +48,9 @@ export interface NegotiationSessionParams {
   settlement?: SettlementProvider;
   buyerAgentId?: string;
   sellerAgentId?: string;
+  // v1.7.2+: Settlement lifecycle configuration
+  settlementIdempotencyKey?: string;
+  settlementAutoPollMs?: number; // If set, poll until resolved (0 = immediate loop, >0 = delay)
 }
 
 export class NegotiationSession {
@@ -62,10 +66,63 @@ export class NegotiationSession {
   private terminal_result?: SessionResult;
   private agreement?: Agreement;
   private receipt?: Receipt;
+  // v1.7.2+: Settlement lifecycle handle (if using lifecycle API)
+  private settlementHandle?: SettlementHandle;
 
   constructor(
     private params: NegotiationSessionParams
   ) {}
+
+  /**
+   * Check if settlement provider supports lifecycle API (v1.7.2+)
+   */
+  private settlementSupportsLifecycle(): boolean {
+    return !!(
+      this.params.settlement &&
+      typeof this.params.settlement.prepare === "function" &&
+      typeof this.params.settlement.commit === "function"
+    );
+  }
+
+  /**
+   * Poll settlement until resolved (v1.7.2+)
+   */
+  private async pollSettlementUntilResolved(
+    handle_id: string,
+    maxAttempts: number = 100
+  ): Promise<{ ok: true; result: SettlementResult } | { ok: false; code: string; reason: string }> {
+    if (!this.params.settlement || typeof this.params.settlement.poll !== "function") {
+      return { ok: false, code: "SETTLEMENT_POLL_NOT_SUPPORTED", reason: "Settlement provider does not support polling" };
+    }
+
+    const pollDelay = this.params.settlementAutoPollMs ?? 0;
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      const result = await this.params.settlement.poll(handle_id);
+      
+      if (result.status === "committed") {
+        return { ok: true, result };
+      }
+      
+      if (result.status === "failed") {
+        return {
+          ok: false,
+          code: result.failure_code || "SETTLEMENT_FAILED",
+          reason: result.failure_reason || "Settlement failed during async processing",
+        };
+      }
+
+      // Still pending - wait and retry
+      if (pollDelay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, pollDelay));
+      }
+      
+      attempts++;
+    }
+
+    return { ok: false, code: "SETTLEMENT_POLL_TIMEOUT", reason: `Settlement still pending after ${attempts} poll attempts` };
+  }
 
   getStatus(): SessionStatus {
     return this.status;
@@ -381,18 +438,87 @@ export class NegotiationSession {
       const sellerAgentId = this.params.sellerAgentId ?? "seller";
       const sellerBond = this.latest_ask?.bond_required ?? this.latest_bid?.bond_required ?? 0;
 
-      // Lock buyer funds
-      const fundsLocked = this.params.settlement.lockFunds(buyerAgentId, message.agreed_price);
-      if (!fundsLocked) {
-        this.terminate("FAILED_ESCROW", "BOND_INSUFFICIENT", "Insufficient buyer balance");
-        return { ok: false, code: "BOND_INSUFFICIENT", reason: "Insufficient buyer balance" };
+      // v1.7.2+: Use lifecycle API if supported (for hash_reveal mode), else fallback to legacy methods
+      if (this.settlementSupportsLifecycle()) {
+        // Use lifecycle API: prepare + commit
+        try {
+          const intent_id = message.intent_id;
+          const handle = await this.params.settlement.prepare({
+            intent_id,
+            from: buyerAgentId,
+            to: sellerAgentId,
+            amount: message.agreed_price,
+            mode: "hash_reveal",
+            idempotency_key: this.params.settlementIdempotencyKey,
+            meta: { agreement_id: intent_id },
+          });
+
+          this.settlementHandle = handle;
+
+          // Commit (may return pending for async providers)
+          const commitResult = await this.params.settlement.commit(handle.handle_id);
+
+          if (commitResult.status === "pending") {
+            // Async settlement - poll if auto_poll_ms is set
+            if (this.params.settlementAutoPollMs !== undefined) {
+              const pollResult = await this.pollSettlementUntilResolved(handle.handle_id);
+              if (!pollResult.ok) {
+                // Poll failed or timed out - abort settlement
+                try {
+                  await this.params.settlement.abort(handle.handle_id, pollResult.reason);
+                } catch (e) {
+                  // Ignore abort errors
+                }
+                // Use the error code from pollResult, not BOND_INSUFFICIENT
+                const errorCode = (pollResult.code as FailureCode) || "SETTLEMENT_FAILED";
+                this.terminate("FAILED_ESCROW", errorCode, pollResult.reason);
+                return { ok: false, code: errorCode, reason: pollResult.reason };
+              }
+              // Poll succeeded - settlement is now committed
+            } else {
+              // No auto-poll configured - return pending status
+              this.terminate("FAILED_ESCROW", "BOND_INSUFFICIENT", "Settlement is pending and auto-poll is not enabled");
+              return { ok: false, code: "BOND_INSUFFICIENT", reason: "Settlement is pending and auto-poll is not enabled" };
+            }
+          } else if (commitResult.status === "failed") {
+            const errorCode = (commitResult.failure_code as FailureCode) || "SETTLEMENT_FAILED";
+            this.terminate("FAILED_ESCROW", errorCode, commitResult.failure_reason || "Settlement failed");
+            return { ok: false, code: errorCode, reason: commitResult.failure_reason || "Settlement failed" };
+          }
+          // committed - continue
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          // Check if error is due to insufficient balance (should be BOND_INSUFFICIENT)
+          // vs other settlement errors (should be SETTLEMENT_FAILED)
+          const isBalanceError = errorMessage.toLowerCase().includes("insufficient balance") || 
+                                 errorMessage.toLowerCase().includes("insufficient funds");
+          const errorCode: FailureCode = isBalanceError ? "BOND_INSUFFICIENT" : "SETTLEMENT_FAILED";
+          this.terminate("FAILED_ESCROW", errorCode, errorMessage);
+          return { ok: false, code: errorCode, reason: errorMessage };
+        }
+      } else {
+        // Legacy settlement methods
+        const fundsLocked = this.params.settlement.lockFunds(buyerAgentId, message.agreed_price);
+        if (!fundsLocked) {
+          this.terminate("FAILED_ESCROW", "BOND_INSUFFICIENT", "Insufficient buyer balance");
+          return { ok: false, code: "BOND_INSUFFICIENT", reason: "Insufficient buyer balance" };
+        }
       }
 
-      // Lock seller bond
+      // Lock seller bond (always use legacy method for bonds)
       const bondLocked = this.params.settlement.lockBond(sellerAgentId, sellerBond);
       if (!bondLocked) {
-        // Unlock buyer funds on failure
-        this.params.settlement.unlock(buyerAgentId, message.agreed_price);
+        // Unlock buyer funds on failure (abort if lifecycle, unlock if legacy)
+        if (this.settlementHandle) {
+          try {
+            await this.params.settlement.abort(this.settlementHandle.handle_id, "Seller bond insufficient");
+          } catch (e) {
+            // Fallback to legacy unlock
+            this.params.settlement.unlock(buyerAgentId, message.agreed_price);
+          }
+        } else {
+          this.params.settlement.unlock(buyerAgentId, message.agreed_price);
+        }
         this.terminate("FAILED_ESCROW", "BOND_INSUFFICIENT", "Insufficient seller bond");
         return { ok: false, code: "BOND_INSUFFICIENT", reason: "Insufficient seller bond" };
       }
@@ -545,7 +671,7 @@ export class NegotiationSession {
     const now = this.params.now();
     if (now > this.agreement.delivery_deadline_ms) {
       // Seller failed to commit by deadline - slash
-      this.slashSeller("Seller failed to commit by deadline");
+      await this.slashSeller("Seller failed to commit by deadline");
       return { ok: false, code: "FAILED_PROOF", reason: "Seller failed to commit by deadline" };
     }
 
@@ -619,7 +745,7 @@ export class NegotiationSession {
     const now = this.params.now();
     if (now > this.agreement.delivery_deadline_ms) {
       // Seller failed to reveal by deadline - slash
-      this.slashSeller("Seller failed to reveal by deadline");
+      await this.slashSeller("Seller failed to reveal by deadline");
       return { ok: false, code: "FAILED_PROOF", reason: "Seller failed to reveal by deadline" };
     }
 
@@ -632,7 +758,7 @@ export class NegotiationSession {
 
     if (!isValidReveal) {
       // Hash mismatch - slash seller
-      this.slashSeller("Reveal hash mismatch");
+      await this.slashSeller("Reveal hash mismatch");
       return { ok: false, code: "FAILED_PROOF", reason: "Reveal hash mismatch" };
     }
 
@@ -649,13 +775,50 @@ export class NegotiationSession {
       const buyerAgentId = this.params.buyerAgentId ?? "buyer";
       const sellerAgentId = this.params.sellerAgentId ?? "seller";
 
-      // Unlock buyer payment (adds back to balance)
-      this.params.settlement.unlock(buyerAgentId, this.agreement.agreed_price);
-      // Debit from buyer and credit to seller
-      this.params.settlement.debit(buyerAgentId, this.agreement.agreed_price);
-      this.params.settlement.credit(sellerAgentId, this.agreement.agreed_price);
+      // v1.7.2+: If using lifecycle API, funds are already transferred on commit
+      // Just need to ensure it's committed (poll if still pending)
+      if (this.settlementHandle) {
+        // Check if settlement is already committed
+        if (this.params.settlement.poll) {
+          const pollResult = await this.params.settlement.poll(this.settlementHandle.handle_id);
+          if (pollResult.status === "pending") {
+            // Still pending - poll until resolved if auto_poll is enabled
+            if (this.params.settlementAutoPollMs !== undefined) {
+              const resolved = await this.pollSettlementUntilResolved(this.settlementHandle.handle_id);
+              if (!resolved.ok) {
+                // Settlement failed - abort and slash seller
+                try {
+                  await this.params.settlement.abort(this.settlementHandle.handle_id, resolved.reason);
+                } catch (e) {
+                  // Ignore
+                }
+                await this.slashSeller(`Settlement failed: ${resolved.reason}`);
+                return { ok: false, code: "FAILED_PROOF", reason: resolved.reason };
+              }
+            } else {
+              // Pending but no auto-poll - this shouldn't happen if we handled it in accept
+              // But handle gracefully
+              await this.slashSeller("Settlement still pending");
+              return { ok: false, code: "FAILED_PROOF", reason: "Settlement still pending" };
+            }
+          } else if (pollResult.status === "failed") {
+            // Settlement failed - slash seller
+            await this.slashSeller(pollResult.failure_reason || "Settlement failed");
+            return { ok: false, code: "FAILED_PROOF", reason: pollResult.failure_reason || "Settlement failed" };
+          }
+          // committed - funds already transferred, continue
+        }
+        // If no poll method, assume committed (legacy behavior)
+      } else {
+        // Legacy settlement: unlock, debit, credit
+        // Unlock buyer payment (adds back to balance)
+        this.params.settlement.unlock(buyerAgentId, this.agreement.agreed_price);
+        // Debit from buyer and credit to seller
+        this.params.settlement.debit(buyerAgentId, this.agreement.agreed_price);
+        this.params.settlement.credit(sellerAgentId, this.agreement.agreed_price);
+      }
 
-      // Unlock seller bond
+      // Unlock seller bond (always use legacy method for bonds)
       this.params.settlement.unlock(sellerAgentId, this.agreement.seller_bond);
     }
 
@@ -677,7 +840,7 @@ export class NegotiationSession {
   /**
    * Slash seller for failure to commit/reveal or hash mismatch.
    */
-  private slashSeller(reason: string): void {
+  private async slashSeller(reason: string): Promise<void> {
     if (!this.agreement || !this.params.settlement) {
       return;
     }
@@ -685,8 +848,21 @@ export class NegotiationSession {
     const buyerAgentId = this.params.buyerAgentId ?? "buyer";
     const sellerAgentId = this.params.sellerAgentId ?? "seller";
 
-    // Refund buyer payment
-    this.params.settlement.unlock(buyerAgentId, this.agreement.agreed_price);
+    // v1.7.2+: If using lifecycle API, abort settlement (releases locked/transferred funds)
+    if (this.settlementHandle) {
+      // Try to abort settlement (works if still prepared/pending)
+      // If already committed, we need to reverse the transfer manually
+      try {
+        await this.params.settlement.abort(this.settlementHandle.handle_id, reason);
+      } catch {
+        // Abort failed (likely already committed) - reverse the transfer manually
+        this.params.settlement.credit(buyerAgentId, this.agreement.agreed_price);
+        this.params.settlement.debit(sellerAgentId, this.agreement.agreed_price);
+      }
+    } else {
+      // Legacy settlement: unlock buyer payment
+      this.params.settlement.unlock(buyerAgentId, this.agreement.agreed_price);
+    }
 
     // Slash seller bond to buyer
     this.params.settlement.slash(sellerAgentId, buyerAgentId, this.agreement.seller_bond);
@@ -735,7 +911,7 @@ export class NegotiationSession {
   /**
    * Check for timeouts and update state.
    */
-  tick(): SessionResult | null {
+  async tick(): Promise<SessionResult | null> {
     if (this.status === "IDLE" || this.status === "ACCEPTED" || this.status === "REJECTED" || this.status === "TIMEOUT" || this.status === "FAILED") {
       return this.terminal_result ?? null; // Already terminal or idle
     }

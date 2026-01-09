@@ -24,6 +24,7 @@ export type AcquireInput = {
     provider?: "mock" | "external" | "stripe_like"; // v1.7.1+: stripe_like for Stripe-like semantics
     params?: Record<string, unknown>; // Parameters for external provider (e.g., { rail: "stripe", network: "testnet" })
     idempotency_key?: string; // Optional idempotency key for settlement lifecycle
+    auto_poll_ms?: number; // v1.7.2+: If set, poll settlement until resolved (0 = immediate poll loop, >0 = delay between polls)
   };
   // Optional identity/verification (v1: for policy enforcement)
   identity?: {

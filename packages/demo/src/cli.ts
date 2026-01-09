@@ -281,6 +281,8 @@ async function main() {
   
   // v1.7.2+: Optional async flag for stripe_like (default: false, synchronous)
   const stripeAsync = !!args.stripeAsync || !!args["stripe-async"];
+  // v1.7.2+: Optional fail flag for stripe_like (default: false, succeeds)
+  const stripeFail = !!args.stripeFail || !!args["stripe-fail"];
   
   // Note: For bad-reveal demo, the provider server must be started with
   // PACT_DEV_BAD_REVEAL=1 environment variable set, as the provider server
@@ -353,12 +355,12 @@ async function main() {
       provider: settlementProvider,
     };
     
-    // v1.7.2+: If stripe_like and stripeAsync flag is set, enable async behavior
-    if (settlementProvider === "stripe_like" && stripeAsync) {
+    // v1.7.2+: If stripe_like and stripeAsync/stripeFail flags are set, configure async behavior
+    if (settlementProvider === "stripe_like" && (stripeAsync || stripeFail)) {
       providerConfig.params = {
-        asyncCommit: true,
+        asyncCommit: stripeAsync || stripeFail, // Enable async if either flag is set
         commitDelayTicks: 3, // Default delay
-        failCommit: false,
+        failCommit: stripeFail, // Fail if stripeFail flag is set
       };
     }
     
@@ -583,8 +585,19 @@ async function main() {
       ...(minTrustTier ? { minTrustTier } : {}),
       ...(minTrustScore !== undefined ? { minTrustScore } : {}),
       ...(requireCredential ? { requireCredential: true } : {}),
+      // v1.7.2+: Settlement lifecycle configuration
+      // Only set auto_poll_ms if using stripe_like with async
+      // DO NOT set provider here - we pass the funded instance explicitly as 'settlement' parameter
+      // Setting input.settlement.provider would cause acquire() to create a NEW unfunded instance
+      ...(settlementProvider === "stripe_like" && stripeAsync
+        ? {
+            settlement: {
+              auto_poll_ms: 0, // Immediate poll loop for demo
+            },
+          }
+        : {}),
       // Note: Settlement provider is passed as explicit 'settlement' parameter below
-      // (explicit instance wins over input.settlement.provider)
+      // (explicit instance wins over input.settlement.provider, but only if input.settlement.provider is not set)
     },
     buyerKeyPair,
     sellerKeyPair,
@@ -684,6 +697,12 @@ async function main() {
     // For demo modes, this is expected behavior
     if (isDemoMode && (demoMode === "price-too-high" || demoMode === "timeout" || demoMode === "bad-reveal")) {
       console.error(`\n✅ Demo mode "${demoMode}": Failure is expected behavior.`);
+      process.exit(0);
+    }
+    
+    // For stripeFail demo mode, settlement failure is expected
+    if (isDemoMode && stripeFail && result.code === "SETTLEMENT_FAILED") {
+      console.error(`\n✅ Expected failure demonstrated`);
       process.exit(0);
     }
     
