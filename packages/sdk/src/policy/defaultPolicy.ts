@@ -130,6 +130,10 @@ export function createDefaultPolicy(nowMs?: number): PactPolicy {
         cutoff_on_violation: true,
       },
     },
+    settlement_routing: {
+      default_provider: "mock",
+      rules: [],
+    },
     anti_gaming: {
       rate_limits: {
         per_agent_per_intent_per_min: 30,

@@ -4,4 +4,5 @@ export * from "./mock";
 export * from "./external";
 export * from "./stripe_like";
 export * from "./factory";
+export * from "./routing";
 

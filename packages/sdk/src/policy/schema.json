@@ -393,6 +393,43 @@
           }
         }
       },
+
+      "settlement_routing": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["default_provider", "rules"],
+        "properties": {
+          "default_provider": {
+            "type": "string",
+            "enum": ["mock", "stripe_like", "external"]
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["use"],
+              "properties": {
+                "when": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "min_amount": { "type": "number", "minimum": 0 },
+                    "max_amount": { "type": "number", "minimum": 0 },
+                    "mode": { "type": "string", "enum": ["hash_reveal", "streaming"] },
+                    "min_trust_tier": { "type": "string", "enum": ["untrusted", "low", "trusted"] },
+                    "min_trust_score": { "type": "number", "minimum": 0, "maximum": 1 }
+                  }
+                },
+                "use": {
+                  "type": "string",
+                  "enum": ["mock", "stripe_like", "external"]
+                }
+              }
+            }
+          }
+        }
+      },
   
       "anti_gaming": {
         "type": "object",

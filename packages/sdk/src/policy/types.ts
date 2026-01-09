@@ -150,6 +150,22 @@ export interface SettlementConstraints {
   streaming: SettlementStreaming;
 }
 
+export interface SettlementRoutingRule {
+  when?: {
+    min_amount?: number;
+    max_amount?: number;
+    mode?: "hash_reveal" | "streaming";
+    min_trust_tier?: "untrusted" | "low" | "trusted";
+    min_trust_score?: number;
+  };
+  use: "mock" | "stripe_like" | "external";
+}
+
+export interface SettlementRouting {
+  default_provider: "mock" | "stripe_like" | "external";
+  rules: SettlementRoutingRule[];
+}
+
 export interface AntiGamingRateLimits {
   per_agent_per_intent_per_min: number;
   max_concurrent_negotiations: number;
@@ -227,6 +243,7 @@ export interface PactPolicy {
   sla: SLAConstraints;
   economics: EconomicsConstraints;
   settlement: SettlementConstraints;
+  settlement_routing?: SettlementRouting; // Optional settlement provider routing rules
   anti_gaming: AntiGamingConstraints;
   observability: ObservabilityConstraints;
   overrides: OverridesConstraints;

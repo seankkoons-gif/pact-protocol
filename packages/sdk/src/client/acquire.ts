@@ -24,6 +24,7 @@ import { TranscriptStore } from "../transcript/store";
 import { computeCredentialTrustScore } from "../kya/trust";
 import { createSettlementProvider } from "../settlement/factory";
 import { MockSettlementProvider } from "../settlement/mock";
+import { selectSettlementProvider } from "../settlement/routing";
 
 const round8 = (x: number) => Math.round(x * 1e8) / 1e8;
 
@@ -35,7 +36,7 @@ export async function acquire(params: {
   buyerId: string;
   sellerId: string;
   policy: PactPolicy;
-  settlement: SettlementProvider;
+  settlement?: SettlementProvider; // Optional: if not provided, use routing or input.settlement.provider
   store?: ReceiptStore;
   directory?: ProviderDirectory;
   rfq?: {
@@ -135,48 +136,49 @@ export async function acquire(params: {
   // Settlement provider selection (v1.6.2+)
   // If caller passes settlement instance explicitly, that wins (backward compatibility).
   // Else if input.settlement.provider is provided, create provider via factory.
-  // Else use existing default behavior (mock already being passed by demo).
-  let settlement: SettlementProvider;
-  try {
-    if (explicitSettlement) {
-      // Explicit instance wins (backward compatibility)
-      settlement = explicitSettlement;
-    } else if (input.settlement?.provider) {
-      // Create provider via factory (only if no explicit instance provided)
+  // Else defer to policy-driven routing (after provider selection to get amount/trust info).
+  let settlement: SettlementProvider | undefined;
+  let settlementRoutingResult: { provider: string; matchedRuleIndex?: number; reason: string } | undefined;
+  
+  // Only create settlement provider early if explicitly provided (for backward compatibility)
+  if (explicitSettlement) {
+    // Explicit instance wins (backward compatibility)
+    settlement = explicitSettlement;
+  } else if (input.settlement?.provider) {
+    // Explicit provider specified - create now
+    try {
       settlement = createSettlementProvider({
         provider: input.settlement.provider,
         params: input.settlement.params,
         idempotency_key: input.settlement.idempotency_key,
       });
-    } else {
-      // Fallback: should not happen in practice, but provide error
-      throw new Error("No settlement provider provided: either pass 'settlement' parameter or set 'input.settlement.provider'");
+    } catch (error: any) {
+      // Handle factory creation errors (e.g., invalid config)
+      const errorMsg = error?.message || String(error);
+      const explainLevel: ExplainLevel = input.explain ?? "none";
+      const explain: AcquireExplain | null = explainLevel !== "none" ? {
+        level: explainLevel,
+        intentType: input.intentType,
+        settlement: "hash_reveal",
+        regime: "posted",
+        fanout: 0,
+        providers_considered: 0,
+        providers_eligible: 0,
+        log: [],
+      } : null;
+      
+      // Record lifecycle error in transcript
+      recordLifecycleError("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED", `Settlement provider creation failed: ${errorMsg}`);
+      
+      return {
+        ok: false,
+        code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+        reason: `Settlement provider not implemented: ${errorMsg}`,
+        explain: explain || undefined,
+      };
     }
-  } catch (error: any) {
-    // Handle factory creation errors (e.g., invalid config)
-    const errorMsg = error?.message || String(error);
-    const explainLevel: ExplainLevel = input.explain ?? "none";
-    const explain: AcquireExplain | null = explainLevel !== "none" ? {
-      level: explainLevel,
-      intentType: input.intentType,
-      settlement: "hash_reveal",
-      regime: "posted",
-      fanout: 0,
-      providers_considered: 0,
-      providers_eligible: 0,
-      log: [],
-    } : null;
-    
-    // Record lifecycle error in transcript
-    recordLifecycleError("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED", `Settlement provider creation failed: ${errorMsg}`);
-    
-    return {
-      ok: false,
-      code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
-      reason: `Settlement provider not implemented: ${errorMsg}`,
-      explain: explain || undefined,
-    };
   }
+  // If neither explicit settlement nor input.settlement.provider, defer to routing after provider selection
   
   // Initialize explain if requested
   const explainLevel: ExplainLevel = input.explain ?? "none";
@@ -1153,6 +1155,79 @@ export async function acquire(params: {
     explain.selected_provider_id = selectedProvider.provider_id;
   }
   
+  // Apply policy-driven settlement provider routing if needed (B1)
+  // Only apply if caller did NOT pass settlement instance AND input.settlement.provider is undefined
+  if (!settlement) {
+    // Determine routing context from selected provider and negotiation state
+    const routingAmount = selectedAskPrice; // Use selected quote price as amount estimate
+    const routingMode = chosenMode;
+    // Extract trust information from provider (set during evaluation phase)
+    const providerTrustTier = (selectedProvider as any)._trustTier;
+    const routingTrustTier: "untrusted" | "low" | "trusted" = 
+      (providerTrustTier === "low" || providerTrustTier === "trusted") ? providerTrustTier : "untrusted";
+    const routingTrustScore = (selectedProvider as any)._trustScore ?? 0;
+    
+    // Apply routing
+    settlementRoutingResult = selectSettlementProvider(compiled, {
+      amount: routingAmount,
+      mode: routingMode,
+      trustTier: routingTrustTier,
+      trustScore: routingTrustScore,
+    });
+    
+    // Create settlement provider based on routing result
+    try {
+      // Set input.settlement.provider so factory creates the chosen provider
+      if (!input.settlement) {
+        input.settlement = {};
+      }
+      input.settlement.provider = settlementRoutingResult.provider as "mock" | "stripe_like" | "external";
+      
+      settlement = createSettlementProvider({
+        provider: settlementRoutingResult.provider as "mock" | "stripe_like" | "external",
+        params: input.settlement.params,
+        idempotency_key: input.settlement.idempotency_key,
+      });
+      
+      // Record routing decision in transcript
+      if (transcriptData) {
+        if (!transcriptData.settlement_lifecycle) {
+          transcriptData.settlement_lifecycle = {
+            provider: settlementRoutingResult.provider,
+            idempotency_key: input.settlement?.idempotency_key,
+            errors: [],
+          };
+        } else {
+          transcriptData.settlement_lifecycle.provider = settlementRoutingResult.provider;
+        }
+        // Store routing metadata (use validated/clamped values that were actually used for routing)
+        (transcriptData.settlement_lifecycle as any).routing = {
+          matched_rule_index: settlementRoutingResult.matchedRuleIndex,
+          reason: settlementRoutingResult.reason,
+          context: {
+            amount: routingAmount, // Already validated (finite and non-negative) by routing function
+            mode: routingMode,
+            trust_tier: routingTrustTier, // Already validated (defaults to "untrusted" if invalid)
+            trust_score: Math.max(0.0, Math.min(1.0, routingTrustScore)), // Clamp to [0.0, 1.0] to match routing function behavior
+          },
+        };
+      }
+    } catch (error: any) {
+      // Handle factory creation errors
+      const errorMsg = error?.message || String(error);
+      // Defensive: settlementRoutingResult should be defined at this point, but check for safety
+      const selectedProviderName = settlementRoutingResult?.provider ?? "unknown";
+      recordLifecycleError("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED", `Settlement provider routing selected "${selectedProviderName}" but creation failed: ${errorMsg}`);
+      
+      return {
+        ok: false,
+        code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+        reason: `Settlement provider routing selected "${selectedProviderName}" but creation failed: ${errorMsg}`,
+        explain: explain || undefined,
+      };
+    }
+  }
+  
   // Track verification status for HTTP providers (for demo output)
   let verification: {
     quoteVerified: boolean;
@@ -1266,12 +1341,23 @@ export async function acquire(params: {
     selectedAskPrice * bonding.seller_bond_multiple
   );
 
-  // 10.5) Ensure seller has enough balance (v1 simulation: top-up if needed)
+  // 10.5) Ensure buyer and seller have enough balance (v1 simulation: top-up if needed)
+  // This is needed especially when routing creates a new empty settlement provider
   try {
-  const sellerBal = settlement.getBalance(selectedProviderPubkey);
-  if (sellerBal < sellerBondRequired) {
-    // v1: top-up seller so lockBond can succeed during tests/demo
-    settlement.credit(selectedProviderPubkey, sellerBondRequired - sellerBal);
+    // Credit buyer if needed (buyer needs balance to lock payment amount)
+    const buyerBal = settlement.getBalance(buyerId);
+    const paymentAmount = selectedAskPrice;
+    const buyerBufferAmount = 0.1; // Buffer for tests/demo to ensure sufficient balance
+    if (buyerBal < paymentAmount) {
+      // v1: top-up buyer so lock can succeed during tests/demo
+      settlement.credit(buyerId, paymentAmount - buyerBal + buyerBufferAmount);
+    }
+    
+    // Credit seller if needed (seller needs balance for bond)
+    const sellerBal = settlement.getBalance(selectedProviderPubkey);
+    if (sellerBal < sellerBondRequired) {
+      // v1: top-up seller so lockBond can succeed during tests/demo
+      settlement.credit(selectedProviderPubkey, sellerBondRequired - sellerBal);
     }
   } catch (error: any) {
     // Handle settlement provider errors (e.g., ExternalSettlementProvider NotImplemented)

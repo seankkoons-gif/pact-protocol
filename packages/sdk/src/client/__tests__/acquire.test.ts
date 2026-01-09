@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
+import * as fs from "fs";
 import { acquire } from "../acquire";
 import { createDefaultPolicy } from "../../policy/defaultPolicy";
 import { MockSettlementProvider } from "../../settlement/mock";
@@ -1196,6 +1197,113 @@ describe("acquire", () => {
       expect(result.ok).toBe(true);
       if (result.ok) {
         expect(result.receipt.fulfilled).toBe(true);
+      }
+    });
+
+    it("should apply policy-driven routing when no explicit settlement or input.settlement.provider (B1)", async () => {
+      const buyer = createKeyPair();
+      const seller = createKeyPair();
+      
+      // Create policy with routing rules (empty rules = use default)
+      const policy = createDefaultPolicy();
+      policy.settlement_routing = {
+        default_provider: "mock",
+        rules: [],
+      };
+      
+      const store = new ReceiptStore();
+      // Don't use directory - test with direct sellerId (simpler, like basic test)
+
+      // Don't pass explicit settlement and don't set input.settlement.provider
+      // This should trigger routing, which should select "mock" (default)
+      // Routing creates settlement provider, and code will credit buyer/seller as needed
+      const result = await acquire({
+        input: {
+          intentType: "weather.data",
+          scope: "NYC",
+          constraints: { latency_ms: 50, freshness_sec: 10 },
+          maxPrice: 0.0001,
+          saveTranscript: true,
+          // No settlement config - should trigger routing
+        },
+        buyerKeyPair: buyer.keyPair,
+        sellerKeyPair: seller.keyPair,
+        buyerId: buyer.id,
+        sellerId: seller.id,
+        policy,
+        // No explicit settlement - should trigger routing
+        store,
+        now: createClock(),
+      });
+
+      // Should succeed (routing should select "mock" as default)
+      expect(result.ok).toBe(true);
+      if (result.ok && result.transcriptPath) {
+        // Verify transcript contains routing decision
+        const transcriptContent = fs.readFileSync(result.transcriptPath, "utf-8");
+        const transcript = JSON.parse(transcriptContent);
+        
+        expect(transcript.settlement_lifecycle).toBeDefined();
+        expect(transcript.settlement_lifecycle.provider).toBe("mock"); // Default
+        expect(transcript.settlement_lifecycle.routing).toBeDefined();
+        expect(transcript.settlement_lifecycle.routing.reason).toContain("default_provider");
+      }
+    });
+
+    it("should match routing rule based on amount threshold (B1)", async () => {
+      const buyer = createKeyPair();
+      const seller = createKeyPair();
+      
+      // Create policy with routing rules: use stripe_like for amount under 0.0001
+      const policy = createDefaultPolicy();
+      policy.settlement_routing = {
+        default_provider: "mock",
+        rules: [
+          {
+            when: {
+              max_amount: 0.0001,
+            },
+            use: "stripe_like",
+          },
+        ],
+      };
+      
+      const store = new ReceiptStore();
+      // Don't use directory - test with direct sellerId (simpler, like basic test)
+
+      // Don't pass explicit settlement and don't set input.settlement.provider
+      // Routing should select stripe_like based on amount rule
+      const result = await acquire({
+        input: {
+          intentType: "weather.data",
+          scope: "NYC",
+          constraints: { latency_ms: 50, freshness_sec: 10 },
+          maxPrice: 0.0001, // Use same as first test to match routing rule threshold
+          saveTranscript: true,
+        },
+        buyerKeyPair: buyer.keyPair,
+        sellerKeyPair: seller.keyPair,
+        buyerId: buyer.id,
+        sellerId: seller.id,
+        policy,
+        store,
+        now: createClock(),
+      });
+
+      // Should succeed with routing selecting stripe_like based on amount rule
+      // Note: maxPrice 0.0001 results in askPrice ~0.00008 (80% of maxPrice),
+      // which is <= max_amount 0.0001, so the rule matches
+      expect(result.ok).toBe(true);
+      if (result.ok && result.transcriptPath) {
+        // Verify transcript contains routing decision
+        const transcriptContent = fs.readFileSync(result.transcriptPath, "utf-8");
+        const transcript = JSON.parse(transcriptContent);
+        
+        expect(transcript.settlement_lifecycle).toBeDefined();
+        expect(transcript.settlement_lifecycle.provider).toBe("stripe_like"); // Rule matched
+        expect(transcript.settlement_lifecycle.routing).toBeDefined();
+        expect(transcript.settlement_lifecycle.routing.matched_rule_index).toBe(0);
+        expect(transcript.settlement_lifecycle.routing.reason).toContain("Matched rule 0");
       }
     });
   });
