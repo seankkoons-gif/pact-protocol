@@ -109,5 +109,18 @@ export type TranscriptV1 = {
     code?: string;
     reason?: string;
   };
+  
+  // Settlement lifecycle metadata (v1.6.3+)
+  settlement_lifecycle?: {
+    provider?: string; // "mock" | "external"
+    idempotency_key?: string; // Idempotency key from input.settlement.idempotency_key
+    handle_id?: string; // Settlement handle ID from prepare()
+    status?: "prepared" | "committed" | "aborted"; // Lifecycle status
+    prepared_at_ms?: number; // Timestamp when prepare() was called
+    committed_at_ms?: number; // Timestamp when commit() was called
+    aborted_at_ms?: number; // Timestamp when abort() was called
+    paid_amount?: number; // Amount paid (from commit result)
+    errors?: Array<{ code: string; reason: string }>; // Lifecycle errors
+  };
 };
 

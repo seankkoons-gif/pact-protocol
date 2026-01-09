@@ -46,6 +46,36 @@ export async function acquire(params: {
 }): Promise<AcquireResult> {
   const { input, buyerKeyPair, sellerKeyPair, buyerId, sellerId, policy, settlement: explicitSettlement, store, directory, rfq, now: nowFn } = params;
   
+  // Initialize transcript collection if requested (needed for recordLifecycleError)
+  const saveTranscript = input.saveTranscript ?? false;
+  const transcriptData: Partial<TranscriptV1> | null = saveTranscript ? {
+    version: "1",
+    intent_type: input.intentType,
+    timestamp_ms: nowFn ? nowFn() : Date.now(),
+    input: { ...input }, // Sanitized copy (can remove sensitive data if needed)
+    directory: [],
+    credential_checks: [],
+    quotes: [],
+    outcome: { ok: false },
+    // Initialize settlement lifecycle metadata (v1.6.3+)
+    settlement_lifecycle: input.settlement?.provider ? {
+      provider: input.settlement.provider,
+      idempotency_key: input.settlement.idempotency_key,
+      errors: [],
+    } : undefined,
+  } : null;
+  
+  // Helper to record settlement lifecycle error in transcript (v1.6.3+)
+  // Must be declared after transcriptData initialization
+  const recordLifecycleError = (code: string, reason: string) => {
+    if (transcriptData?.settlement_lifecycle) {
+      if (!transcriptData.settlement_lifecycle.errors) {
+        transcriptData.settlement_lifecycle.errors = [];
+      }
+      transcriptData.settlement_lifecycle.errors.push({ code, reason });
+    }
+  };
+
   // Settlement provider selection (v1.6.2+)
   // If caller passes settlement instance explicitly, that wins (backward compatibility).
   // Else if input.settlement.provider is provided, create provider via factory.
@@ -88,6 +118,9 @@ export async function acquire(params: {
       log: [],
     } : null;
     
+    // Record lifecycle error in transcript
+    recordLifecycleError("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED", `Settlement provider creation failed: ${errorMsg}`);
+    
     return {
       ok: false,
       code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
@@ -109,19 +142,6 @@ export async function acquire(params: {
     log: [],
   } : null;
 
-  // Initialize transcript collection if requested
-  const saveTranscript = input.saveTranscript ?? false;
-  const transcriptData: Partial<TranscriptV1> | null = saveTranscript ? {
-    version: "1",
-    intent_type: input.intentType,
-    timestamp_ms: nowFn ? nowFn() : Date.now(),
-    input: { ...input }, // Sanitized copy (can remove sensitive data if needed)
-    directory: [],
-    credential_checks: [],
-    quotes: [],
-    outcome: { ok: false },
-  } : null;
-  
   // Helper to push decision to explain log
   const pushDecision = (
     provider: { provider_id: string; pubkey_b58: string; endpoint?: string },
@@ -1017,6 +1037,18 @@ export async function acquire(params: {
         reason: finalCode === "UNTRUSTED_ISSUER" ? "All providers failed trusted issuer validation" : "No eligible providers",
       };
       
+      // Finalize settlement lifecycle metadata for error case (v1.6.3+)
+      if (transcriptData.settlement_lifecycle) {
+        // If there were lifecycle errors, ensure status reflects that
+        if (transcriptData.settlement_lifecycle.errors && transcriptData.settlement_lifecycle.errors.length > 0) {
+          // Status may be set by error recording, but ensure it's consistent
+          if (!transcriptData.settlement_lifecycle.status) {
+            transcriptData.settlement_lifecycle.status = "aborted";
+            transcriptData.settlement_lifecycle.aborted_at_ms = nowFn ? nowFn() : Date.now();
+          }
+        }
+      }
+      
       const transcriptStore = new TranscriptStore(input.transcriptDir);
       transcriptPath = await transcriptStore.writeTranscript(errorIntentId, transcriptData as TranscriptV1);
     }
@@ -1193,6 +1225,7 @@ export async function acquire(params: {
     // Handle settlement provider errors (e.g., ExternalSettlementProvider NotImplemented)
     const errorMsg = error?.message || String(error);
     if (errorMsg.includes("NotImplemented") || errorMsg.includes("ExternalSettlementProvider")) {
+      recordLifecycleError("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED", `Settlement operation (credit) failed: ${errorMsg}`);
       if (explain) {
         pushDecision(
           selectedProvider,
@@ -1698,6 +1731,7 @@ export async function acquire(params: {
         // Handle settlement provider errors (e.g., ExternalSettlementProvider NotImplemented)
         const errorMsg = error?.message || String(error);
         if (errorMsg.includes("NotImplemented") || errorMsg.includes("ExternalSettlementProvider")) {
+          recordLifecycleError("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED", `Settlement operation (unlock) failed: ${errorMsg}`);
           if (explain) {
             pushDecision(
               selectedProvider,
@@ -1745,6 +1779,7 @@ export async function acquire(params: {
           // Handle settlement provider errors from exchange.start()
           const errorMsg = error?.message || String(error);
           if (errorMsg.includes("NotImplemented") || errorMsg.includes("ExternalSettlementProvider")) {
+            recordLifecycleError("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED", `Settlement operation (exchange.start) failed: ${errorMsg}`);
             if (explain) {
               pushDecision(
                 selectedProvider,
@@ -1882,6 +1917,7 @@ export async function acquire(params: {
         // Handle settlement provider errors from exchange.tick()
         const errorMsg = error?.message || String(error);
         if (errorMsg.includes("NotImplemented") || errorMsg.includes("ExternalSettlementProvider")) {
+          recordLifecycleError("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED", `Settlement operation (exchange.tick) failed: ${errorMsg}`);
           if (explain) {
             pushDecision(
               selectedProvider,
@@ -2051,6 +2087,16 @@ export async function acquire(params: {
     transcriptData.receipt = receipt;
     transcriptData.explain = explain || undefined;
     transcriptData.outcome = { ok: true };
+    
+    // Finalize settlement lifecycle metadata (v1.6.3+)
+    if (transcriptData.settlement_lifecycle) {
+      // If successful, record committed status and paid amount from receipt
+      if (receipt && receipt.fulfilled) {
+        transcriptData.settlement_lifecycle.status = "committed";
+        transcriptData.settlement_lifecycle.committed_at_ms = receipt.timestamp_ms || (nowFn ? nowFn() : Date.now());
+        transcriptData.settlement_lifecycle.paid_amount = receipt.paid_amount || (receipt as any).agreed_price || 0;
+      }
+    }
     
     const transcriptStore = new TranscriptStore(input.transcriptDir);
     transcriptPath = await transcriptStore.writeTranscript(intentId, transcriptData as TranscriptV1);

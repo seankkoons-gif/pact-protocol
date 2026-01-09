@@ -34,6 +34,8 @@ export type ReplayResult = {
     commit_reveal_verified: number;
     commit_reveal_failed: number;
     artifacts_missing: number;
+    settlement_lifecycle_verified: number; // Settlement lifecycle validation (v1.6.3+)
+    settlement_lifecycle_failed: number; // Settlement lifecycle validation failures (v1.6.3+)
   };
 };
 
@@ -74,6 +76,8 @@ export async function replayTranscript(
     commit_reveal_verified: 0,
     commit_reveal_failed: 0,
     artifacts_missing: 0,
+    settlement_lifecycle_verified: 0,
+    settlement_lifecycle_failed: 0,
   };
 
   // Verify credential checks
@@ -256,6 +260,108 @@ export async function replayTranscript(
             });
             summary.envelopes_failed++;
           }
+        }
+      }
+    }
+  }
+
+  // Verify settlement lifecycle metadata (v1.6.3+)
+  if (transcript.settlement_lifecycle) {
+    const lifecycle = transcript.settlement_lifecycle;
+    
+    // Validate status-based invariants
+    if (lifecycle.status === "committed") {
+      // If committed, paid_amount must be present and > 0
+      if (lifecycle.paid_amount === undefined || lifecycle.paid_amount === null) {
+        failures.push({
+          code: "SETTLEMENT_LIFECYCLE_INVALID",
+          reason: "Settlement status is 'committed' but paid_amount is missing",
+          context: {
+            status: lifecycle.status,
+            has_paid_amount: lifecycle.paid_amount !== undefined,
+          },
+        });
+        summary.settlement_lifecycle_failed++;
+      } else if (lifecycle.paid_amount <= 0) {
+        failures.push({
+          code: "SETTLEMENT_LIFECYCLE_INVALID",
+          reason: `Settlement status is 'committed' but paid_amount (${lifecycle.paid_amount}) is not > 0`,
+          context: {
+            status: lifecycle.status,
+            paid_amount: lifecycle.paid_amount,
+          },
+        });
+        summary.settlement_lifecycle_failed++;
+      } else {
+        summary.settlement_lifecycle_verified++;
+      }
+      
+      // If committed, committed_at_ms should be present
+      if (lifecycle.committed_at_ms === undefined || lifecycle.committed_at_ms === null) {
+        failures.push({
+          code: "SETTLEMENT_LIFECYCLE_INVALID",
+          reason: "Settlement status is 'committed' but committed_at_ms is missing",
+          context: {
+            status: lifecycle.status,
+          },
+        });
+        summary.settlement_lifecycle_failed++;
+      }
+    } else if (lifecycle.status === "aborted") {
+      // If aborted, paid_amount must be absent or 0
+      if (lifecycle.paid_amount !== undefined && lifecycle.paid_amount !== null && lifecycle.paid_amount > 0) {
+        failures.push({
+          code: "SETTLEMENT_LIFECYCLE_INVALID",
+          reason: `Settlement status is 'aborted' but paid_amount (${lifecycle.paid_amount}) is > 0`,
+          context: {
+            status: lifecycle.status,
+            paid_amount: lifecycle.paid_amount,
+          },
+        });
+        summary.settlement_lifecycle_failed++;
+      } else {
+        summary.settlement_lifecycle_verified++;
+      }
+    } else if (lifecycle.status === "prepared") {
+      // If prepared, handle_id must be present
+      if (!lifecycle.handle_id) {
+        failures.push({
+          code: "SETTLEMENT_LIFECYCLE_INVALID",
+          reason: "Settlement status is 'prepared' but handle_id is missing",
+          context: {
+            status: lifecycle.status,
+          },
+        });
+        summary.settlement_lifecycle_failed++;
+      } else {
+        summary.settlement_lifecycle_verified++;
+      }
+      
+      // If prepared, prepared_at_ms should be present
+      if (lifecycle.prepared_at_ms === undefined || lifecycle.prepared_at_ms === null) {
+        failures.push({
+          code: "SETTLEMENT_LIFECYCLE_INVALID",
+          reason: "Settlement status is 'prepared' but prepared_at_ms is missing",
+          context: {
+            status: lifecycle.status,
+          },
+        });
+        summary.settlement_lifecycle_failed++;
+      }
+    }
+    
+    // Validate errors array if present
+    if (lifecycle.errors && Array.isArray(lifecycle.errors)) {
+      for (const error of lifecycle.errors) {
+        if (!error.code || !error.reason) {
+          failures.push({
+            code: "SETTLEMENT_LIFECYCLE_INVALID",
+            reason: "Settlement lifecycle error entry missing code or reason",
+            context: {
+              error,
+            },
+          });
+          summary.settlement_lifecycle_failed++;
         }
       }
     }
