@@ -6,8 +6,9 @@ dist/
 coverage/
 
 # Local artifacts
-packages/demo/demo_receipts.jsonl
-.pact/transcripts/
+.pact/
+packages/demo/.pact/
+packages/demo/demo_receipts_*.jsonl
 
 # Backup and temp files
 *.backup
