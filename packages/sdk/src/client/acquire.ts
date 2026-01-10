@@ -25,6 +25,7 @@ import { computeCredentialTrustScore } from "../kya/trust";
 import { createSettlementProvider } from "../settlement/factory";
 import { MockSettlementProvider } from "../settlement/mock";
 import { selectSettlementProvider } from "../settlement/routing";
+import { isRetryableFailure, buildFallbackPlan, type ProviderCandidate } from "../settlement/fallback";
 
 const round8 = (x: number) => Math.round(x * 1e8) / 1e8;
 
@@ -74,6 +75,77 @@ export async function acquire(params: {
         transcriptData.settlement_lifecycle.errors = [];
       }
       transcriptData.settlement_lifecycle.errors.push({ code, reason });
+    }
+  };
+
+  // Helper to save transcript on early return (non-retryable failures)
+  // This ensures consistent transcript saving for UX and audit trails
+  const saveTranscriptOnEarlyReturn = async (
+    intentId: string,
+    failureCode: string,
+    failureReason: string,
+    attemptEntry?: typeof attemptEntry
+  ): Promise<string | undefined> => {
+    if (!saveTranscript || !transcriptData || !input.transcriptDir) {
+      return undefined;
+    }
+
+    // Update transcript with outcome and attempt entry
+    transcriptData.intent_id = intentId;
+    transcriptData.explain = explain || undefined;
+    transcriptData.outcome = {
+      ok: false,
+      code: failureCode,
+      reason: failureReason,
+    };
+
+    // Include attempt entry if provided, merging with any existing attempts
+    // This ensures we capture the full attempt chain even on early returns
+    if (attemptEntry) {
+      // If transcriptData.settlement_attempts already exists (from previous attempts), 
+      // merge with the current attempt entry
+      if (transcriptData.settlement_attempts && transcriptData.settlement_attempts.length > 0) {
+        // Update existing entry or add new one
+        const existingIdx = transcriptData.settlement_attempts.findIndex(a => a.idx === attemptEntry.idx);
+        if (existingIdx >= 0) {
+          transcriptData.settlement_attempts[existingIdx] = attemptEntry;
+        } else {
+          transcriptData.settlement_attempts.push(attemptEntry);
+        }
+      } else {
+        // First attempt, create array with this entry
+        transcriptData.settlement_attempts = [attemptEntry];
+      }
+    }
+
+    // Ensure settlement lifecycle status is set if lifecycle exists
+    if (transcriptData.settlement_lifecycle) {
+      // If status is not already terminal, set to "failed" for settlement-related errors
+      if (failureCode.includes("SETTLEMENT") || failureCode === "SETTLEMENT_FAILED" || 
+          failureCode === "FAILED_PROOF" || failureCode === "NO_RECEIPT") {
+        if (!transcriptData.settlement_lifecycle.status || 
+            (transcriptData.settlement_lifecycle.status !== "committed" && 
+             transcriptData.settlement_lifecycle.status !== "aborted" &&
+             transcriptData.settlement_lifecycle.status !== "failed")) {
+          transcriptData.settlement_lifecycle.status = "failed";
+        }
+        // Set failure code/reason if not already set
+        if (!transcriptData.settlement_lifecycle.failure_code) {
+          transcriptData.settlement_lifecycle.failure_code = failureCode;
+        }
+        if (!transcriptData.settlement_lifecycle.failure_reason) {
+          transcriptData.settlement_lifecycle.failure_reason = failureReason;
+        }
+      }
+    }
+
+    try {
+      const transcriptStore = new TranscriptStore(input.transcriptDir);
+      return await transcriptStore.writeTranscript(intentId, transcriptData as TranscriptV1);
+    } catch (error: any) {
+      // Don't throw - transcript save failure shouldn't break the error return
+      // Log error in development if needed
+      return undefined;
     }
   };
 
@@ -141,10 +213,10 @@ export async function acquire(params: {
   let settlementRoutingResult: { provider: string; matchedRuleIndex?: number; reason: string } | undefined;
   
   // Only create settlement provider early if explicitly provided (for backward compatibility)
-  if (explicitSettlement) {
-    // Explicit instance wins (backward compatibility)
-    settlement = explicitSettlement;
-  } else if (input.settlement?.provider) {
+    if (explicitSettlement) {
+      // Explicit instance wins (backward compatibility)
+      settlement = explicitSettlement;
+    } else if (input.settlement?.provider) {
     // Explicit provider specified - create now
     try {
       settlement = createSettlementProvider({
@@ -152,31 +224,31 @@ export async function acquire(params: {
         params: input.settlement.params,
         idempotency_key: input.settlement.idempotency_key,
       });
-    } catch (error: any) {
-      // Handle factory creation errors (e.g., invalid config)
-      const errorMsg = error?.message || String(error);
-      const explainLevel: ExplainLevel = input.explain ?? "none";
-      const explain: AcquireExplain | null = explainLevel !== "none" ? {
-        level: explainLevel,
-        intentType: input.intentType,
-        settlement: "hash_reveal",
-        regime: "posted",
-        fanout: 0,
-        providers_considered: 0,
-        providers_eligible: 0,
-        log: [],
-      } : null;
-      
-      // Record lifecycle error in transcript
-      recordLifecycleError("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED", `Settlement provider creation failed: ${errorMsg}`);
-      
-      return {
-        ok: false,
-        code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
-        reason: `Settlement provider not implemented: ${errorMsg}`,
-        explain: explain || undefined,
-      };
-    }
+  } catch (error: any) {
+    // Handle factory creation errors (e.g., invalid config)
+    const errorMsg = error?.message || String(error);
+    const explainLevel: ExplainLevel = input.explain ?? "none";
+    const explain: AcquireExplain | null = explainLevel !== "none" ? {
+      level: explainLevel,
+      intentType: input.intentType,
+      settlement: "hash_reveal",
+      regime: "posted",
+      fanout: 0,
+      providers_considered: 0,
+      providers_eligible: 0,
+      log: [],
+    } : null;
+    
+    // Record lifecycle error in transcript
+    recordLifecycleError("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED", `Settlement provider creation failed: ${errorMsg}`);
+    
+    return {
+      ok: false,
+      code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+      reason: `Settlement provider not implemented: ${errorMsg}`,
+      explain: explain || undefined,
+    };
+  }
   }
   // If neither explicit settlement nor input.settlement.provider, defer to routing after provider selection
   
@@ -1122,23 +1194,109 @@ export async function acquire(params: {
 
   evaluations.sort((a, b) => a.utility - b.utility);
   const bestQuote = evaluations[0];
-  const selectedProvider = bestQuote.provider;
-  const selectedProviderPubkey = bestQuote.providerPubkey;
+  const primaryProviderId = bestQuote.provider.provider_id;
   
-  // Collect selection for transcript
+  // Build fallback plan from eligible candidates (B2)
+  const orderedCandidates = buildFallbackPlan({
+    candidates: evaluations.map(e => e.provider), // Use evaluated providers
+    primaryProviderId,
+  });
+  
+  // Create evaluation map for quick lookup by provider_id
+  const evaluationMap = new Map<string, CandidateEvaluation>();
+  for (const evaluation of evaluations) {
+    evaluationMap.set(evaluation.provider.provider_id, evaluation);
+  }
+  
+  // Initialize settlement_attempts array for transcript (B2)
+  const settlementAttempts: Array<{
+    idx: number;
+    provider_pubkey: string;
+    provider_id?: string;
+    settlement_provider?: string;
+    outcome: "success" | "failed";
+    failure_code?: string;
+    failure_reason?: string;
+    timestamp_ms?: number;
+  }> = [];
+  
+  // Fallback retry loop: attempt acquisition with each candidate in order (B2)
+  let lastFailure: { code: string; reason: string } | undefined;
+  
+  // Variables to store final result values (defined outside loop for access after loop)
+  let finalReceipt: Receipt | null = null;
+  let finalVerification: {
+    quoteVerified: boolean;
+    signerMatched: boolean;
+    commitVerified?: boolean;
+    revealVerified?: boolean;
+  } | undefined;
+  let finalIntentId: string | undefined;
+  let firstAttemptIntentId: string | undefined; // Track first attempt intentId for transcript when all fail
+  let finalSelectedProvider: ProviderCandidate | undefined;
+  let finalSelectedProviderPubkey: string | undefined;
+  
+  // Helper function to handle attempt failures with retry logic (B2)
+  const handleAttemptFailure = (failureCode: string, failureReason: string, attemptEntry: typeof settlementAttempts[0]): "continue" | "return" => {
+    // Record attempt failure
+    attemptEntry.outcome = "failed";
+    attemptEntry.failure_code = failureCode;
+    attemptEntry.failure_reason = failureReason;
+    attemptEntry.timestamp_ms = nowFunction();
+    settlementAttempts.push(attemptEntry);
+    
+    lastFailure = { code: failureCode, reason: failureReason };
+    
+    // Check if retryable
+    if (!isRetryableFailure(failureCode)) {
+      // Non-retryable failure - stop and return
   if (transcriptData) {
+        transcriptData.settlement_attempts = settlementAttempts;
+      }
+      return "return";
+    }
+    
+    // Retryable failure - continue to next candidate
+    return "continue";
+  };
+  
+  for (let attemptIdx = 0; attemptIdx < orderedCandidates.length; attemptIdx++) {
+    const candidate = orderedCandidates[attemptIdx];
+    const candidateEvaluation = evaluationMap.get(candidate.provider_id);
+    
+    if (!candidateEvaluation) {
+      // Should not happen, but handle gracefully
+      continue;
+    }
+    
+    const selectedProvider = candidateEvaluation.provider;
+    const selectedProviderPubkey = candidateEvaluation.providerPubkey;
+    const selectedAskPrice = candidateEvaluation.askPrice;
+    const attemptTimestamp = nowFunction();
+    
+    // Record attempt start (will update with outcome later)
+    let attemptEntry: typeof settlementAttempts[0] = {
+      idx: attemptIdx,
+      provider_pubkey: selectedProviderPubkey,
+      provider_id: selectedProvider.provider_id,
+      outcome: "failed", // Default, will update if success
+      timestamp_ms: attemptTimestamp,
+    };
+    
+    try {
+      // Collect selection for transcript (only on first attempt)
+      if (attemptIdx === 0 && transcriptData) {
     transcriptData.selection = {
       selected_provider_id: selectedProvider.provider_id,
       selected_pubkey_b58: selectedProviderPubkey,
       reason: "Lowest utility score",
-      utility_score: bestQuote.utility,
+          utility_score: candidateEvaluation.utility,
       alternatives_considered: evaluations.length,
     };
   }
-  const selectedAskPrice = bestQuote.askPrice;
   
-  // Log provider selection
-  if (explain) {
+      // Log provider selection (only on first attempt for explain)
+      if (attemptIdx === 0 && explain) {
     pushDecision(
       selectedProvider,
       "selection",
@@ -1146,87 +1304,103 @@ export async function acquire(params: {
       "PROVIDER_SELECTED",
       `Selected provider with best utility score`,
       explainLevel === "full" ? {
-        utility: bestQuote.utility,
+            utility: candidateEvaluation.utility,
         price: selectedAskPrice,
-        latency_ms: bestQuote.latencyMs,
-        reputation: bestQuote.sellerReputation,
+            latency_ms: candidateEvaluation.latencyMs,
+            reputation: candidateEvaluation.sellerReputation,
       } : undefined
     );
     explain.selected_provider_id = selectedProvider.provider_id;
   }
-  
-  // Apply policy-driven settlement provider routing if needed (B1)
-  // Only apply if caller did NOT pass settlement instance AND input.settlement.provider is undefined
-  if (!settlement) {
-    // Determine routing context from selected provider and negotiation state
-    const routingAmount = selectedAskPrice; // Use selected quote price as amount estimate
-    const routingMode = chosenMode;
-    // Extract trust information from provider (set during evaluation phase)
-    const providerTrustTier = (selectedProvider as any)._trustTier;
-    const routingTrustTier: "untrusted" | "low" | "trusted" = 
-      (providerTrustTier === "low" || providerTrustTier === "trusted") ? providerTrustTier : "untrusted";
-    const routingTrustScore = (selectedProvider as any)._trustScore ?? 0;
-    
-    // Apply routing
-    settlementRoutingResult = selectSettlementProvider(compiled, {
-      amount: routingAmount,
-      mode: routingMode,
-      trustTier: routingTrustTier,
-      trustScore: routingTrustScore,
-    });
-    
-    // Create settlement provider based on routing result
-    try {
-      // Set input.settlement.provider so factory creates the chosen provider
-      if (!input.settlement) {
-        input.settlement = {};
-      }
-      input.settlement.provider = settlementRoutingResult.provider as "mock" | "stripe_like" | "external";
       
-      settlement = createSettlementProvider({
-        provider: settlementRoutingResult.provider as "mock" | "stripe_like" | "external",
-        params: input.settlement.params,
-        idempotency_key: input.settlement.idempotency_key,
-      });
+      // Apply policy-driven settlement provider routing if needed (B1)
+      // Only apply if caller did NOT pass settlement instance AND input.settlement.provider is undefined
+      let attemptSettlement: SettlementProvider | undefined = explicitSettlement;
+      let settlementRoutingResult: { provider: string; matchedRuleIndex?: number; reason: string } | undefined;
       
-      // Record routing decision in transcript
-      if (transcriptData) {
-        if (!transcriptData.settlement_lifecycle) {
-          transcriptData.settlement_lifecycle = {
-            provider: settlementRoutingResult.provider,
-            idempotency_key: input.settlement?.idempotency_key,
-            errors: [],
-          };
-        } else {
-          transcriptData.settlement_lifecycle.provider = settlementRoutingResult.provider;
+      if (!attemptSettlement) {
+        // Determine routing context from selected provider and negotiation state
+        const routingAmount = selectedAskPrice; // Use selected quote price as amount estimate
+        const routingMode = chosenMode;
+        // Extract trust information from provider (set during evaluation phase)
+        const providerTrustTier = (selectedProvider as any)._trustTier;
+        const routingTrustTier: "untrusted" | "low" | "trusted" = 
+          (providerTrustTier === "low" || providerTrustTier === "trusted") ? providerTrustTier : "untrusted";
+        const routingTrustScore = (selectedProvider as any)._trustScore ?? 0;
+        
+        // Apply routing
+        settlementRoutingResult = selectSettlementProvider(compiled, {
+          amount: routingAmount,
+          mode: routingMode,
+          trustTier: routingTrustTier,
+          trustScore: routingTrustScore,
+        });
+        
+        // Create settlement provider based on routing result
+        try {
+          // Set input.settlement.provider so factory creates the chosen provider
+          if (!input.settlement) {
+            input.settlement = {};
+          }
+          input.settlement.provider = settlementRoutingResult.provider as "mock" | "stripe_like" | "external";
+          
+          attemptSettlement = createSettlementProvider({
+            provider: settlementRoutingResult.provider as "mock" | "stripe_like" | "external",
+            params: input.settlement.params,
+            idempotency_key: input.settlement.idempotency_key,
+          });
+          
+          // Record settlement provider in attempt entry
+          attemptEntry.settlement_provider = settlementRoutingResult.provider;
+          
+          // Record routing decision in transcript (only on first attempt)
+          if (attemptIdx === 0 && transcriptData) {
+            if (!transcriptData.settlement_lifecycle) {
+              transcriptData.settlement_lifecycle = {
+                provider: settlementRoutingResult.provider,
+                idempotency_key: input.settlement?.idempotency_key,
+                errors: [],
+              };
+            } else {
+              transcriptData.settlement_lifecycle.provider = settlementRoutingResult.provider;
+            }
+            // Store routing metadata (use validated/clamped values that were actually used for routing)
+            (transcriptData.settlement_lifecycle as any).routing = {
+              matched_rule_index: settlementRoutingResult.matchedRuleIndex,
+              reason: settlementRoutingResult.reason,
+              context: {
+                amount: routingAmount, // Already validated (finite and non-negative) by routing function
+                mode: routingMode,
+                trust_tier: routingTrustTier, // Already validated (defaults to "untrusted" if invalid)
+                trust_score: Math.max(0.0, Math.min(1.0, routingTrustScore)), // Clamp to [0.0, 1.0] to match routing function behavior
+              },
+            };
+          }
+        } catch (error: any) {
+          // Handle factory creation errors - this is retryable
+          const errorMsg = error?.message || String(error);
+          const selectedProviderName = settlementRoutingResult?.provider ?? "unknown";
+          const failureCode = "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED";
+          const failureReason = `Settlement provider routing selected "${selectedProviderName}" but creation failed: ${errorMsg}`;
+          
+          // Record attempt failure using helper
+          attemptEntry.settlement_provider = selectedProviderName;
+          const action = handleAttemptFailure(failureCode, failureReason, attemptEntry);
+          if (action === "return") {
+            return {
+              ok: false,
+              code: failureCode,
+              reason: failureReason,
+              explain: explain || undefined,
+            };
+          }
+          // continue to next candidate
+          continue;
         }
-        // Store routing metadata (use validated/clamped values that were actually used for routing)
-        (transcriptData.settlement_lifecycle as any).routing = {
-          matched_rule_index: settlementRoutingResult.matchedRuleIndex,
-          reason: settlementRoutingResult.reason,
-          context: {
-            amount: routingAmount, // Already validated (finite and non-negative) by routing function
-            mode: routingMode,
-            trust_tier: routingTrustTier, // Already validated (defaults to "untrusted" if invalid)
-            trust_score: Math.max(0.0, Math.min(1.0, routingTrustScore)), // Clamp to [0.0, 1.0] to match routing function behavior
-          },
-        };
+      } else {
+        // Explicit settlement provided - use it
+        attemptEntry.settlement_provider = (attemptSettlement as any).providerType || "explicit";
       }
-    } catch (error: any) {
-      // Handle factory creation errors
-      const errorMsg = error?.message || String(error);
-      // Defensive: settlementRoutingResult should be defined at this point, but check for safety
-      const selectedProviderName = settlementRoutingResult?.provider ?? "unknown";
-      recordLifecycleError("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED", `Settlement provider routing selected "${selectedProviderName}" but creation failed: ${errorMsg}`);
-      
-      return {
-        ok: false,
-        code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
-        reason: `Settlement provider routing selected "${selectedProviderName}" but creation failed: ${errorMsg}`,
-        explain: explain || undefined,
-      };
-    }
-  }
   
   // Track verification status for HTTP providers (for demo output)
   let verification: {
@@ -1250,7 +1424,7 @@ export async function acquire(params: {
     now: nowFunction,
     role: "buyer",
     intentType: input.intentType,
-    settlement,
+        settlement: attemptSettlement, // Use attemptSettlement, not settlement
     buyerAgentId: buyerId,
     sellerAgentId: selectedProviderPubkey, // Use selected provider's pubkey
     // v1.7.2+: Settlement lifecycle configuration
@@ -1284,6 +1458,9 @@ export async function acquire(params: {
       // Skip credential check for buyers - credentials are seller requirements
       // Only fail on other identity checks
     } else {
+          // Buyer identity check failures are non-retryable (policy/trust issue)
+          const action = handleAttemptFailure(buyerIdentityCheck.code, "Buyer identity check failed", attemptEntry);
+          if (action === "return") {
       return {
         ok: false,
         plan: {
@@ -1292,12 +1469,19 @@ export async function acquire(params: {
         },
         code: buyerIdentityCheck.code,
         reason: "Buyer identity check failed",
+              explain: explain || undefined,
       };
+          }
+          continue;
     }
   }
 
   // 9) Build and sign INTENT envelope
-  const intentId = `intent-${nowFunction()}`;
+      const intentId = `intent-${nowFunction()}-${attemptIdx}`; // Add attemptIdx for uniqueness
+      // Track first attempt intentId for transcript when all attempts fail
+      if (attemptIdx === 0) {
+        firstAttemptIntentId = intentId;
+      }
   const intentNow = nowFunction();
   const intentMsg = {
     protocol_version: "pact/1.0" as const,
@@ -1317,6 +1501,9 @@ export async function acquire(params: {
   const intentResult = await session.openWithIntent(intentEnvelope);
 
   if (!intentResult.ok) {
+        // INTENT failures are typically non-retryable (policy issues), but check anyway
+        const action = handleAttemptFailure(intentResult.code, intentResult.reason || "Failed to open intent", attemptEntry);
+        if (action === "return") {
     if (explain) {
       explain.regime = plan.regime;
       explain.settlement = chosenMode;
@@ -1332,6 +1519,8 @@ export async function acquire(params: {
       reason: intentResult.reason || "Failed to open intent",
       ...(explain ? { explain } : {}),
     };
+        }
+        continue;
   }
 
   // 10) Compute seller bond requirement deterministically from policy
@@ -1341,45 +1530,43 @@ export async function acquire(params: {
     selectedAskPrice * bonding.seller_bond_multiple
   );
 
-  // 10.5) Ensure buyer and seller have enough balance (v1 simulation: top-up if needed)
-  // This is needed especially when routing creates a new empty settlement provider
-  try {
-    // Credit buyer if needed (buyer needs balance to lock payment amount)
-    const buyerBal = settlement.getBalance(buyerId);
-    const paymentAmount = selectedAskPrice;
-    const buyerBufferAmount = 0.1; // Buffer for tests/demo to ensure sufficient balance
-    if (buyerBal < paymentAmount) {
-      // v1: top-up buyer so lock can succeed during tests/demo
-      settlement.credit(buyerId, paymentAmount - buyerBal + buyerBufferAmount);
-    }
-    
-    // Credit seller if needed (seller needs balance for bond)
-    const sellerBal = settlement.getBalance(selectedProviderPubkey);
-    if (sellerBal < sellerBondRequired) {
-      // v1: top-up seller so lockBond can succeed during tests/demo
-      settlement.credit(selectedProviderPubkey, sellerBondRequired - sellerBal);
+      // 10.5) Ensure buyer and seller have enough balance (v1 simulation: top-up if needed)
+      // This is needed especially when routing creates a new empty settlement provider
+      try {
+        // Credit buyer if needed (buyer needs balance to lock payment amount)
+        const buyerBal = attemptSettlement.getBalance(buyerId);
+        const paymentAmount = selectedAskPrice;
+        const buyerBufferAmount = 0.1; // Buffer for tests/demo to ensure sufficient balance
+        if (buyerBal < paymentAmount) {
+          // v1: top-up buyer so lock can succeed during tests/demo
+          attemptSettlement.credit(buyerId, paymentAmount - buyerBal + buyerBufferAmount);
+        }
+        
+        // Credit seller if needed (seller needs balance for bond)
+        const sellerBal = attemptSettlement.getBalance(selectedProviderPubkey);
+  if (sellerBal < sellerBondRequired) {
+    // v1: top-up seller so lockBond can succeed during tests/demo
+          attemptSettlement.credit(selectedProviderPubkey, sellerBondRequired - sellerBal);
     }
   } catch (error: any) {
     // Handle settlement provider errors (e.g., ExternalSettlementProvider NotImplemented)
     const errorMsg = error?.message || String(error);
     if (errorMsg.includes("NotImplemented") || errorMsg.includes("ExternalSettlementProvider")) {
-      recordLifecycleError("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED", `Settlement operation (credit) failed: ${errorMsg}`);
-      if (explain) {
-        pushDecision(
-          selectedProvider,
-          "settlement",
-          false,
-          "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
-          `Settlement provider not implemented: ${errorMsg}`,
-          explainLevel === "full" ? { error: errorMsg } : undefined
-        );
-      }
+          const failureCode = "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED";
+          const failureReason = `Settlement operation (credit) failed: ${errorMsg}`;
+          
+          // Record attempt failure using helper
+          const action = handleAttemptFailure(failureCode, failureReason, attemptEntry);
+          if (action === "return") {
       return {
         ok: false,
-        code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
-        reason: `Settlement provider not implemented: ${errorMsg}`,
+              code: failureCode,
+              reason: failureReason,
         explain: explain || undefined,
       };
+          }
+          // continue to next candidate
+          continue;
     }
     // Re-throw other errors
     throw error;
@@ -1388,6 +1575,7 @@ export async function acquire(params: {
   // 11) Build and sign ASK envelope for selected provider
   // For HTTP providers, extract quote data from verified envelope and create new ASK with correct intent_id
   // For local providers, sign a new ASK message
+      const askNow = nowFunction(); // Define askNow inside loop
   let askEnvelope;
   if (selectedProvider.endpoint) {
     // HTTP provider: extract quote data from verified envelope and create new ASK
@@ -1438,7 +1626,7 @@ export async function acquire(params: {
           intent_id: intentId,
           price: selectedAskPrice,
           unit: "request" as const,
-          latency_ms: bestQuote.latencyMs,
+              latency_ms: candidateEvaluation.latencyMs, // Use candidateEvaluation instead of bestQuote
           valid_for_ms: 20000,
           bond_required: sellerBondRequired,
           sent_at_ms: askNow,
@@ -1461,7 +1649,7 @@ export async function acquire(params: {
         intent_id: intentId,
         price: selectedAskPrice,
         unit: "request" as const,
-        latency_ms: bestQuote.latencyMs,
+            latency_ms: candidateEvaluation.latencyMs, // Use candidateEvaluation instead of bestQuote
         valid_for_ms: 20000,
         bond_required: sellerBondRequired,
         sent_at_ms: askNow,
@@ -1477,7 +1665,7 @@ export async function acquire(params: {
       intent_id: intentId,
       price: selectedAskPrice,
       unit: "request" as const,
-      latency_ms: bestQuote.latencyMs,
+          latency_ms: candidateEvaluation.latencyMs, // Use candidateEvaluation instead of bestQuote
       valid_for_ms: 20000,
       bond_required: sellerBondRequired,
       sent_at_ms: askNow,
@@ -1488,7 +1676,7 @@ export async function acquire(params: {
   }
   const counterpartySummary = {
     agent_id: selectedProviderPubkey,
-    reputation: bestQuote.sellerReputation,
+        reputation: candidateEvaluation.sellerReputation, // Use candidateEvaluation instead of bestQuote
     age_ms: 1_000_000,
     region: selectedProvider.region ?? "us-east",
     failure_rate: 0,
@@ -1498,6 +1686,9 @@ export async function acquire(params: {
 
   const askResult = await session.onQuote(askEnvelope, counterpartySummary, referenceP50);
   if (!askResult.ok) {
+        // ASK rejection failures are typically non-retryable (policy issues), but check anyway
+        const action = handleAttemptFailure(askResult.code, askResult.reason || "ASK rejected by policy", attemptEntry);
+        if (action === "return") {
     if (explain) {
       explain.regime = plan.regime;
       explain.settlement = chosenMode;
@@ -1523,6 +1714,8 @@ export async function acquire(params: {
       offers_eligible: evaluations.length,
       ...(explain ? { explain } : {}),
     };
+        }
+        continue;
   }
 
   // 7) Build and sign ACCEPT envelope
@@ -1542,61 +1735,62 @@ export async function acquire(params: {
 
   const acceptEnvelope = await signEnvelope(acceptMsg, buyerKeyPair);
   const acceptResult = await session.accept(acceptEnvelope);
-  if (!acceptResult.ok) {
-    // Record settlement lifecycle failure (v1.7.2+)
-    // When commit returns pending and auto_poll is enabled, failure happens during poll
-    if (acceptResult.code === "SETTLEMENT_FAILED" && transcriptData?.settlement_lifecycle) {
-      recordLifecycleEvent("poll", "failed", {
-        failure_code: acceptResult.code,
-        failure_reason: acceptResult.reason || "Settlement failed during async processing",
-      });
-    }
-    
-    if (explain) {
-      explain.regime = plan.regime;
-      explain.settlement = chosenMode;
-      explain.fanout = plan.fanout;
-      pushDecision(
-        selectedProvider,
-        "settlement",
-        false,
-        "SETTLEMENT_FAILED",
-        acceptResult.reason || "ACCEPT failed",
-        explainLevel === "full" ? { code: acceptResult.code } : undefined
-      );
-    }
-    
-    // Save transcript for settlement failure (v1.7.2+)
-    let transcriptPath: string | undefined;
-    if (saveTranscript && transcriptData) {
-      transcriptData.intent_id = intentId;
-      transcriptData.explain = explain || undefined;
-      transcriptData.outcome = {
-        ok: false,
-        code: acceptResult.code,
-        reason: acceptResult.reason || "ACCEPT failed",
-      };
-      
-      const transcriptStore = new TranscriptStore(input.transcriptDir);
-      transcriptPath = await transcriptStore.writeTranscript(intentId, transcriptData as TranscriptV1);
-    }
-    
-    return {
-      ok: false,
-      plan: {
-        ...plan,
-        overrideActive,
-      },
-      code: acceptResult.code,
-      reason: acceptResult.reason || "ACCEPT failed",
-      offers_eligible: evaluations.length,
-      ...(explain ? { explain } : {}),
-      ...(transcriptPath ? { transcriptPath } : {}),
-    };
-  }
+      if (!acceptResult.ok) {
+        // ACCEPT failures (settlement failures) are retryable
+        const action = handleAttemptFailure(acceptResult.code, acceptResult.reason || "ACCEPT failed", attemptEntry);
+        
+        // Record settlement lifecycle failure (v1.7.2+) if applicable
+        if (acceptResult.code === "SETTLEMENT_FAILED" && transcriptData?.settlement_lifecycle) {
+          recordLifecycleEvent("poll", "failed", {
+            failure_code: acceptResult.code,
+            failure_reason: acceptResult.reason || "Settlement failed during async processing",
+          });
+        }
+        
+        if (action === "return") {
+          if (explain) {
+            explain.regime = plan.regime;
+            explain.settlement = chosenMode;
+            explain.fanout = plan.fanout;
+            pushDecision(
+              selectedProvider,
+              "settlement",
+              false,
+              "SETTLEMENT_FAILED",
+              acceptResult.reason || "ACCEPT failed",
+              explainLevel === "full" ? { code: acceptResult.code } : undefined
+            );
+          }
+          
+          // Save transcript for non-retryable ACCEPT failure (v1.7.2+)
+          const transcriptPath = await saveTranscriptOnEarlyReturn(
+            intentId,
+            acceptResult.code,
+            acceptResult.reason || "ACCEPT failed",
+            attemptEntry
+          );
+          
+          return {
+            ok: false,
+            plan: {
+              ...plan,
+              overrideActive,
+            },
+            code: acceptResult.code,
+            reason: acceptResult.reason || "ACCEPT failed",
+            offers_eligible: evaluations.length,
+            ...(explain ? { explain } : {}),
+            ...(transcriptPath ? { transcriptPath } : {}),
+          };
+        }
+        continue;
+      }
 
   const agreement = session.getAgreement();
   if (!agreement) {
+        // NO_AGREEMENT is typically non-retryable (protocol error), but check anyway
+        const action = handleAttemptFailure("NO_AGREEMENT", "No agreement found after ACCEPT", attemptEntry);
+        if (action === "return") {
     return {
       ok: false,
       plan: {
@@ -1608,6 +1802,8 @@ export async function acquire(params: {
       offers_eligible: evaluations.length,
       ...(explain ? { explain } : {}),
     };
+        }
+        continue;
   }
 
   // 8) Execute settlement
@@ -1674,29 +1870,51 @@ export async function acquire(params: {
         const commitResult = await session.onCommit(commitResponse.envelope as SignedEnvelope<CommitMessage>);
         
         if (!commitResult.ok) {
-          // Log settlement failure
-          if (explain) {
-            pushDecision(
-              selectedProvider,
-              "settlement",
-              false,
-              "SETTLEMENT_FAILED",
+          // COMMIT failures are retryable (SETTLEMENT_FAILED)
+          const action = handleAttemptFailure(commitResult.code, commitResult.reason || "COMMIT failed", attemptEntry);
+          if (action === "return") {
+            if (explain) {
+              pushDecision(
+                selectedProvider,
+                "settlement",
+                false,
+                "SETTLEMENT_FAILED",
+                commitResult.reason || "COMMIT failed",
+                explainLevel === "full" ? { code: commitResult.code } : undefined
+              );
+            }
+            
+            // Record settlement lifecycle failure if applicable
+            if (commitResult.code === "SETTLEMENT_FAILED" && transcriptData?.settlement_lifecycle) {
+              recordLifecycleEvent("commit", "failed", {
+                failure_code: commitResult.code,
+                failure_reason: commitResult.reason || "COMMIT failed",
+              });
+            }
+            
+            // Save transcript for non-retryable COMMIT failure (v1.7.2+)
+            const transcriptPath = await saveTranscriptOnEarlyReturn(
+              intentId,
+              commitResult.code,
               commitResult.reason || "COMMIT failed",
-              explainLevel === "full" ? { code: commitResult.code } : undefined
+              attemptEntry
             );
+            
+            return {
+              ok: false,
+              plan: {
+                ...plan,
+                overrideActive,
+              },
+              code: commitResult.code,
+              reason: commitResult.reason || "COMMIT failed",
+              offers_eligible: evaluations.length,
+              ...(explain ? { explain } : {}),
+              ...(transcriptPath ? { transcriptPath } : {}),
+            };
           }
-          
-          return {
-            ok: false,
-            plan: {
-              ...plan,
-              overrideActive,
-            },
-            code: commitResult.code,
-            reason: commitResult.reason || "COMMIT failed",
-            offers_eligible: evaluations.length,
-            ...(explain ? { explain } : {}),
-          };
+          // Retryable - continue to next candidate (will be caught by outer catch)
+          throw new Error(`COMMIT failed: ${commitResult.reason || commitResult.code}`); // Will be caught by outer catch
         }
         
         // Call /reveal endpoint to get signed REVEAL envelope
@@ -1732,33 +1950,47 @@ export async function acquire(params: {
         }
         
         if (!revealResponse.ok) {
-          // Provider rejected reveal (hash mismatch)
+              // Provider rejected reveal (hash mismatch) - FAILED_PROOF is non-retryable
+              const failureCode = revealResponse.code || "FAILED_PROOF";
           // Still feed the verified envelope to record the failure
           const revealResult = await session.onReveal(revealResponse.envelope as SignedEnvelope<RevealMessage>);
           
-          // Log settlement failure
-          if (explain) {
-            pushDecision(
-              selectedProvider,
-              "settlement",
-              false,
-              "SETTLEMENT_FAILED",
-              revealResponse.reason || "REVEAL failed",
-              explainLevel === "full" ? { code: revealResponse.code || "FAILED_PROOF" } : undefined
-            );
-          }
-          
-          return {
-            ok: false,
-            plan: {
-              ...plan,
-              overrideActive,
-            },
-            code: revealResponse.code || "FAILED_PROOF",
-            reason: revealResponse.reason || "REVEAL failed",
-            agreed_price: agreement.agreed_price,
-            ...(explain ? { explain } : {}),
-          };
+              const action = handleAttemptFailure(failureCode, revealResponse.reason || "REVEAL failed", attemptEntry);
+              if (action === "return") {
+                if (explain) {
+                  pushDecision(
+                    selectedProvider,
+                    "settlement",
+                    false,
+                    "SETTLEMENT_FAILED",
+                    revealResponse.reason || "REVEAL failed",
+                    explainLevel === "full" ? { code: failureCode } : undefined
+                  );
+                }
+                
+                // Save transcript for non-retryable REVEAL failure (v1.7.2+)
+                const transcriptPath = await saveTranscriptOnEarlyReturn(
+                  intentId,
+                  failureCode,
+                  revealResponse.reason || "REVEAL failed",
+                  attemptEntry
+                );
+                
+                return {
+                  ok: false,
+                  plan: {
+                    ...plan,
+                    overrideActive,
+                  },
+                  code: failureCode,
+                  reason: revealResponse.reason || "REVEAL failed",
+                  agreed_price: agreement.agreed_price,
+                  ...(explain ? { explain } : {}),
+                  ...(transcriptPath ? { transcriptPath } : {}),
+                };
+              }
+              // If retryable (shouldn't happen for FAILED_PROOF), continue
+              throw new Error(`REVEAL failed: ${revealResponse.reason || failureCode}`); // Will be caught by outer catch
         }
         
         revealOk = true;
@@ -1787,19 +2019,48 @@ export async function acquire(params: {
         const revealResult = await session.onReveal(revealEnvelopeToUse);
         
         if (!revealResult.ok) {
-          return {
-            ok: false,
-            plan: {
-              ...plan,
-              overrideActive,
-            },
-            code: revealResult.code,
-            reason: revealResult.reason || "REVEAL failed",
-            offers_eligible: evaluations.length,
-            ...(explain ? { explain } : {}),
-          };
+          // REVEAL failures are typically non-retryable (FAILED_PROOF), but check anyway
+          const action = handleAttemptFailure(revealResult.code, revealResult.reason || "REVEAL failed", attemptEntry);
+          if (action === "return") {
+            if (explain) {
+              pushDecision(
+                selectedProvider,
+                "settlement",
+                false,
+                "SETTLEMENT_FAILED",
+                revealResult.reason || "REVEAL failed",
+                explainLevel === "full" ? { code: revealResult.code } : undefined
+              );
+            }
+            
+            // Save transcript for non-retryable REVEAL failure (v1.7.2+)
+            const transcriptPath = await saveTranscriptOnEarlyReturn(
+              intentId,
+              revealResult.code,
+              revealResult.reason || "REVEAL failed",
+              attemptEntry
+            );
+            
+            return {
+              ok: false,
+              plan: {
+                ...plan,
+                overrideActive,
+              },
+              code: revealResult.code,
+              reason: revealResult.reason || "REVEAL failed",
+              offers_eligible: evaluations.length,
+              ...(explain ? { explain } : {}),
+              ...(transcriptPath ? { transcriptPath } : {}),
+            };
+          }
+          // If retryable, continue
+          throw new Error(`REVEAL failed: ${revealResult.reason || revealResult.code}`); // Will be caught by outer catch
         }
       } catch (error: any) {
+            // HTTP provider errors are retryable (provider-specific issues)
+            const action = handleAttemptFailure("HTTP_PROVIDER_ERROR", `HTTP provider error: ${error.message}`, attemptEntry);
+            if (action === "return") {
         return {
           ok: false,
           plan: {
@@ -1811,6 +2072,9 @@ export async function acquire(params: {
           offers_eligible: evaluations.length,
           ...(explain ? { explain } : {}),
         };
+            }
+            // Retryable - continue to next candidate (will be caught by outer catch)
+            throw error; // Re-throw to be caught by outer catch
       }
     } else {
       // Local provider: generate commit/reveal locally
@@ -1829,17 +2093,40 @@ export async function acquire(params: {
       const commitResult = await session.onCommit(commitEnvelope);
 
       if (!commitResult.ok) {
-        return {
-          ok: false,
-          plan: {
-            ...plan,
-            overrideActive,
-          },
-          code: commitResult.code,
-          reason: commitResult.reason || "COMMIT failed",
-          offers_eligible: evaluations.length,
-          ...(explain ? { explain } : {}),
-        };
+        // COMMIT failures are retryable (SETTLEMENT_FAILED)
+        const action = handleAttemptFailure(commitResult.code, commitResult.reason || "COMMIT failed", attemptEntry);
+        if (action === "return") {
+          // Record settlement lifecycle failure if applicable
+          if (commitResult.code === "SETTLEMENT_FAILED" && transcriptData?.settlement_lifecycle) {
+            recordLifecycleEvent("commit", "failed", {
+              failure_code: commitResult.code,
+              failure_reason: commitResult.reason || "COMMIT failed",
+            });
+          }
+          
+          // Save transcript for non-retryable COMMIT failure (v1.7.2+)
+          const transcriptPath = await saveTranscriptOnEarlyReturn(
+            intentId,
+            commitResult.code,
+            commitResult.reason || "COMMIT failed",
+            attemptEntry
+          );
+          
+          return {
+            ok: false,
+            plan: {
+              ...plan,
+              overrideActive,
+            },
+            code: commitResult.code,
+            reason: commitResult.reason || "COMMIT failed",
+            offers_eligible: evaluations.length,
+            ...(explain ? { explain } : {}),
+            ...(transcriptPath ? { transcriptPath } : {}),
+          };
+        }
+        // Retryable - continue
+        throw new Error(`COMMIT failed: ${commitResult.reason || commitResult.code}`); // Will be caught by outer catch
       }
 
       const revealNow = nowFunction();
@@ -1857,17 +2144,43 @@ export async function acquire(params: {
       const revealResult = await session.onReveal(revealEnvelope);
 
       if (!revealResult.ok) {
-        return {
-          ok: false,
-          plan: {
-            ...plan,
-            overrideActive,
-          },
-          code: revealResult.code,
-          reason: revealResult.reason || "REVEAL failed",
-          offers_eligible: evaluations.length,
-          ...(explain ? { explain } : {}),
-        };
+        // REVEAL failures are typically non-retryable (FAILED_PROOF), but check anyway
+        const action = handleAttemptFailure(revealResult.code, revealResult.reason || "REVEAL failed", attemptEntry);
+        if (action === "return") {
+          if (explain) {
+            pushDecision(
+              selectedProvider,
+              "settlement",
+              false,
+              "SETTLEMENT_FAILED",
+              revealResult.reason || "REVEAL failed",
+              explainLevel === "full" ? { code: revealResult.code } : undefined
+            );
+          }
+          
+          // Save transcript for non-retryable REVEAL failure (v1.7.2+)
+          const transcriptPath = await saveTranscriptOnEarlyReturn(
+            intentId,
+            revealResult.code,
+            revealResult.reason || "REVEAL failed",
+            attemptEntry
+          );
+          
+          return {
+            ok: false,
+            plan: {
+              ...plan,
+              overrideActive,
+            },
+            code: revealResult.code,
+            reason: revealResult.reason || "REVEAL failed",
+            offers_eligible: evaluations.length,
+            ...(explain ? { explain } : {}),
+            ...(transcriptPath ? { transcriptPath } : {}),
+          };
+        }
+        // If retryable, continue
+        throw new Error(`REVEAL failed: ${revealResult.reason || revealResult.code}`); // Will be caught by outer catch
       }
     }
 
@@ -1876,42 +2189,56 @@ export async function acquire(params: {
     // Streaming settlement
     const streamingPolicy = compiled.base.settlement.streaming;
     if (!streamingPolicy) {
-      return {
-        ok: false,
-        plan: {
-          ...plan,
-          overrideActive,
-        },
-        code: "STREAMING_NOT_CONFIGURED",
-        reason: "Streaming policy not configured",
-      };
+      // STREAMING_NOT_CONFIGURED is non-retryable (policy issue)
+      const action = handleAttemptFailure("STREAMING_NOT_CONFIGURED", "Streaming policy not configured", attemptEntry);
+      if (action === "return") {
+        // Save transcript for STREAMING_NOT_CONFIGURED failure (v1.7.2+)
+        const transcriptPath = await saveTranscriptOnEarlyReturn(
+          intentId,
+          "STREAMING_NOT_CONFIGURED",
+          "Streaming policy not configured",
+          attemptEntry
+        );
+        
+        return {
+          ok: false,
+          plan: {
+            ...plan,
+            overrideActive,
+          },
+          code: "STREAMING_NOT_CONFIGURED",
+          reason: "Streaming policy not configured",
+          offers_eligible: evaluations.length,
+          ...(explain ? { explain } : {}),
+          ...(transcriptPath ? { transcriptPath } : {}),
+        };
+      }
+      // If retryable, continue
+      throw new Error("STREAMING_NOT_CONFIGURED"); // Will be caught by outer catch
     }
 
     // Unlock what the agreement locked (pay-as-you-go)
       try {
-        settlement.unlock(buyerId, agreement.agreed_price);
-        settlement.unlock(selectedProviderPubkey, agreement.seller_bond);
+          attemptSettlement.unlock(buyerId, agreement.agreed_price);
+          attemptSettlement.unlock(selectedProviderPubkey, agreement.seller_bond);
       } catch (error: any) {
         // Handle settlement provider errors (e.g., ExternalSettlementProvider NotImplemented)
         const errorMsg = error?.message || String(error);
         if (errorMsg.includes("NotImplemented") || errorMsg.includes("ExternalSettlementProvider")) {
-          recordLifecycleError("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED", `Settlement operation (unlock) failed: ${errorMsg}`);
-          if (explain) {
-            pushDecision(
-              selectedProvider,
-              "settlement",
-              false,
-              "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
-              `Settlement provider not implemented: ${errorMsg}`,
-              explainLevel === "full" ? { error: errorMsg } : undefined
-            );
-          }
+            const failureCode = "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED";
+            const failureReason = `Settlement operation (unlock) failed: ${errorMsg}`;
+            
+            const action = handleAttemptFailure(failureCode, failureReason, attemptEntry);
+            if (action === "return") {
           return {
             ok: false,
-            code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
-            reason: `Settlement provider not implemented: ${errorMsg}`,
+                code: failureCode,
+                reason: failureReason,
             explain: explain || undefined,
           };
+            }
+            // Retryable - continue to next candidate
+            throw error; // Re-throw to be caught by outer catch
         }
         // Re-throw other errors
         throw error;
@@ -1926,7 +2253,7 @@ export async function acquire(params: {
     const streamNowFn = () => streamNow; // THIS is the clock exchange will use
 
     const exchange = new StreamingExchange({
-      settlement,
+          settlement: attemptSettlement, // Use attemptSettlement instead of settlement
       policy: compiled,
       now: streamNowFn, // Use dedicated streaming clock, not nowFunction
       buyerId,
@@ -1943,23 +2270,20 @@ export async function acquire(params: {
           // Handle settlement provider errors from exchange.start()
           const errorMsg = error?.message || String(error);
           if (errorMsg.includes("NotImplemented") || errorMsg.includes("ExternalSettlementProvider")) {
-            recordLifecycleError("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED", `Settlement operation (exchange.start) failed: ${errorMsg}`);
-            if (explain) {
-              pushDecision(
-                selectedProvider,
-                "settlement",
-                false,
-                "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
-                `Settlement provider not implemented: ${errorMsg}`,
-                explainLevel === "full" ? { error: errorMsg } : undefined
-              );
-            }
+            const failureCode = "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED";
+            const failureReason = `Settlement operation (exchange.start) failed: ${errorMsg}`;
+            
+            const action = handleAttemptFailure(failureCode, failureReason, attemptEntry);
+            if (action === "return") {
             return {
               ok: false,
-              code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
-              reason: `Settlement provider not implemented: ${errorMsg}`,
+                code: failureCode,
+                reason: failureReason,
               explain: explain || undefined,
             };
+            }
+            // Retryable - continue to next candidate
+            throw error; // Re-throw to be caught by outer catch
           }
           // Re-throw other errors
           throw error;
@@ -1983,6 +2307,9 @@ export async function acquire(params: {
           
           // Verify envelope signature (synchronous)
           if (!verifyEnvelope(chunkResponse.envelope)) {
+                // PROVIDER_SIGNATURE_INVALID is typically retryable (provider-specific issue)
+                const action = handleAttemptFailure("PROVIDER_SIGNATURE_INVALID", "Invalid STREAM_CHUNK envelope signature", attemptEntry);
+                if (action === "return") {
             if (explain) {
               pushDecision(
                 selectedProvider,
@@ -2003,6 +2330,9 @@ export async function acquire(params: {
               offers_eligible: evaluations.length,
               ...(explain ? { explain } : {}),
             };
+                }
+                // Retryable - break out of tick loop and continue to next candidate
+                throw new Error("PROVIDER_SIGNATURE_INVALID: Invalid STREAM_CHUNK envelope signature"); // Will be caught by outer catch
           }
           
           // Parse envelope (async)
@@ -2011,6 +2341,9 @@ export async function acquire(params: {
           // Know Your Agent: verify signer matches provider pubkey
           const chunkSignerMatches = parsed.signer_public_key_b58 === selectedProviderPubkey;
           if (!chunkSignerMatches) {
+                // PROVIDER_SIGNER_MISMATCH is typically retryable (provider misconfiguration)
+                const action = handleAttemptFailure("PROVIDER_SIGNER_MISMATCH", "STREAM_CHUNK envelope signer doesn't match provider pubkey", attemptEntry);
+                if (action === "return") {
             if (explain) {
               pushDecision(
                 selectedProvider,
@@ -2031,11 +2364,17 @@ export async function acquire(params: {
               offers_eligible: evaluations.length,
               ...(explain ? { explain } : {}),
             };
+                }
+                // Retryable - break out of tick loop and continue to next candidate
+                throw new Error("PROVIDER_SIGNER_MISMATCH: STREAM_CHUNK envelope signer doesn't match provider pubkey"); // Will be caught by outer catch
           }
           
           // Type assertion: we know this is a STREAM_CHUNK from the HTTP endpoint
           const chunkMsg = parsed.message as any;
           if (chunkMsg.type !== "STREAM_CHUNK") {
+                // INVALID_MESSAGE_TYPE is typically retryable (provider issue)
+                const action = handleAttemptFailure("INVALID_MESSAGE_TYPE", "Expected STREAM_CHUNK message", attemptEntry);
+                if (action === "return") {
             return {
               ok: false,
               plan: {
@@ -2044,12 +2383,26 @@ export async function acquire(params: {
               },
               code: "INVALID_MESSAGE_TYPE",
               reason: "Expected STREAM_CHUNK message",
+                    explain: explain || undefined,
             };
+                }
+                // Retryable - break out of tick loop and continue to next candidate
+                throw new Error("INVALID_MESSAGE_TYPE: Expected STREAM_CHUNK message"); // Will be caught by outer catch
           }
           
           // Call onChunk with the verified chunk message
           exchange.onChunk(chunkMsg);
         } catch (error: any) {
+              // HTTP_STREAMING_ERROR is retryable (network/provider issue)
+              const errorMsg = error?.message || String(error);
+              // Check if this is already a handled error (from above checks)
+              if (errorMsg.includes("PROVIDER_SIGNATURE_INVALID") || errorMsg.includes("PROVIDER_SIGNER_MISMATCH") || errorMsg.includes("INVALID_MESSAGE_TYPE")) {
+                // Re-throw to be caught by outer catch
+                throw error;
+              }
+              // Otherwise, treat as HTTP_STREAMING_ERROR
+              const action = handleAttemptFailure("HTTP_STREAMING_ERROR", `HTTP streaming error: ${errorMsg}`, attemptEntry);
+              if (action === "return") {
           return {
             ok: false,
             plan: {
@@ -2057,8 +2410,12 @@ export async function acquire(params: {
               overrideActive,
             },
             code: "HTTP_STREAMING_ERROR",
-            reason: `HTTP streaming error: ${error.message}`,
+                  reason: `HTTP streaming error: ${errorMsg}`,
+                  explain: explain || undefined,
           };
+              }
+              // Retryable - continue to next candidate
+              throw new Error(`HTTP_STREAMING_ERROR: ${errorMsg}`); // Will be caught by outer catch
         }
       } else {
         // Local provider: generate chunk locally
@@ -2081,23 +2438,20 @@ export async function acquire(params: {
         // Handle settlement provider errors from exchange.tick()
         const errorMsg = error?.message || String(error);
         if (errorMsg.includes("NotImplemented") || errorMsg.includes("ExternalSettlementProvider")) {
-          recordLifecycleError("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED", `Settlement operation (exchange.tick) failed: ${errorMsg}`);
-          if (explain) {
-            pushDecision(
-              selectedProvider,
-              "settlement",
-              false,
-              "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
-              `Settlement provider not implemented: ${errorMsg}`,
-              explainLevel === "full" ? { error: errorMsg } : undefined
-            );
-          }
+              const failureCode = "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED";
+              const failureReason = `Settlement operation (exchange.tick) failed: ${errorMsg}`;
+              
+              const action = handleAttemptFailure(failureCode, failureReason, attemptEntry);
+              if (action === "return") {
           return {
             ok: false,
-            code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
-            reason: `Settlement provider not implemented: ${errorMsg}`,
+                  code: failureCode,
+                  reason: failureReason,
             explain: explain || undefined,
           };
+              }
+              // Retryable - break out of tick loop and continue to next candidate
+              throw error; // Re-throw to be caught by outer catch
         }
         // Re-throw other errors
         throw error;
@@ -2148,64 +2502,229 @@ export async function acquire(params: {
           ticks: state.ticks,
           chunks: state.chunks,
         });
+          }
       }
     }
 
     if (agreement) {
       (agreement as any).status = "COMPLETED";
-    }
   }
 
-  if (!receipt) {
-    if (explain) {
-      explain.regime = plan.regime;
-      explain.settlement = chosenMode;
-      explain.fanout = plan.fanout;
-      pushDecision(
-        selectedProvider,
-        "settlement",
-        false,
-        "SETTLEMENT_FAILED",
-        "No receipt generated after settlement"
-      );
+      if (!receipt) {
+        // NO_RECEIPT is typically non-retryable (protocol error), but check anyway
+        const action = handleAttemptFailure("NO_RECEIPT", "No receipt generated after settlement", attemptEntry);
+        if (action === "return") {
+          if (explain) {
+            explain.regime = plan.regime;
+            explain.settlement = chosenMode;
+            explain.fanout = plan.fanout;
+            pushDecision(
+              selectedProvider,
+              "settlement",
+              false,
+              "SETTLEMENT_FAILED",
+              "No receipt generated after settlement"
+            );
+          }
+          
+          // Save transcript for NO_RECEIPT failure (v1.7.2+)
+          const transcriptPath = await saveTranscriptOnEarlyReturn(
+            intentId,
+            "NO_RECEIPT",
+            "No receipt generated after settlement",
+            attemptEntry
+          );
+          
+          return {
+            ok: false,
+            plan: {
+              ...plan,
+              overrideActive,
+            },
+            code: "NO_RECEIPT",
+            reason: "No receipt generated after settlement",
+            offers_eligible: evaluations.length,
+            ...(explain ? { explain } : {}),
+            ...(transcriptPath ? { transcriptPath } : {}),
+          };
+        }
+        continue;
+      }
+    
+    // SUCCESS! Record success attempt and break out of loop
+    attemptEntry.outcome = "success";
+    attemptEntry.timestamp_ms = nowFunction();
+    settlementAttempts.push(attemptEntry);
+    
+    // Record settlement_attempts in transcript
+    if (transcriptData) {
+      transcriptData.settlement_attempts = settlementAttempts;
     }
+    
+    // Break out of loop - we succeeded!
+    // Store variables for success return (already defined outside loop)
+    finalReceipt = receipt;
+    finalVerification = verification;
+    finalIntentId = intentId;
+    finalSelectedProvider = selectedProvider;
+    finalSelectedProviderPubkey = selectedProviderPubkey;
+    
+    break; // Exit the for loop
+    } catch (error: any) {
+      // Handle errors during attempt (may be retryable failures thrown from nested blocks)
+      const errorMsg = error?.message || String(error);
+      
+      // Check if this is a known retryable failure pattern (from nested blocks)
+      // Known retryable patterns: SETTLEMENT_FAILED, SETTLEMENT_PROVIDER_NOT_IMPLEMENTED, HTTP_PROVIDER_ERROR, etc.
+      let failureCode = "UNEXPECTED_ERROR";
+      let failureReason = `Unexpected error during acquisition attempt: ${errorMsg}`;
+      
+      // Try to extract failure code from error message (for retryable failures thrown from nested blocks)
+      if (errorMsg.includes("SETTLEMENT_PROVIDER_NOT_IMPLEMENTED")) {
+        failureCode = "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED";
+        failureReason = errorMsg;
+      } else if (errorMsg.includes("SETTLEMENT_FAILED") || errorMsg.includes("COMMIT failed") || errorMsg.includes("REVEAL failed")) {
+        failureCode = "SETTLEMENT_FAILED";
+        failureReason = errorMsg;
+      } else if (errorMsg.includes("HTTP_PROVIDER_ERROR") || errorMsg.includes("HTTP provider error") || errorMsg.includes("HTTP_STREAMING_ERROR")) {
+        failureCode = errorMsg.includes("HTTP_STREAMING_ERROR") ? "HTTP_STREAMING_ERROR" : "HTTP_PROVIDER_ERROR";
+        failureReason = errorMsg;
+      } else if (errorMsg === "STREAMING_NOT_CONFIGURED" || errorMsg.includes("STREAMING_NOT_CONFIGURED")) {
+        failureCode = "STREAMING_NOT_CONFIGURED";
+        failureReason = errorMsg;
+      } else if (errorMsg.includes("PROVIDER_SIGNATURE_INVALID")) {
+        failureCode = "PROVIDER_SIGNATURE_INVALID";
+        failureReason = errorMsg;
+      } else if (errorMsg.includes("PROVIDER_SIGNER_MISMATCH")) {
+        failureCode = "PROVIDER_SIGNER_MISMATCH";
+        failureReason = errorMsg;
+      } else if (errorMsg.includes("INVALID_MESSAGE_TYPE")) {
+        failureCode = "INVALID_MESSAGE_TYPE";
+        failureReason = errorMsg;
+      }
+      
+      // Record attempt failure
+      const action = handleAttemptFailure(failureCode, failureReason, attemptEntry);
+      if (action === "return") {
+        return {
+          ok: false,
+          code: failureCode,
+          reason: failureReason,
+          explain: explain || undefined,
+        };
+      }
+      // Retryable failure - continue to next candidate
+      continue;
+    }
+  } // End of for loop
+  
+  // After loop: check if we succeeded or all attempts failed
+  // If we broke out of the loop (success), finalReceipt should be set
+  // Otherwise, all attempts failed - return last failure
+  if (!finalReceipt) {
+    // All attempts failed
+    if (transcriptData) {
+      transcriptData.settlement_attempts = settlementAttempts;
+    }
+    
+    // Return last failure or NO_ELIGIBLE_PROVIDERS if none attempted
+    const failureCode = lastFailure?.code || "NO_ELIGIBLE_PROVIDERS";
+    const failureReason = lastFailure?.reason || "All provider attempts failed";
+    
+    // Save transcript if requested (v1.7.2+)
+    let transcriptPath: string | undefined;
+    if (saveTranscript && transcriptData && input.transcriptDir) {
+      // Use first attempt intentId if available, otherwise generate one
+      const transcriptIntentId = firstAttemptIntentId || finalIntentId || `intent-${nowFunction()}-failed`;
+      transcriptData.intent_id = transcriptIntentId;
+      transcriptData.explain = explain || undefined;
+      transcriptData.outcome = {
+        ok: false,
+        code: failureCode,
+        reason: failureReason,
+      };
+      
+      // Finalize settlement lifecycle metadata when all attempts fail (v1.7.2+)
+      if (transcriptData.settlement_lifecycle) {
+        // If status is not already set to a terminal state, set it to "failed"
+        if (!transcriptData.settlement_lifecycle.status || 
+            (transcriptData.settlement_lifecycle.status !== "committed" && 
+             transcriptData.settlement_lifecycle.status !== "aborted" &&
+             transcriptData.settlement_lifecycle.status !== "failed")) {
+          transcriptData.settlement_lifecycle.status = "failed";
+        }
+        // Set failure code/reason if settlement-related failure
+        if (failureCode.includes("SETTLEMENT") || failureCode === "SETTLEMENT_FAILED") {
+          if (!transcriptData.settlement_lifecycle.failure_code) {
+            transcriptData.settlement_lifecycle.failure_code = failureCode;
+          }
+          if (!transcriptData.settlement_lifecycle.failure_reason) {
+            transcriptData.settlement_lifecycle.failure_reason = failureReason;
+          }
+        }
+        // Ensure errors array exists and includes this failure if not already present
+        if (!transcriptData.settlement_lifecycle.errors) {
+          transcriptData.settlement_lifecycle.errors = [];
+        }
+        const errorExists = transcriptData.settlement_lifecycle.errors.some(
+          (e: any) => e.code === failureCode && e.reason === failureReason
+        );
+        if (!errorExists && (failureCode.includes("SETTLEMENT") || failureCode === "SETTLEMENT_FAILED")) {
+          transcriptData.settlement_lifecycle.errors.push({
+            code: failureCode,
+            reason: failureReason,
+          });
+        }
+      }
+      
+      try {
+        const transcriptStore = new TranscriptStore(input.transcriptDir);
+        transcriptPath = await transcriptStore.writeTranscript(transcriptIntentId, transcriptData as TranscriptV1);
+      } catch (error: any) {
+        // Don't throw - transcript save failure shouldn't break the error return
+      }
+    }
+    
     return {
       ok: false,
       plan: {
         ...plan,
         overrideActive,
+        offers_considered: evaluations.length,
       },
-      code: "NO_RECEIPT",
-      reason: "No receipt generated after settlement",
+      code: failureCode,
+      reason: failureReason,
       offers_eligible: evaluations.length,
       ...(explain ? { explain } : {}),
+      ...(transcriptPath ? { transcriptPath } : {}),
     };
   }
-
+  
+  // SUCCESS! Build and return success result
   // Log settlement completion
-  if (explain && receipt) {
+  if (explain && finalReceipt) {
     pushDecision(
-      selectedProvider,
+      finalSelectedProvider,
       "settlement",
       true,
       "SETTLEMENT_COMPLETED",
       `Settlement completed successfully`,
       explainLevel === "full" ? {
-        receipt_id: (receipt as any).intent_id,
-        fulfilled: (receipt as any).fulfilled,
+        receipt_id: (finalReceipt as any).intent_id,
+        fulfilled: (finalReceipt as any).fulfilled,
       } : undefined
     );
   }
 
   // Ingest receipt into store if provided
-  if (store && receipt) {
-    (receipt as any).intent_type = input.intentType;
-    store.ingest(receipt);
+  if (store && finalReceipt) {
+    (finalReceipt as any).intent_type = input.intentType;
+    store.ingest(finalReceipt);
     
     // Log receipt ingestion
     if (explain) {
       pushDecision(
-        selectedProvider,
+        finalSelectedProvider,
         "settlement",
         true,
         "RECEIPT_INGESTED",
@@ -2230,25 +2749,25 @@ export async function acquire(params: {
       maxRounds: plan.maxRounds,
       reason: plan.reason,
       overrideActive,
-      selected_provider_id: selectedProvider.provider_id,
+      selected_provider_id: finalSelectedProvider.provider_id,
       offers_considered: evaluations.length,
     },
-    intent_id: intentId,
+    intent_id: finalIntentId,
     buyer_agent_id: buyerId,
-    seller_agent_id: selectedProviderPubkey,
-    receipt,
+    seller_agent_id: finalSelectedProviderPubkey,
+    receipt: finalReceipt,
     offers_eligible: evaluations.length,
   };
   
   // Build and write transcript if requested
   let transcriptPath: string | undefined;
   if (saveTranscript && transcriptData) {
-    transcriptData.intent_id = intentId;
+    transcriptData.intent_id = finalIntentId;
     transcriptData.settlement = {
       mode: chosenMode,
-      verification_summary: verification,
+      verification_summary: finalVerification,
     };
-    transcriptData.receipt = receipt;
+    transcriptData.receipt = finalReceipt;
     transcriptData.explain = explain || undefined;
     transcriptData.outcome = { ok: true };
     
@@ -2256,7 +2775,7 @@ export async function acquire(params: {
     if (transcriptData.settlement_lifecycle) {
       // If successful, record committed status and paid amount from receipt
       // v1.7.2+: Preserve pending status if async settlement is in progress
-      if (receipt && receipt.fulfilled) {
+      if (finalReceipt && finalReceipt.fulfilled) {
         // Only update if not already set to pending (preserve async status)
         if (!transcriptData.settlement_lifecycle.status || 
             (transcriptData.settlement_lifecycle.status !== "pending" && 
@@ -2264,21 +2783,21 @@ export async function acquire(params: {
           transcriptData.settlement_lifecycle.status = "committed";
         }
         if (!transcriptData.settlement_lifecycle.committed_at_ms) {
-          transcriptData.settlement_lifecycle.committed_at_ms = receipt.timestamp_ms || (nowFn ? nowFn() : Date.now());
+          transcriptData.settlement_lifecycle.committed_at_ms = finalReceipt.timestamp_ms || (nowFn ? nowFn() : Date.now());
         }
         if (!transcriptData.settlement_lifecycle.paid_amount) {
-          transcriptData.settlement_lifecycle.paid_amount = receipt.paid_amount || (receipt as any).agreed_price || 0;
+          transcriptData.settlement_lifecycle.paid_amount = finalReceipt.paid_amount || (finalReceipt as any).agreed_price || 0;
         }
       }
     }
     
     const transcriptStore = new TranscriptStore(input.transcriptDir);
-    transcriptPath = await transcriptStore.writeTranscript(intentId, transcriptData as TranscriptV1);
+    transcriptPath = await transcriptStore.writeTranscript(finalIntentId, transcriptData as TranscriptV1);
   }
   
   const finalResult: AcquireResult = explain 
-    ? { ...baseResult, explain, ...(verification ? { verification } : {}), ...(transcriptPath ? { transcriptPath } : {}) }
-    : { ...baseResult, ...(verification ? { verification } : {}), ...(transcriptPath ? { transcriptPath } : {}) };
+    ? { ...baseResult, explain, ...(finalVerification ? { verification: finalVerification } : {}), ...(transcriptPath ? { transcriptPath } : {}) }
+    : { ...baseResult, ...(finalVerification ? { verification: finalVerification } : {}), ...(transcriptPath ? { transcriptPath } : {}) };
   return finalResult;
 }
 

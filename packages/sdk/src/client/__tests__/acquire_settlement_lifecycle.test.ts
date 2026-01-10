@@ -278,6 +278,7 @@ describe("Acquire with Settlement Lifecycle (v1.7.2+)", () => {
         auto_poll_ms: 0, // Immediate poll loop
       },
       saveTranscript: true,
+      transcriptDir: "/tmp/test-transcripts",
     };
 
     const result = await acquire({

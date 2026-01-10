@@ -134,5 +134,18 @@ export type TranscriptV1 = {
       meta?: Record<string, unknown>;
     }>;
   };
+  
+  // Settlement attempt chain (v1.6.2+, B2)
+  // Records each provider/settlement attempt in fallback retry loop
+  settlement_attempts?: Array<{
+    idx: number; // Attempt index (0-based, 0 = first attempt)
+    provider_pubkey: string; // Provider public key (b58)
+    provider_id?: string; // Provider ID from directory
+    settlement_provider?: string; // Settlement provider used ("mock", "stripe_like", "external")
+    outcome: "success" | "failed"; // Outcome of this attempt
+    failure_code?: string; // Failure code if outcome is "failed"
+    failure_reason?: string; // Failure reason if outcome is "failed"
+    timestamp_ms?: number; // Timestamp when attempt completed
+  }>;
 };
 
