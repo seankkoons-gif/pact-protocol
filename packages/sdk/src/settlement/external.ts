@@ -148,10 +148,28 @@ export class ExternalSettlementProvider implements SettlementProvider {
     );
   }
 
+  // Legacy refund method (v1.6.5+, C1) - kept for backward compatibility
   refund(fromAgentId: string, toAgentId: string, amount: number, meta?: Record<string, unknown>): void {
     throw new Error(
       `${this.errorMessage}: refund() - Real implementations should integrate with ${this.config.rail} payment rail`
     );
+  }
+
+  // First-class refund API (v1.6.8+, C2)
+  async refund(refund: {
+    dispute_id: string;
+    from: string;
+    to: string;
+    amount: number;
+    reason?: string;
+    idempotency_key?: string;
+  }): Promise<{ ok: boolean; refunded_amount: number; code?: string; reason?: string }> {
+    return {
+      ok: false,
+      refunded_amount: 0,
+      code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+      reason: `${this.errorMessage}: refund() - Real implementations should integrate with ${this.config.rail} payment rail`,
+    };
   }
 }
 

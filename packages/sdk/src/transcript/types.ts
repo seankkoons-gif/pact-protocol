@@ -183,5 +183,17 @@ export type TranscriptV1 = {
       provider?: string;
     }>;
   };
+  
+  // Dispute events (v1.6.8+, C2)
+  dispute_events?: Array<{
+    ts_ms: number;
+    dispute_id: string;
+    outcome: string;
+    refund_amount: number;
+    settlement_provider?: string;
+    status: "resolved" | "failed";
+    failure_code?: string;
+    failure_reason?: string;
+  }>;
 };
 

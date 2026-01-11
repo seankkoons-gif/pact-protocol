@@ -266,8 +266,35 @@ export interface SettlementProvider {
    * - getBalance(fromAgentId) decreases by amount (if sufficient)
    * - getBalance(toAgentId) increases by amount
    * - Total balance across all agents remains constant
+   * 
+   * @deprecated Use refund() with refund object parameter (v1.6.8+, C2)
    */
   refund?(fromAgentId: string, toAgentId: string, amount: number, meta?: Record<string, unknown>): void | Promise<void>;
+
+  /**
+   * Refund funds from seller to buyer (v1.6.8+, C2).
+   * First-class refund API with idempotency support.
+   * 
+   * @param refund Refund parameters
+   * @returns Promise resolving to refund result with ok status and refunded_amount
+   * 
+   * Idempotency: If called multiple times with the same dispute_id (as idempotency_key),
+   * returns ok=true with the same refunded_amount without changing balances twice.
+   * 
+   * Invariants:
+   * - getBalance(from) decreases by amount (if sufficient)
+   * - getBalance(to) increases by amount
+   * - Total balance across all agents remains constant
+   * - Idempotent: repeated calls with same dispute_id return same result
+   */
+  refund?(refund: {
+    dispute_id: string;
+    from: string;        // seller
+    to: string;          // buyer
+    amount: number;
+    reason?: string;
+    idempotency_key?: string;
+  }): Promise<{ ok: boolean; refunded_amount: number; code?: string; reason?: string }>;
 }
 
 

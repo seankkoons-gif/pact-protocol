@@ -533,6 +533,65 @@ export async function replayTranscript(
     }
   }
 
+  // Verify dispute events (v1.6.8+, C2)
+  if (transcript.dispute_events && Array.isArray(transcript.dispute_events)) {
+    const disputeEvents = transcript.dispute_events;
+    const paidAmount = transcript.receipt?.paid_amount ?? transcript.receipt?.agreed_price ?? 0;
+    
+    // Track refund amounts per dispute_id for idempotency check
+    const refundsByDisputeId = new Map<string, number>();
+    
+    for (const event of disputeEvents) {
+      // Check: refund_amount >= 0
+      if (event.refund_amount < 0) {
+        failures.push({
+          code: "DISPUTE_EVENT_INVALID",
+          reason: `Dispute event has negative refund_amount: ${event.refund_amount}`,
+          context: {
+            dispute_id: event.dispute_id,
+            refund_amount: event.refund_amount,
+          },
+        });
+      }
+      
+      // Check: for resolved refunds, refund_amount <= (receipt.paid_amount || receipt.agreed_price)
+      if (event.status === "resolved" && event.refund_amount > 0) {
+        if (event.refund_amount > paidAmount) {
+          failures.push({
+            code: "DISPUTE_REFUND_EXCEEDS_PAID",
+            reason: `Dispute refund amount ${event.refund_amount} exceeds paid amount ${paidAmount}`,
+            context: {
+              dispute_id: event.dispute_id,
+              refund_amount: event.refund_amount,
+              paid_amount: paidAmount,
+            },
+          });
+        }
+      }
+      
+      // Track refunds by dispute_id for idempotency check
+      if (event.status === "resolved" && event.refund_amount > 0) {
+        const existing = refundsByDisputeId.get(event.dispute_id) || 0;
+        refundsByDisputeId.set(event.dispute_id, existing + event.refund_amount);
+      }
+    }
+    
+    // Check idempotency: if multiple events for same dispute_id, they must not sum to > paid amount
+    for (const [disputeId, totalRefunded] of refundsByDisputeId.entries()) {
+      if (totalRefunded > paidAmount) {
+        failures.push({
+          code: "DISPUTE_IDEMPOTENCY_VIOLATION",
+          reason: `Multiple dispute events for ${disputeId} sum to ${totalRefunded} which exceeds paid amount ${paidAmount}`,
+          context: {
+            dispute_id: disputeId,
+            total_refunded: totalRefunded,
+            paid_amount: paidAmount,
+          },
+        });
+      }
+    }
+  }
+
   return {
     ok: failures.length === 0,
     failures,

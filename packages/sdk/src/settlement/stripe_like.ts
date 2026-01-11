@@ -500,9 +500,38 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
     return this.mockProvider.getAccount(agentId);
   }
 
+  // Legacy refund method (v1.6.5+, C1) - kept for backward compatibility
   refund(fromAgentId: string, toAgentId: string, amount: number, meta?: Record<string, unknown>): void {
     // Delegate to underlying mock provider
     this.mockProvider.refund(fromAgentId, toAgentId, amount, meta);
+  }
+
+  // First-class refund API (v1.6.8+, C2) with idempotency
+  async refund(refund: {
+    dispute_id: string;
+    from: string;
+    to: string;
+    amount: number;
+    reason?: string;
+    idempotency_key?: string;
+  }): Promise<{ ok: boolean; refunded_amount: number; code?: string; reason?: string }> {
+    // Check if original payment is still pending (if handle exists and is pending)
+    const handleId = refund.idempotency_key || refund.dispute_id;
+    const handle = this.handles.get(handleId);
+    
+    if (handle && handle.status === "pending") {
+      // If original payment is still pending, refund may not be possible
+      // For simplicity, treat as insufficient funds (or could return REFUND_NOT_SETTLED)
+      return {
+        ok: false,
+        refunded_amount: 0,
+        code: "REFUND_INSUFFICIENT_FUNDS",
+        reason: "Original payment is still pending and not settled",
+      };
+    }
+
+    // Delegate to underlying mock provider (which handles idempotency)
+    return await this.mockProvider.refund(refund);
   }
 }
 

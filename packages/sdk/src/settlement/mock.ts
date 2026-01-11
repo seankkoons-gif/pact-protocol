@@ -8,6 +8,8 @@ type Account = { balance: number; locked: number };
 export class MockSettlementProvider implements SettlementProvider {
   private accounts = new Map<string, Account>();
   private handles = new Map<string, SettlementHandle>();
+  // v1.6.8+: Track processed refund idempotency keys (C2)
+  private processedRefunds = new Map<string, { refunded_amount: number; timestamp_ms: number }>();
 
   private acct(agentId: string): Account {
     const a = this.accounts.get(agentId);
@@ -387,6 +389,7 @@ export class MockSettlementProvider implements SettlementProvider {
     }
   }
 
+  // Legacy refund method (v1.6.5+, C1) - kept for backward compatibility
   refund(fromAgentId: string, toAgentId: string, amount: number, meta?: Record<string, unknown>): void {
     if (!(amount > 0)) {
       throw new Error("Refund amount must be > 0");
@@ -400,6 +403,87 @@ export class MockSettlementProvider implements SettlementProvider {
     fromAcct.balance -= amount;
     this.acct(toAgentId).balance += amount;
     // meta is ignored in mock implementation but available for external providers
+  }
+
+  // First-class refund API (v1.6.8+, C2) with idempotency
+  async refund(refund: {
+    dispute_id: string;
+    from: string;
+    to: string;
+    amount: number;
+    reason?: string;
+    idempotency_key?: string;
+  }): Promise<{ ok: boolean; refunded_amount: number; code?: string; reason?: string }> {
+    const { dispute_id, from, to, amount } = refund;
+    
+    if (!(amount > 0)) {
+      return {
+        ok: false,
+        refunded_amount: 0,
+        code: "INVALID_AMOUNT",
+        reason: "Refund amount must be > 0",
+      };
+    }
+
+    // Use dispute_id as idempotency key (or provided idempotency_key)
+    const idempotencyKey = refund.idempotency_key || dispute_id;
+    
+    // Check idempotency: if already processed, return same result
+    const existing = this.processedRefunds.get(idempotencyKey);
+    if (existing) {
+      return {
+        ok: true,
+        refunded_amount: existing.refunded_amount,
+      };
+    }
+
+    const fromAcct = this.acct(from);
+    // Check if seller has sufficient balance (balance + locked)
+    const totalAvailable = fromAcct.balance + fromAcct.locked;
+    if (totalAvailable < amount) {
+      return {
+        ok: false,
+        refunded_amount: 0,
+        code: "REFUND_INSUFFICIENT_FUNDS",
+        reason: `Seller has insufficient funds for refund of ${amount}`,
+      };
+    }
+
+    // Prioritize refunding from available balance, then locked
+    let remainingAmount = amount;
+    if (fromAcct.balance >= remainingAmount) {
+      fromAcct.balance -= remainingAmount;
+      remainingAmount = 0;
+    } else {
+      remainingAmount -= fromAcct.balance;
+      fromAcct.balance = 0;
+      if (fromAcct.locked >= remainingAmount) {
+        fromAcct.locked -= remainingAmount;
+        remainingAmount = 0;
+      } else {
+        // Should not happen if total balance check passed, but for safety
+        return {
+          ok: false,
+          refunded_amount: 0,
+          code: "REFUND_INSUFFICIENT_FUNDS",
+          reason: `Seller has insufficient locked funds for refund`,
+        };
+      }
+    }
+
+    // Credit buyer
+    this.acct(to).balance += amount;
+
+    // Record processed refund for idempotency
+    this.processedRefunds.set(idempotencyKey, {
+      refunded_amount: amount,
+      timestamp_ms: Date.now(),
+    });
+
+    return {
+      ok: true,
+      refunded_amount: amount,
+    };
   }
 }
 

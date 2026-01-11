@@ -5,10 +5,13 @@
  */
 
 import { randomBytes } from "crypto";
+import * as fs from "fs";
+import * as path from "path";
 import type { PactPolicy } from "../policy/types";
 import type { Receipt } from "../exchange/receipt";
 import type { SettlementProvider } from "../settlement/provider";
 import type { DisputeRecord, DisputeOutcome } from "./types";
+import type { TranscriptV1 } from "../transcript/types";
 import { createDispute, loadDispute, updateDispute } from "./store";
 
 export interface OpenDisputeParams {
@@ -32,7 +35,9 @@ export interface ResolveDisputeParams {
   now: number;
   policy: PactPolicy;
   settlementProvider: SettlementProvider;
+  receipt: Receipt; // v1.6.8+: Receipt must include buyer/seller ids and paid_amount (C2)
   disputeDir?: string;
+  transcriptPath?: string; // v1.6.8+: Optional transcript path for dispute events (C2)
 }
 
 /**
@@ -96,80 +101,149 @@ export function openDispute(params: OpenDisputeParams): DisputeRecord {
 }
 
 /**
- * Resolve a dispute.
+ * Resolve a dispute (v1.6.8+, C2).
+ * Executes refund via settlement provider and updates dispute record.
  */
-export function resolveDispute(params: ResolveDisputeParams): DisputeRecord {
-  const { dispute_id, outcome, refund_amount, notes, now, policy, settlementProvider, disputeDir } = params;
+export async function resolveDispute(params: ResolveDisputeParams): Promise<{ ok: boolean; record?: DisputeRecord; code?: string; reason?: string }> {
+  const { dispute_id, outcome, refund_amount, notes, now, policy, settlementProvider, receipt, disputeDir, transcriptPath } = params;
   
   // Load dispute
   const dispute = loadDispute(dispute_id, disputeDir);
   if (!dispute) {
-    throw new Error(`Dispute ${dispute_id} not found`);
+    return {
+      ok: false,
+      code: "DISPUTE_NOT_FOUND",
+      reason: `Dispute ${dispute_id} not found`,
+    };
   }
   
   // Check status
   if (dispute.status !== "OPEN") {
-    throw new Error(`Dispute ${dispute_id} is not OPEN (status: ${dispute.status})`);
+    return {
+      ok: false,
+      code: "DISPUTE_NOT_OPEN",
+      reason: `Dispute ${dispute_id} is not OPEN (status: ${dispute.status})`,
+    };
   }
   
   // Get disputes config
   const disputesConfig = policy.base.disputes;
   if (!disputesConfig || !disputesConfig.enabled) {
-    throw new Error("Disputes are not enabled in policy");
+    return {
+      ok: false,
+      code: "DISPUTES_NOT_ENABLED",
+      reason: "Disputes are not enabled in policy",
+    };
   }
   
-  // Determine refund amount
-  let actualRefundAmount: number | undefined;
-  if (outcome === "REFUND_FULL") {
-    // For full refund, require refund_amount to be provided
-    // In practice, this would be loaded from the receipt's paid_amount field
-    if (refund_amount === undefined || refund_amount <= 0) {
-      throw new Error("refund_amount must be provided and > 0 for full refund");
-    }
-    actualRefundAmount = refund_amount;
+  // Get paid amount from receipt (use paid_amount if present, otherwise agreed_price)
+  const paidAmount = receipt.paid_amount ?? receipt.agreed_price;
+  
+  // Determine refund amount based on outcome
+  let actualRefundAmount: number = 0;
+  if (outcome === "NO_REFUND") {
+    actualRefundAmount = 0;
+  } else if (outcome === "REFUND_FULL") {
+    // Full refund: min(paid_amount, agreed_price) capped by max_refund_pct
+    const maxRefundAllowed = paidAmount * disputesConfig.max_refund_pct;
+    actualRefundAmount = Math.min(paidAmount, receipt.agreed_price, maxRefundAllowed);
   } else if (outcome === "REFUND_PARTIAL") {
     if (!disputesConfig.allow_partial) {
-      throw new Error("Partial refunds are not allowed in policy");
+      return {
+        ok: false,
+        code: "PARTIAL_REFUND_NOT_ALLOWED",
+        reason: "Partial refunds are not allowed in policy",
+      };
     }
     if (refund_amount === undefined || refund_amount <= 0) {
-      throw new Error("refund_amount must be > 0 for partial refund");
+      return {
+        ok: false,
+        code: "INVALID_REFUND_AMOUNT",
+        reason: "refund_amount must be > 0 for partial refund",
+      };
     }
-    // Validate against max_refund_pct
-    // Note: In practice, we'd load the receipt to get paid_amount
-    // For now, we require the caller to provide the original amount via refund_amount
-    // and validate that it doesn't exceed max_refund_pct of some base amount
-    // This is a simplification - real implementation would load receipt
-    const maxRefundBase = refund_amount / disputesConfig.max_refund_pct; // Reverse calculate base
-    const maxRefundAllowed = maxRefundBase * disputesConfig.max_refund_pct;
+    // Validate: refund_amount <= paid_amount and <= max_refund_pct * paid_amount
+    const maxRefundAllowed = paidAmount * disputesConfig.max_refund_pct;
+    if (refund_amount > paidAmount) {
+      return {
+        ok: false,
+        code: "REFUND_EXCEEDS_PAID",
+        reason: `Refund amount ${refund_amount} exceeds paid amount ${paidAmount}`,
+      };
+    }
     if (refund_amount > maxRefundAllowed) {
-      throw new Error(`Refund amount ${refund_amount} exceeds max_refund_pct (${disputesConfig.max_refund_pct})`);
+      return {
+        ok: false,
+        code: "REFUND_EXCEEDS_MAX_PCT",
+        reason: `Refund amount ${refund_amount} exceeds max_refund_pct (${disputesConfig.max_refund_pct}) of paid amount`,
+      };
     }
     actualRefundAmount = refund_amount;
-  } else {
-    actualRefundAmount = undefined;
   }
   
-  // Execute refund if needed
-  if (actualRefundAmount !== undefined && actualRefundAmount > 0) {
-    if (settlementProvider.refund) {
+  // Execute refund if needed (v1.6.8+, C2: use first-class refund API)
+  let refundResult: { ok: boolean; refunded_amount: number; code?: string; reason?: string } | undefined;
+  if (actualRefundAmount > 0) {
+    // Check if refund method exists (try new API first, fallback to legacy)
+    if (typeof settlementProvider.refund === "function") {
       try {
-        settlementProvider.refund(
-          dispute.seller_agent_id,
-          dispute.buyer_agent_id,
-          actualRefundAmount,
-          {
-            dispute_id: dispute.dispute_id,
-            receipt_id: dispute.receipt_id,
-            intent_id: dispute.intent_id,
-          }
-        );
+        // Try new refund API (takes refund object)
+        const refundParam = {
+          dispute_id: dispute.dispute_id,
+          from: dispute.seller_agent_id,
+          to: dispute.buyer_agent_id,
+          amount: actualRefundAmount,
+          reason: notes,
+          idempotency_key: dispute.dispute_id, // Use dispute_id as idempotency key
+        };
+        
+        // Check if it's the new API (returns Promise) or legacy (void)
+        const result = await (settlementProvider.refund as any)(refundParam);
+        if (result && typeof result === "object" && "ok" in result) {
+          // New API
+          refundResult = result;
+        } else {
+          // Legacy API (void) - treat as success
+          refundResult = { ok: true, refunded_amount: actualRefundAmount };
+        }
       } catch (error: any) {
-        // If refund fails, throw error
-        throw new Error(`Refund failed: ${error?.message || String(error)}`);
+        // Legacy API throws - extract error message
+        const errorMsg = error?.message || String(error);
+        if (errorMsg.includes("REFUND_INSUFFICIENT_FUNDS")) {
+          refundResult = {
+            ok: false,
+            refunded_amount: 0,
+            code: "REFUND_INSUFFICIENT_FUNDS",
+            reason: errorMsg,
+          };
+        } else {
+          refundResult = {
+            ok: false,
+            refunded_amount: 0,
+            code: "REFUND_FAILED",
+            reason: errorMsg,
+          };
+        }
       }
     } else {
-      throw new Error("Settlement provider does not support refunds");
+      return {
+        ok: false,
+        code: "REFUND_NOT_SUPPORTED",
+        reason: "Settlement provider does not support refunds",
+      };
     }
+    
+    // Check refund result
+    if (!refundResult.ok) {
+      return {
+        ok: false,
+        code: refundResult.code || "REFUND_FAILED",
+        reason: refundResult.reason || "Refund failed",
+      };
+    }
+    
+    // Update actual refund amount from result (may differ due to idempotency)
+    actualRefundAmount = refundResult.refunded_amount;
   }
   
   // Update dispute record
@@ -177,9 +251,79 @@ export function resolveDispute(params: ResolveDisputeParams): DisputeRecord {
   dispute.outcome = outcome;
   dispute.refund_amount = actualRefundAmount;
   dispute.notes = notes;
+  if (transcriptPath) {
+    dispute.transcript_path = transcriptPath;
+  }
   
   updateDispute(dispute, disputeDir);
   
-  return dispute;
+  // v1.6.8+: Write dispute event to transcript if transcriptPath provided (C2)
+  if (transcriptPath && fs.existsSync(transcriptPath)) {
+    try {
+      const transcriptContent = fs.readFileSync(transcriptPath, "utf-8");
+      const transcript = JSON.parse(transcriptContent) as TranscriptV1;
+      
+      // Initialize dispute_events if not present
+      if (!transcript.dispute_events) {
+        transcript.dispute_events = [];
+      }
+      
+      // Add dispute event
+      transcript.dispute_events.push({
+        ts_ms: now,
+        dispute_id: dispute.dispute_id,
+        outcome: outcome,
+        refund_amount: actualRefundAmount,
+        settlement_provider: dispute.settlement_provider,
+        status: "resolved",
+      });
+      
+      // Write updated transcript
+      fs.writeFileSync(transcriptPath, JSON.stringify(transcript, null, 2), "utf-8");
+    } catch (error) {
+      // Don't fail dispute resolution if transcript write fails
+      // Just log (in production, might want to log this)
+    }
+  } else if (transcriptPath) {
+    // Transcript path provided but file doesn't exist - create a minimal dispute event file
+    // Write to .pact/transcripts/<intent_id>-dispute-<dispute_id>.json
+    try {
+      const transcriptDir = path.dirname(transcriptPath);
+      const intentId = dispute.intent_id;
+      const disputeEventPath = path.join(transcriptDir, `${intentId}-dispute-${dispute.dispute_id}.json`);
+      
+      const disputeEventTranscript: TranscriptV1 = {
+        version: "1",
+        intent_id: intentId,
+        intent_type: "dispute_resolution",
+        timestamp_ms: now,
+        outcome: {
+          ok: true,
+        },
+        dispute_events: [{
+          ts_ms: now,
+          dispute_id: dispute.dispute_id,
+          outcome: outcome,
+          refund_amount: actualRefundAmount,
+          settlement_provider: dispute.settlement_provider,
+          status: "resolved",
+        }],
+      };
+      
+      // Ensure directory exists
+      if (!fs.existsSync(transcriptDir)) {
+        fs.mkdirSync(transcriptDir, { recursive: true });
+      }
+      
+      fs.writeFileSync(disputeEventPath, JSON.stringify(disputeEventTranscript, null, 2), "utf-8");
+    } catch (error) {
+      // Don't fail dispute resolution if transcript write fails
+    }
+  }
+  
+  return {
+    ok: true,
+    record: dispute,
+  };
 }
 

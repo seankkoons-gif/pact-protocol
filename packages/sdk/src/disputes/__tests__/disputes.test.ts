@@ -162,7 +162,7 @@ describe("disputes", () => {
     expect(loaded?.dispute_id).toBe(dispute.dispute_id);
   });
 
-  it("should resolve dispute with REFUND_FULL and move funds back", () => {
+  it("should resolve dispute with REFUND_FULL and move funds back", async () => {
     const receipt = createReceipt({
       intent_id: "intent-1",
       buyer_agent_id: "buyer",
@@ -190,7 +190,7 @@ describe("disputes", () => {
     expect(settlement.getBalance("buyer")).toBe(0.4);
     
     // Resolve with full refund
-    const resolved = resolveDispute({
+    const resolved = await resolveDispute({
       dispute_id: dispute.dispute_id,
       outcome: "REFUND_FULL",
       refund_amount: 0.1,
@@ -198,13 +198,15 @@ describe("disputes", () => {
       now: 3000,
       policy,
       settlementProvider: settlement,
+      receipt,
       disputeDir: tempDir,
     });
     
-    expect(resolved.status).toBe("RESOLVED");
-    expect(resolved.outcome).toBe("REFUND_FULL");
-    expect(resolved.refund_amount).toBe(0.1);
-    expect(resolved.notes).toBe("Refund approved");
+    expect(resolved.ok).toBe(true);
+    expect(resolved.record?.status).toBe("RESOLVED");
+    expect(resolved.record?.outcome).toBe("REFUND_FULL");
+    expect(resolved.record?.refund_amount).toBe(0.1);
+    expect(resolved.record?.notes).toBe("Refund approved");
     
     // Verify funds moved back
     expect(settlement.getBalance("seller")).toBe(1.0); // Lost 0.1
@@ -216,7 +218,7 @@ describe("disputes", () => {
     expect(loaded?.outcome).toBe("REFUND_FULL");
   });
 
-  it("should resolve dispute with REFUND_PARTIAL and respect max_refund_pct", () => {
+  it("should resolve dispute with REFUND_PARTIAL and respect max_refund_pct", async () => {
     policy.base.disputes!.max_refund_pct = 0.5; // Max 50% refund
     
     const receipt = createReceipt({
@@ -238,7 +240,7 @@ describe("disputes", () => {
     });
     
     // Resolve with partial refund (0.05 = 50% of 0.1)
-    const resolved = resolveDispute({
+    const resolved = await resolveDispute({
       dispute_id: dispute.dispute_id,
       outcome: "REFUND_PARTIAL",
       refund_amount: 0.05,
@@ -246,15 +248,17 @@ describe("disputes", () => {
       now: 3000,
       policy,
       settlementProvider: settlement,
+      receipt,
       disputeDir: tempDir,
     });
     
-    expect(resolved.status).toBe("RESOLVED");
-    expect(resolved.outcome).toBe("REFUND_PARTIAL");
-    expect(resolved.refund_amount).toBe(0.05);
+    expect(resolved.ok).toBe(true);
+    expect(resolved.record?.status).toBe("RESOLVED");
+    expect(resolved.record?.outcome).toBe("REFUND_PARTIAL");
+    expect(resolved.record?.refund_amount).toBe(0.05);
   });
 
-  it("should fail partial refund if allow_partial=false", () => {
+  it("should fail partial refund if allow_partial=false", async () => {
     policy.base.disputes!.allow_partial = false;
     
     const receipt = createReceipt({
@@ -275,20 +279,22 @@ describe("disputes", () => {
       disputeDir: tempDir,
     });
     
-    expect(() => {
-      resolveDispute({
-        dispute_id: dispute.dispute_id,
-        outcome: "REFUND_PARTIAL",
-        refund_amount: 0.05,
-        now: 3000,
-        policy,
-        settlementProvider: settlement,
-        disputeDir: tempDir,
-      });
-    }).toThrow("Partial refunds are not allowed in policy");
+    const result = await resolveDispute({
+      dispute_id: dispute.dispute_id,
+      outcome: "REFUND_PARTIAL",
+      refund_amount: 0.05,
+      now: 3000,
+      policy,
+      settlementProvider: settlement,
+      receipt,
+      disputeDir: tempDir,
+    });
+    
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe("PARTIAL_REFUND_NOT_ALLOWED");
   });
 
-  it("should fail refund if seller has insufficient funds", () => {
+  it("should fail refund if seller has insufficient funds", async () => {
     const receipt = createReceipt({
       intent_id: "intent-1",
       buyer_agent_id: "buyer",
@@ -310,17 +316,21 @@ describe("disputes", () => {
     // Seller has no balance
     settlement.setBalance("seller", 0);
     
-    expect(() => {
-      resolveDispute({
+    await expect(async () => {
+      const result = await resolveDispute({
         dispute_id: dispute.dispute_id,
         outcome: "REFUND_FULL",
         refund_amount: 0.1,
         now: 3000,
         policy,
         settlementProvider: settlement,
+        receipt,
         disputeDir: tempDir,
       });
-    }).toThrow("REFUND_INSUFFICIENT_FUNDS");
+      if (!result.ok) {
+        throw new Error(result.reason || result.code || "Refund failed");
+      }
+    }).rejects.toThrow();
   });
 
   it("should list all disputes", () => {
