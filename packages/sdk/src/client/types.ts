@@ -25,6 +25,10 @@ export type AcquireInput = {
     params?: Record<string, unknown>; // Parameters for external provider (e.g., { rail: "stripe", network: "testnet" })
     idempotency_key?: string; // Optional idempotency key for settlement lifecycle
     auto_poll_ms?: number; // v1.7.2+: If set, poll settlement until resolved (0 = immediate poll loop, >0 = delay between polls)
+    split?: { // v1.6.6+: Split settlement across multiple providers (B3)
+      enabled?: boolean; // Enable split settlement (default: false)
+      max_segments?: number; // Maximum number of segments (default: unlimited)
+    };
   };
   // Optional identity/verification (v1: for policy enforcement)
   identity?: {

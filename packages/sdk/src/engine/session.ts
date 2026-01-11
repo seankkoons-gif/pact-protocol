@@ -51,6 +51,22 @@ export interface NegotiationSessionParams {
   // v1.7.2+: Settlement lifecycle configuration
   settlementIdempotencyKey?: string;
   settlementAutoPollMs?: number; // If set, poll until resolved (0 = immediate loop, >0 = delay)
+  // v1.6.6+: Split settlement configuration (B3)
+  settlementSplit?: {
+    enabled: boolean;
+    max_segments?: number;
+  };
+  // v1.6.6+: Fallback candidates for split settlement (B3)
+  settlementCandidates?: Array<{
+    provider_pubkey: string;
+    provider_id?: string;
+    trust_tier?: "untrusted" | "low" | "trusted";
+    trust_score?: number;
+  }>;
+  // v1.6.6+: Settlement provider factory for split settlement (B3)
+  createSettlementProvider?: (provider: "mock" | "stripe_like" | "external", params?: Record<string, unknown>) => SettlementProvider;
+  // v1.6.6+: Routing function for split settlement (B3)
+  selectSettlementProvider?: (amount: number, mode: "hash_reveal" | "streaming", trustTier: "untrusted" | "low" | "trusted", trustScore: number) => { provider: string; matchedRuleIndex?: number; reason: string };
 }
 
 export class NegotiationSession {
@@ -68,6 +84,18 @@ export class NegotiationSession {
   private receipt?: Receipt;
   // v1.7.2+: Settlement lifecycle handle (if using lifecycle API)
   private settlementHandle?: SettlementHandle;
+  // v1.6.6+: Split settlement segments (B3)
+  private settlementSegments: Array<{
+    idx: number;
+    provider_pubkey: string;
+    settlement_provider: string;
+    amount: number;
+    status: "committed" | "failed";
+    handle_id?: string;
+    failure_code?: string;
+    failure_reason?: string;
+  }> = [];
+  private splitTotalPaid: number = 0;
 
   constructor(
     private params: NegotiationSessionParams
@@ -81,6 +109,17 @@ export class NegotiationSession {
       this.params.settlement &&
       typeof this.params.settlement.prepare === "function" &&
       typeof this.params.settlement.commit === "function"
+    );
+  }
+
+  /**
+   * Check if a settlement provider supports lifecycle API (v1.6.6+, B3)
+   */
+  private settlementSupportsLifecycleForProvider(provider: SettlementProvider): boolean {
+    return !!(
+      provider &&
+      typeof provider.prepare === "function" &&
+      typeof provider.commit === "function"
     );
   }
 
@@ -437,9 +476,227 @@ export class NegotiationSession {
       const buyerAgentId = this.params.buyerAgentId ?? "buyer";
       const sellerAgentId = this.params.sellerAgentId ?? "seller";
       const sellerBond = this.latest_ask?.bond_required ?? this.latest_bid?.bond_required ?? 0;
+      const targetAmount = message.agreed_price;
+      const mode = message.settlement_mode === "streaming" ? "streaming" : "hash_reveal";
 
-      // v1.7.2+: Use lifecycle API if supported (for hash_reveal mode), else fallback to legacy methods
-      if (this.settlementSupportsLifecycle()) {
+      // v1.6.6+: Split settlement (B3) - only for hash_reveal mode
+      const splitEnabled = this.params.settlementSplit?.enabled === true && mode === "hash_reveal";
+      
+      if (splitEnabled && this.params.settlementSplit && this.params.createSettlementProvider && this.params.selectSettlementProvider && this.params.settlementCandidates) {
+        // Split settlement: fulfill payment in multiple segments across different providers
+        const maxSegments = this.params.settlementSplit.max_segments ?? this.params.settlementCandidates.length;
+        const epsilon = 0.00000001; // Float tolerance
+        let remaining = targetAmount;
+        let segmentIdx = 0;
+        let candidateIdx = 0;
+        
+        this.settlementSegments = [];
+        this.splitTotalPaid = 0;
+        
+        while (remaining > epsilon && segmentIdx < maxSegments && candidateIdx < this.params.settlementCandidates.length) {
+          const candidate = this.params.settlementCandidates[candidateIdx];
+          const segmentAmount = Math.min(remaining, targetAmount / maxSegments);
+          
+          // Route settlement provider for this segment
+          const routingResult = this.params.selectSettlementProvider(
+            segmentAmount,
+            mode,
+            candidate.trust_tier || "untrusted",
+            candidate.trust_score || 0
+          );
+          
+          // Create settlement provider for this segment
+          let segmentSettlement: SettlementProvider;
+          try {
+            segmentSettlement = this.params.createSettlementProvider(
+              routingResult.provider as "mock" | "stripe_like" | "external",
+              {} // No params for split segments
+            );
+          } catch (error: any) {
+            // Provider creation failed - record segment failure and continue
+            this.settlementSegments.push({
+              idx: segmentIdx,
+              provider_pubkey: candidate.provider_pubkey,
+              settlement_provider: routingResult.provider,
+              amount: segmentAmount,
+              status: "failed",
+              failure_code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+              failure_reason: `Settlement provider creation failed: ${error?.message || String(error)}`,
+            });
+            candidateIdx++;
+            continue;
+          }
+          
+          // Attempt segment settlement
+          try {
+            if (this.settlementSupportsLifecycleForProvider(segmentSettlement)) {
+              const intent_id = `${message.intent_id}-segment-${segmentIdx}`;
+              const handle = await segmentSettlement.prepare({
+                intent_id,
+                from: buyerAgentId,
+                to: sellerAgentId,
+                amount: segmentAmount,
+                mode: "hash_reveal",
+                idempotency_key: this.params.settlementIdempotencyKey ? `${this.params.settlementIdempotencyKey}-seg${segmentIdx}` : undefined,
+                meta: { agreement_id: message.intent_id, segment_idx: segmentIdx },
+              });
+              
+              const commitResult = await segmentSettlement.commit(handle.handle_id);
+              
+              if (commitResult.status === "pending" && this.params.settlementAutoPollMs !== undefined) {
+                // Poll for async providers
+                if (typeof segmentSettlement.poll === "function") {
+                  let pollAttempts = 0;
+                  const maxPollAttempts = 100;
+                  while (pollAttempts < maxPollAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, this.params.settlementAutoPollMs || 0));
+                    const pollResult = await segmentSettlement.poll(handle.handle_id);
+                    if (pollResult.status !== "pending") {
+                      if (pollResult.status === "committed") {
+                        // Success - record committed segment
+                        this.settlementSegments.push({
+                          idx: segmentIdx,
+                          provider_pubkey: candidate.provider_pubkey,
+                          settlement_provider: routingResult.provider,
+                          amount: segmentAmount,
+                          status: "committed",
+                          handle_id: handle.handle_id,
+                        });
+                        this.splitTotalPaid += segmentAmount;
+                        remaining -= segmentAmount;
+                        segmentIdx++;
+                        candidateIdx = 0; // Reset candidate index for next segment
+                        break;
+                      } else {
+                        // Failed - record failed segment and continue to next candidate
+                        this.settlementSegments.push({
+                          idx: segmentIdx,
+                          provider_pubkey: candidate.provider_pubkey,
+                          settlement_provider: routingResult.provider,
+                          amount: segmentAmount,
+                          status: "failed",
+                          handle_id: handle.handle_id,
+                          failure_code: pollResult.failure_code || "SETTLEMENT_FAILED",
+                          failure_reason: pollResult.failure_reason || "Settlement failed",
+                        });
+                        candidateIdx++;
+                        break;
+                      }
+                    }
+                    pollAttempts++;
+                  }
+                  if (pollAttempts >= maxPollAttempts) {
+                    // Poll timeout - record failed segment
+                    this.settlementSegments.push({
+                      idx: segmentIdx,
+                      provider_pubkey: candidate.provider_pubkey,
+                      settlement_provider: routingResult.provider,
+                      amount: segmentAmount,
+                      status: "failed",
+                      handle_id: handle.handle_id,
+                      failure_code: "SETTLEMENT_POLL_TIMEOUT",
+                      failure_reason: "Poll timeout",
+                    });
+                    candidateIdx++;
+                  }
+                } else {
+                  // No poll support - record failed segment
+                  this.settlementSegments.push({
+                    idx: segmentIdx,
+                    provider_pubkey: candidate.provider_pubkey,
+                    settlement_provider: routingResult.provider,
+                    amount: segmentAmount,
+                    status: "failed",
+                    handle_id: handle.handle_id,
+                    failure_code: "SETTLEMENT_POLL_NOT_SUPPORTED",
+                    failure_reason: "Settlement provider does not support polling",
+                  });
+                  candidateIdx++;
+                }
+              } else if (commitResult.status === "committed") {
+                // Success - record committed segment
+                this.settlementSegments.push({
+                  idx: segmentIdx,
+                  provider_pubkey: candidate.provider_pubkey,
+                  settlement_provider: routingResult.provider,
+                  amount: segmentAmount,
+                  status: "committed",
+                  handle_id: handle.handle_id,
+                });
+                this.splitTotalPaid += segmentAmount;
+                remaining -= segmentAmount;
+                segmentIdx++;
+                candidateIdx = 0; // Reset candidate index for next segment
+              } else if (commitResult.status === "failed") {
+                // Failed - record failed segment and continue to next candidate
+                this.settlementSegments.push({
+                  idx: segmentIdx,
+                  provider_pubkey: candidate.provider_pubkey,
+                  settlement_provider: routingResult.provider,
+                  amount: segmentAmount,
+                  status: "failed",
+                  handle_id: handle.handle_id,
+                  failure_code: commitResult.failure_code || "SETTLEMENT_FAILED",
+                  failure_reason: commitResult.failure_reason || "Settlement failed",
+                });
+                candidateIdx++;
+              } else {
+                // Pending without auto-poll - record failed segment
+                this.settlementSegments.push({
+                  idx: segmentIdx,
+                  provider_pubkey: candidate.provider_pubkey,
+                  settlement_provider: routingResult.provider,
+                  amount: segmentAmount,
+                  status: "failed",
+                  handle_id: handle.handle_id,
+                  failure_code: "SETTLEMENT_PENDING_UNRESOLVED",
+                  failure_reason: "Settlement is pending and auto-poll is not enabled",
+                });
+                candidateIdx++;
+              }
+            } else {
+              // Legacy settlement - not supported for split
+              this.settlementSegments.push({
+                idx: segmentIdx,
+                provider_pubkey: candidate.provider_pubkey,
+                settlement_provider: routingResult.provider,
+                amount: segmentAmount,
+                status: "failed",
+                failure_code: "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED",
+                failure_reason: "Split settlement requires lifecycle API support",
+              });
+              candidateIdx++;
+            }
+          } catch (error: any) {
+            // Segment settlement failed - record failed segment and continue to next candidate
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.settlementSegments.push({
+              idx: segmentIdx,
+              provider_pubkey: candidate.provider_pubkey,
+              settlement_provider: routingResult.provider,
+              amount: segmentAmount,
+              status: "failed",
+              failure_code: "SETTLEMENT_FAILED",
+              failure_reason: errorMessage,
+            });
+            candidateIdx++;
+          }
+        }
+        
+        // Check if split settlement succeeded
+        if (this.splitTotalPaid < targetAmount - epsilon) {
+          // Split settlement failed - not all segments committed
+          // Note: No automatic refunds in B3 - funds already moved remain moved (disputes C2 handles that)
+          const errorCode: FailureCode = "SETTLEMENT_FAILED";
+          const errorReason = `Split settlement incomplete: paid ${this.splitTotalPaid}, target ${targetAmount}`;
+          this.terminate("FAILED_ESCROW", errorCode, errorReason);
+          return { ok: false, code: errorCode, reason: errorReason };
+        }
+        
+        // Split settlement succeeded - continue to create agreement
+        // Note: We don't set this.settlementHandle for split settlement (it's per-segment)
+      } else if (this.settlementSupportsLifecycle()) {
+        // v1.7.2+: Use lifecycle API if supported (for hash_reveal mode), else fallback to legacy methods
         // Use lifecycle API: prepare + commit
         try {
           const intent_id = message.intent_id;
@@ -906,6 +1163,29 @@ export class NegotiationSession {
    */
   getReceipt(): Receipt | undefined {
     return this.receipt;
+  }
+
+  /**
+   * Get settlement segments (v1.6.6+, B3).
+   */
+  getSettlementSegments(): Array<{
+    idx: number;
+    provider_pubkey: string;
+    settlement_provider: string;
+    amount: number;
+    status: "committed" | "failed";
+    handle_id?: string;
+    failure_code?: string;
+    failure_reason?: string;
+  }> {
+    return [...this.settlementSegments];
+  }
+
+  /**
+   * Get split settlement total paid (v1.6.6+, B3).
+   */
+  getSplitTotalPaid(): number {
+    return this.splitTotalPaid;
   }
 
   /**

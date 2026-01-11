@@ -147,5 +147,26 @@ export type TranscriptV1 = {
     failure_reason?: string; // Failure reason if outcome is "failed"
     timestamp_ms?: number; // Timestamp when attempt completed
   }>;
+  
+  // Settlement segments (v1.6.6+, B3)
+  // Records each segment when split settlement is enabled
+  settlement_segments?: Array<{
+    idx: number; // Segment index (0-based, monotonic)
+    provider_pubkey: string; // Provider public key (b58)
+    settlement_provider: string; // Settlement provider used ("mock", "stripe_like", "external")
+    amount: number; // Amount for this segment
+    status: "committed" | "failed"; // Segment status
+    handle_id?: string; // Settlement handle ID for this segment
+    failure_code?: string; // Failure code if status is "failed"
+    failure_reason?: string; // Failure reason if status is "failed"
+  }>;
+  
+  // Split settlement summary (v1.6.6+, B3)
+  settlement_split_summary?: {
+    enabled: boolean; // Whether split settlement was enabled
+    target_amount: number; // Target amount (agreed_price)
+    total_paid: number; // Total amount paid across all segments
+    segments_used: number; // Number of segments used
+  };
 };
 

@@ -415,6 +415,85 @@ export async function replayTranscript(
     }
   }
 
+  // Verify split settlement segments (v1.6.6+, B3)
+  if (transcript.settlement_split_summary?.enabled) {
+    const splitSummary = transcript.settlement_split_summary;
+    const segments = transcript.settlement_segments || [];
+    const epsilon = 0.00000001;
+    
+    // Check: sum(committed segment amounts) == total_paid
+    const committedSegments = segments.filter(s => s.status === "committed");
+    const sumCommitted = committedSegments.reduce((sum, s) => sum + s.amount, 0);
+    if (Math.abs(sumCommitted - splitSummary.total_paid) > epsilon) {
+      failures.push({
+        code: "SPLIT_SETTLEMENT_INVALID",
+        reason: `Sum of committed segment amounts (${sumCommitted}) does not match total_paid (${splitSummary.total_paid})`,
+        context: {
+          sum_committed: sumCommitted,
+          total_paid: splitSummary.total_paid,
+          segments_count: committedSegments.length,
+        },
+      });
+    }
+    
+    // Check: total_paid <= target_amount + epsilon
+    if (splitSummary.total_paid > splitSummary.target_amount + epsilon) {
+      failures.push({
+        code: "SPLIT_SETTLEMENT_OVERPAY",
+        reason: `Total paid (${splitSummary.total_paid}) exceeds target amount (${splitSummary.target_amount})`,
+        context: {
+          total_paid: splitSummary.total_paid,
+          target_amount: splitSummary.target_amount,
+          overpay: splitSummary.total_paid - splitSummary.target_amount,
+        },
+      });
+    }
+    
+    // Check: if final outcome success, total_paid approx == target_amount
+    if (transcript.outcome.ok) {
+      if (Math.abs(splitSummary.total_paid - splitSummary.target_amount) > epsilon) {
+        failures.push({
+          code: "SPLIT_SETTLEMENT_INCOMPLETE",
+          reason: `Final outcome is success but total_paid (${splitSummary.total_paid}) does not match target_amount (${splitSummary.target_amount})`,
+          context: {
+            total_paid: splitSummary.total_paid,
+            target_amount: splitSummary.target_amount,
+            difference: Math.abs(splitSummary.total_paid - splitSummary.target_amount),
+          },
+        });
+      }
+    }
+    
+    // Check: segment indices monotonic
+    const indices = segments.map(s => s.idx).sort((a, b) => a - b);
+    for (let i = 0; i < indices.length; i++) {
+      if (indices[i] !== i) {
+        failures.push({
+          code: "SPLIT_SETTLEMENT_INDICES_INVALID",
+          reason: `Segment indices are not monotonic: expected ${i}, got ${indices[i]}`,
+          context: {
+            expected_idx: i,
+            actual_idx: indices[i],
+            all_indices: indices,
+          },
+        });
+        break;
+      }
+    }
+    
+    // Check: segments_used matches committed segments count
+    if (splitSummary.segments_used !== committedSegments.length) {
+      failures.push({
+        code: "SPLIT_SETTLEMENT_COUNT_MISMATCH",
+        reason: `segments_used (${splitSummary.segments_used}) does not match committed segments count (${committedSegments.length})`,
+        context: {
+          segments_used: splitSummary.segments_used,
+          committed_count: committedSegments.length,
+        },
+      });
+    }
+  }
+
   return {
     ok: failures.length === 0,
     failures,

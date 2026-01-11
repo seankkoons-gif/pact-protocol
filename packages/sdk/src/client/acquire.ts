@@ -1418,6 +1418,8 @@ export async function acquire(params: {
     : (params.sellerKeyPairsByPubkeyB58?.[selectedProviderPubkey] ?? params.sellerKeyPair);
 
   // 8) Create NegotiationSession with selected provider's pubkey
+  // v1.6.6+: Prepare split settlement config if enabled (B3)
+  const splitEnabled = input.settlement?.split?.enabled === true && chosenMode === "hash_reveal";
   const session = new NegotiationSession({
     compiledPolicy: compiled,
     guard,
@@ -1430,6 +1432,32 @@ export async function acquire(params: {
     // v1.7.2+: Settlement lifecycle configuration
     settlementIdempotencyKey: input.settlement?.idempotency_key,
     settlementAutoPollMs: input.settlement?.auto_poll_ms,
+    // v1.6.6+: Split settlement configuration (B3)
+    settlementSplit: splitEnabled ? {
+      enabled: true,
+      max_segments: input.settlement.split?.max_segments,
+    } : undefined,
+    settlementCandidates: splitEnabled ? orderedCandidates.map(c => ({
+      provider_pubkey: evaluationMap.get(c.provider_id)?.providerPubkey || "",
+      provider_id: c.provider_id,
+      trust_tier: (c as any)._trustTier || "untrusted",
+      trust_score: (c as any)._trustScore || 0,
+    })) : undefined,
+    createSettlementProvider: splitEnabled ? (provider: "mock" | "stripe_like" | "external", params?: Record<string, unknown>) => {
+      return createSettlementProvider({
+        provider,
+        params: params || input.settlement?.params,
+        idempotency_key: input.settlement?.idempotency_key,
+      });
+    } : undefined,
+    selectSettlementProvider: splitEnabled ? (amount: number, mode: "hash_reveal" | "streaming", trustTier: "untrusted" | "low" | "trusted", trustScore: number) => {
+      return selectSettlementProvider(compiled, {
+        amount,
+        mode,
+        trustTier,
+        trustScore,
+      });
+    } : undefined,
   });
 
   // 8.5) Check buyer identity (if policy requires it)
@@ -1804,6 +1832,22 @@ export async function acquire(params: {
     };
         }
         continue;
+  }
+
+  // v1.6.6+: Record split settlement segments if enabled (B3)
+  if (splitEnabled && transcriptData) {
+    const segments = session.getSettlementSegments();
+    const totalPaid = session.getSplitTotalPaid();
+    
+    if (segments.length > 0) {
+      transcriptData.settlement_segments = segments;
+      transcriptData.settlement_split_summary = {
+        enabled: true,
+        target_amount: selectedAskPrice,
+        total_paid: totalPaid,
+        segments_used: segments.filter(s => s.status === "committed").length,
+      };
+    }
   }
 
   // 8) Execute settlement
