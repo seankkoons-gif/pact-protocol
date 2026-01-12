@@ -500,12 +500,6 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
     return this.mockProvider.getAccount(agentId);
   }
 
-  // Legacy refund method (v1.6.5+, C1) - kept for backward compatibility
-  refund(fromAgentId: string, toAgentId: string, amount: number, meta?: Record<string, unknown>): void {
-    // Delegate to underlying mock provider
-    this.mockProvider.refund(fromAgentId, toAgentId, amount, meta);
-  }
-
   // First-class refund API (v1.6.8+, C2) with idempotency
   async refund(refund: {
     dispute_id: string;

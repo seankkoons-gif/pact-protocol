@@ -187,10 +187,9 @@ export async function resolveDispute(params: ResolveDisputeParams): Promise<{ ok
   // Execute refund if needed (v1.6.8+, C2: use first-class refund API)
   let refundResult: { ok: boolean; refunded_amount: number; code?: string; reason?: string } | undefined;
   if (actualRefundAmount > 0) {
-    // Check if refund method exists (try new API first, fallback to legacy)
+    // Check if refund method exists
     if (typeof settlementProvider.refund === "function") {
       try {
-        // Try new refund API (takes refund object)
         const refundParam = {
           dispute_id: dispute.dispute_id,
           from: dispute.seller_agent_id,
@@ -200,17 +199,8 @@ export async function resolveDispute(params: ResolveDisputeParams): Promise<{ ok
           idempotency_key: dispute.dispute_id, // Use dispute_id as idempotency key
         };
         
-        // Check if it's the new API (returns Promise) or legacy (void)
-        const result = await (settlementProvider.refund as any)(refundParam);
-        if (result && typeof result === "object" && "ok" in result) {
-          // New API
-          refundResult = result;
-        } else {
-          // Legacy API (void) - treat as success
-          refundResult = { ok: true, refunded_amount: actualRefundAmount };
-        }
+        refundResult = await settlementProvider.refund(refundParam);
       } catch (error: any) {
-        // Legacy API throws - extract error message
         const errorMsg = error?.message || String(error);
         if (errorMsg.includes("REFUND_INSUFFICIENT_FUNDS")) {
           refundResult = {
@@ -344,6 +334,10 @@ export async function resolveDispute(params: ResolveDisputeParams): Promise<{ ok
         intent_id: intentId,
         intent_type: "dispute_resolution",
         timestamp_ms: now,
+        input: {} as any, // Minimal transcript - input not available for dispute-only events
+        directory: [],
+        credential_checks: [],
+        quotes: [],
         outcome: {
           ok: true,
         },

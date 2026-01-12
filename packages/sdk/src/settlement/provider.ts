@@ -250,28 +250,6 @@ export interface SettlementProvider {
   poll?(handle_id: string): Promise<SettlementResult>;
 
   /**
-   * Refund funds from seller to buyer (v1.6.5+, C1).
-   * Used for dispute resolution to reverse a payment.
-   * 
-   * @param fromAgentId Seller agent identifier (source of refund)
-   * @param toAgentId Buyer agent identifier (recipient of refund)
-   * @param amount Amount to refund (must be > 0)
-   * @param meta Optional metadata (dispute_id, receipt_id, intent_id, etc.)
-   * @returns void (resolves on success)
-   * @throws Error if amount <= 0, insufficient balance, or provider doesn't support refunds
-   * 
-   * Default implementation: Throws NotImplemented (providers that don't support refunds).
-   * 
-   * Invariants:
-   * - getBalance(fromAgentId) decreases by amount (if sufficient)
-   * - getBalance(toAgentId) increases by amount
-   * - Total balance across all agents remains constant
-   * 
-   * @deprecated Use refund() with refund object parameter (v1.6.8+, C2)
-   */
-  refund?(fromAgentId: string, toAgentId: string, amount: number, meta?: Record<string, unknown>): void | Promise<void>;
-
-  /**
    * Refund funds from seller to buyer (v1.6.8+, C2).
    * First-class refund API with idempotency support.
    * 

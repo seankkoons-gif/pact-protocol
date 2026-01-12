@@ -80,11 +80,21 @@ export async function acquire(params: {
 
   // Helper to save transcript on early return (non-retryable failures)
   // This ensures consistent transcript saving for UX and audit trails
+  type AttemptEntryType = {
+    idx: number;
+    provider_pubkey: string;
+    provider_id?: string;
+    settlement_provider?: string;
+    outcome: "success" | "failed";
+    failure_code?: string;
+    failure_reason?: string;
+    timestamp_ms?: number;
+  };
   const saveTranscriptOnEarlyReturn = async (
     intentId: string,
     failureCode: string,
     failureReason: string,
-    attemptEntry?: typeof attemptEntry
+    attemptEntry?: AttemptEntryType
   ): Promise<string | undefined> => {
     if (!saveTranscript || !transcriptData || !input.transcriptDir) {
       return undefined;
@@ -108,13 +118,13 @@ export async function acquire(params: {
         // Update existing entry or add new one
         const existingIdx = transcriptData.settlement_attempts.findIndex(a => a.idx === attemptEntry.idx);
         if (existingIdx >= 0) {
-          transcriptData.settlement_attempts[existingIdx] = attemptEntry;
+          transcriptData.settlement_attempts[existingIdx] = attemptEntry as any;
         } else {
-          transcriptData.settlement_attempts.push(attemptEntry);
+          transcriptData.settlement_attempts.push(attemptEntry as any);
         }
       } else {
         // First attempt, create array with this entry
-        transcriptData.settlement_attempts = [attemptEntry];
+        transcriptData.settlement_attempts = [attemptEntry as any];
       }
     }
 
@@ -1436,7 +1446,7 @@ export async function acquire(params: {
     // v1.6.6+: Split settlement configuration (B3)
     settlementSplit: splitEnabled ? {
       enabled: true,
-      max_segments: input.settlement.split?.max_segments,
+      max_segments: input.settlement?.split?.max_segments,
     } : undefined,
     settlementCandidates: splitEnabled ? orderedCandidates.map(c => ({
       provider_pubkey: evaluationMap.get(c.provider_id)?.providerPubkey || "",
@@ -2990,7 +3000,7 @@ export async function acquire(params: {
   
   // SUCCESS! Build and return success result
   // Log settlement completion
-  if (explain && finalReceipt) {
+  if (explain && finalReceipt && finalSelectedProvider) {
     pushDecision(
       finalSelectedProvider,
       "settlement",
@@ -3010,7 +3020,7 @@ export async function acquire(params: {
     store.ingest(finalReceipt);
     
     // Log receipt ingestion
-    if (explain) {
+    if (explain && finalSelectedProvider) {
       pushDecision(
         finalSelectedProvider,
         "settlement",
@@ -3026,6 +3036,11 @@ export async function acquire(params: {
     explain.regime = plan.regime;
     explain.settlement = chosenMode;
     explain.fanout = plan.fanout;
+  }
+
+  // Ensure required values are defined (should be set in success path)
+  if (!finalIntentId || !finalSelectedProvider || !finalSelectedProviderPubkey || !finalReceipt) {
+    throw new Error("Internal error: success path variables not set");
   }
 
   const baseResult = {
@@ -3080,7 +3095,9 @@ export async function acquire(params: {
     }
     
     const transcriptStore = new TranscriptStore(input.transcriptDir);
-    transcriptPath = await transcriptStore.writeTranscript(finalIntentId, transcriptData as TranscriptV1);
+    if (finalIntentId) {
+      transcriptPath = await transcriptStore.writeTranscript(finalIntentId, transcriptData as TranscriptV1);
+    }
   }
   
   const finalResult: AcquireResult = explain 
