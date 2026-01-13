@@ -268,6 +268,184 @@ describe("verifyTranscriptFile", () => {
     expect(result.errors.length).toBeGreaterThan(0);
     expect(result.errors.some(e => e.includes("Failed to load"))).toBe(true);
   });
+  
+  it("warns for pending settlement without resolution (default mode)", async () => {
+    const transcript: TranscriptV1 = {
+      version: "1",
+      transcript_version: "1.0",
+      intent_id: "test-intent",
+      intent_type: "weather.data",
+      timestamp_ms: Date.now(),
+      input: {
+        intentType: "weather.data",
+        scope: "NYC",
+        constraints: { latency_ms: 50, freshness_sec: 10 },
+        maxPrice: 0.0001,
+      },
+      directory: [],
+      credential_checks: [],
+      quotes: [],
+      outcome: { ok: false, code: "SETTLEMENT_POLL_TIMEOUT" },
+      settlement_lifecycle: {
+        handle_id: "handle-123",
+        status: "pending",
+        failure_code: "SETTLEMENT_POLL_TIMEOUT",
+        failure_reason: "Settlement still pending after 100 poll attempts",
+        // No terminal resolution events
+      },
+    };
+    
+    const filepath = writeTranscriptFile("pending-no-resolution.json", transcript);
+    const result = await verifyTranscriptFile(filepath, false); // Default mode
+    
+    expect(result.ok).toBe(true); // Should pass (warning, not error)
+    expect(result.warnings.length).toBeGreaterThan(0);
+    expect(result.warnings.some(w => w.includes("SETTLEMENT_PENDING_UNRESOLVED"))).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+  
+  it("errors for pending settlement without resolution (strict mode)", async () => {
+    const transcript: TranscriptV1 = {
+      version: "1",
+      transcript_version: "1.0",
+      intent_id: "test-intent",
+      intent_type: "weather.data",
+      timestamp_ms: Date.now(),
+      input: {
+        intentType: "weather.data",
+        scope: "NYC",
+        constraints: { latency_ms: 50, freshness_sec: 10 },
+        maxPrice: 0.0001,
+      },
+      directory: [],
+      credential_checks: [],
+      quotes: [],
+      outcome: { ok: false, code: "SETTLEMENT_POLL_TIMEOUT" },
+      settlement_lifecycle: {
+        handle_id: "handle-123",
+        status: "pending",
+        failure_code: "SETTLEMENT_POLL_TIMEOUT",
+        failure_reason: "Settlement still pending after 100 poll attempts",
+        // No terminal resolution events
+      },
+    };
+    
+    const filepath = writeTranscriptFile("pending-no-resolution-strict.json", transcript);
+    const result = await verifyTranscriptFile(filepath, true); // Strict mode
+    
+    expect(result.ok).toBe(false); // Should fail (error, not warning)
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors.some(e => e.includes("SETTLEMENT_PENDING_UNRESOLVED"))).toBe(true);
+  });
+  
+  it("allows reconcile transition pending -> aborted", async () => {
+    const transcript: TranscriptV1 = {
+      version: "1",
+      transcript_version: "1.0",
+      intent_id: "test-intent",
+      intent_type: "weather.data",
+      timestamp_ms: Date.now(),
+      input: {
+        intentType: "weather.data",
+        scope: "NYC",
+        constraints: { latency_ms: 50, freshness_sec: 10 },
+        maxPrice: 0.0001,
+      },
+      directory: [],
+      credential_checks: [],
+      quotes: [],
+      outcome: { ok: false, code: "SETTLEMENT_POLL_TIMEOUT" },
+      settlement_lifecycle: {
+        handle_id: "handle-123",
+        status: "aborted", // Final status is aborted
+      },
+      reconcile_events: [
+        {
+          ts_ms: Date.now(),
+          handle_id: "handle-123",
+          from_status: "pending",
+          to_status: "aborted", // Valid transition: pending -> aborted
+          note: "Settlement aborted after timeout",
+        },
+      ],
+    };
+    
+    const filepath = writeTranscriptFile("reconcile-pending-to-aborted.json", transcript);
+    const result = await verifyTranscriptFile(filepath);
+    
+    expect(result.ok).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    // Should not have errors about invalid transition
+    expect(result.errors.some(e => e.includes("invalid transition"))).toBe(false);
+  });
+  
+  it("skips pending transcript in strict + terminal-only mode", async () => {
+    const transcript: TranscriptV1 = {
+      version: "1",
+      transcript_version: "1.0",
+      intent_id: "test-intent",
+      intent_type: "weather.data",
+      timestamp_ms: Date.now(),
+      input: {
+        intentType: "weather.data",
+        scope: "NYC",
+        constraints: { latency_ms: 50, freshness_sec: 10 },
+        maxPrice: 0.0001,
+      },
+      directory: [],
+      credential_checks: [],
+      quotes: [],
+      outcome: { ok: false, code: "SETTLEMENT_POLL_TIMEOUT" },
+      settlement_lifecycle: {
+        handle_id: "handle-123",
+        status: "pending", // Pending status
+        failure_code: "SETTLEMENT_POLL_TIMEOUT",
+        failure_reason: "Settlement still pending after 100 poll attempts",
+        // No terminal resolution events
+      },
+    };
+    
+    const filepath = writeTranscriptFile("pending-skip.json", transcript);
+    const result = await verifyTranscriptFile(filepath, true, true); // strict + terminal-only
+    
+    expect(result.skipped).toBe(true);
+    expect(result.ok).toBe(true); // Skipped files are considered ok
+    expect(result.errors).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+  });
+  
+  it("verifies terminal transcript in strict + terminal-only mode", async () => {
+    const transcript: TranscriptV1 = {
+      version: "1",
+      transcript_version: "1.0",
+      intent_id: "test-intent",
+      intent_type: "weather.data",
+      timestamp_ms: Date.now(),
+      input: {
+        intentType: "weather.data",
+        scope: "NYC",
+        constraints: { latency_ms: 50, freshness_sec: 10 },
+        maxPrice: 0.0001,
+      },
+      directory: [],
+      credential_checks: [],
+      quotes: [],
+      outcome: { ok: true },
+      settlement_lifecycle: {
+        handle_id: "handle-123",
+        status: "committed", // Terminal status
+        paid_amount: 0.1,
+        committed_at_ms: Date.now(),
+      },
+    };
+    
+    const filepath = writeTranscriptFile("terminal-committed.json", transcript);
+    const result = await verifyTranscriptFile(filepath, true, true); // strict + terminal-only
+    
+    expect(result.skipped).toBeUndefined(); // Not skipped
+    expect(result.ok).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
 });
 
 

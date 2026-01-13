@@ -670,12 +670,12 @@ export async function replayTranscript(
         });
       }
       
-      // Check: transitions are valid (pending -> committed/failed)
+      // Check: transitions are valid (pending -> committed/failed/aborted)
       if (event.from_status === "pending") {
-        if (event.to_status !== "committed" && event.to_status !== "failed") {
+        if (event.to_status !== "committed" && event.to_status !== "failed" && event.to_status !== "aborted") {
           failures.push({
             code: "RECONCILE_EVENT_INVALID_TRANSITION",
-            reason: `Invalid reconcile transition from ${event.from_status} to ${event.to_status}. Expected committed or failed`,
+            reason: `Invalid reconcile transition from ${event.from_status} to ${event.to_status}. Expected committed, failed, or aborted`,
             context: {
               handle_id: event.handle_id,
               from_status: event.from_status,
@@ -713,12 +713,19 @@ export async function replayTranscript(
  * H1: Verify a transcript file with stronger invariants.
  * 
  * @param path File path to transcript JSON
- * @returns Verification result with errors and warnings
+ * @param strict If true, pending settlements without resolution are errors; otherwise warnings
+ * @param terminalOnly If true and strict is true, skip pending transcripts with a warning
+ * @returns Verification result with errors and warnings, or null if skipped
  */
-export async function verifyTranscriptFile(path: string): Promise<{
+export async function verifyTranscriptFile(
+  path: string,
+  strict: boolean = false,
+  terminalOnly: boolean = false
+): Promise<{
   ok: boolean;
   errors: string[];
   warnings: string[];
+  skipped?: boolean;
 }> {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -736,6 +743,22 @@ export async function verifyTranscriptFile(path: string): Promise<{
     };
   }
   
+  // Check if transcript is terminal (committed/failed/aborted) or pending
+  const isTerminal = transcript.settlement_lifecycle?.status === "committed" ||
+                     transcript.settlement_lifecycle?.status === "failed" ||
+                     transcript.settlement_lifecycle?.status === "aborted";
+  const isPending = transcript.settlement_lifecycle?.status === "pending";
+  
+  // If strict + terminalOnly and transcript is pending, skip it
+  if (strict && terminalOnly && isPending) {
+    return {
+      ok: true,
+      errors: [],
+      warnings: [],
+      skipped: true,
+    };
+  }
+  
   // H1: Check transcript_version (warn if missing, not error)
   if (!transcript.transcript_version) {
     warnings.push("transcript_version missing, assuming '1.0'");
@@ -748,11 +771,41 @@ export async function verifyTranscriptFile(path: string): Promise<{
   
   // Convert replay failures to errors or warnings
   // Expired credentials in historical transcripts are expected and should be warnings, not errors
+  // SETTLEMENT_PENDING_UNRESOLVED is warning by default, error in strict mode
+  const pendingUnresolvedMessages: string[] = [];
   for (const failure of replayResult.failures) {
     if (failure.code === "CREDENTIAL_EXPIRED") {
       warnings.push(`Credential expired: ${failure.reason} (expected for historical transcripts)`);
+    } else if (failure.code === "SETTLEMENT_PENDING_UNRESOLVED") {
+      // Collect pending unresolved messages for deduplication
+      pendingUnresolvedMessages.push(failure.reason);
     } else {
       errors.push(`${failure.code}: ${failure.reason}`);
+    }
+  }
+  
+  // Check for pending settlement without terminal resolution event
+  if (transcript.settlement_lifecycle?.status === "pending") {
+    const lifecycle = transcript.settlement_lifecycle;
+    const hasTerminalResolution = lifecycle.settlement_events?.some(
+      (e) => e.status === "committed" || e.status === "failed" || e.status === "aborted"
+    ) || transcript.reconcile_events?.some(
+      (e) => e.from_status === "pending" && (e.to_status === "committed" || e.to_status === "failed" || e.to_status === "aborted")
+    );
+    
+    if (!hasTerminalResolution) {
+      const message = "Settlement status is 'pending' but no terminal resolution event found (committed/failed/aborted)";
+      pendingUnresolvedMessages.push(message);
+    }
+  }
+  
+  // Dedupe and add SETTLEMENT_PENDING_UNRESOLVED messages (keep the most descriptive/longest one)
+  if (pendingUnresolvedMessages.length > 0) {
+    const bestMessage = pendingUnresolvedMessages.reduce((a, b) => a.length > b.length ? a : b);
+    if (strict) {
+      errors.push(`SETTLEMENT_PENDING_UNRESOLVED: ${bestMessage}`);
+    } else {
+      warnings.push(`SETTLEMENT_PENDING_UNRESOLVED: ${bestMessage}`);
     }
   }
   
@@ -839,17 +892,30 @@ export async function verifyTranscriptFile(path: string): Promise<{
         errors.push(`reconcile_events: event handle_id (${event.handle_id}) does not match settlement_lifecycle.handle_id (${lifecycle.handle_id})`);
       }
       
-      // Check: valid transitions (already in replay)
-      if (event.from_status === "pending" && event.to_status !== "committed" && event.to_status !== "failed") {
-        errors.push(`reconcile_events: invalid transition from ${event.from_status} to ${event.to_status}`);
+      // Check: valid transitions (pending -> committed/failed/aborted)
+      if (event.from_status === "pending" && event.to_status !== "committed" && event.to_status !== "failed" && event.to_status !== "aborted") {
+        errors.push(`reconcile_events: invalid transition from ${event.from_status} to ${event.to_status}. Expected committed, failed, or aborted`);
       }
     }
   }
   
+  // Dedupe warnings by code (keep the more descriptive/longer one)
+  const warningsByCode = new Map<string, string>();
+  for (const warning of warnings) {
+    // Extract code (everything before first colon or space)
+    const match = warning.match(/^([A-Z_]+)[:\s]/);
+    const code = match ? match[1] : warning;
+    const existing = warningsByCode.get(code);
+    if (!existing || warning.length > existing.length) {
+      warningsByCode.set(code, warning);
+    }
+  }
+  const dedupedWarnings = Array.from(warningsByCode.values());
+  
   return {
     ok: errors.length === 0,
     errors,
-    warnings,
+    warnings: dedupedWarnings,
   };
 }
 

@@ -44,14 +44,20 @@ function findJsonFiles(dir: string): string[] {
 
 async function main() {
   const raw = process.argv.slice(2).filter((x) => x !== "--");
-  const args = minimist(raw);
+  const args = minimist(raw, {
+    boolean: ["strict", "terminal-only"],
+  });
   
   // Get positional arguments (paths to verify)
   const paths = args._;
+  const strict = args.strict || false;
+  const terminalOnly = args["terminal-only"] || false;
   
   if (paths.length === 0) {
-    console.error("Usage: pnpm replay:verify -- <path>");
+    console.error("Usage: pnpm replay:verify -- <path> [--strict] [--terminal-only]");
     console.error("  <path> can be a file or directory");
+    console.error("  --strict: Treat pending settlements without resolution as errors (default: warnings)");
+    console.error("  --terminal-only: When used with --strict, skip pending transcripts with a warning");
     process.exit(1);
   }
   
@@ -91,10 +97,19 @@ async function main() {
   let totalErrors = 0;
   let totalWarnings = 0;
   let totalFiles = 0;
+  let skippedFiles = 0;
   
   for (const file of files) {
     totalFiles++;
-    const result = await verifyTranscriptFile(file);
+    const result = await verifyTranscriptFile(file, strict, terminalOnly);
+    
+    // Handle skipped files (strict + terminal-only + pending)
+    if (result.skipped) {
+      skippedFiles++;
+      console.log(`\n${file}:`);
+      console.log(`  ⚠️  WARNING: Skipped pending transcript (strict + terminal-only mode)`);
+      continue;
+    }
     
     if (result.errors.length > 0 || result.warnings.length > 0) {
       console.log(`\n${file}:`);
@@ -117,7 +132,10 @@ async function main() {
   
   // Summary
   console.log(`\n=== Summary ===`);
-  console.log(`Files verified: ${totalFiles}`);
+  console.log(`Files verified: ${totalFiles - skippedFiles}`);
+  if (skippedFiles > 0) {
+    console.log(`Files skipped: ${skippedFiles}`);
+  }
   console.log(`Total errors: ${totalErrors}`);
   console.log(`Total warnings: ${totalWarnings}`);
   
