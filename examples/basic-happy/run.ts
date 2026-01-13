@@ -1,0 +1,119 @@
+#!/usr/bin/env tsx
+/**
+ * Example: Basic Happy Path
+ * 
+ * Demonstrates a simple acquisition against the registry.
+ * Prints the receipt and transcript path.
+ */
+
+import {
+  acquire,
+  createDefaultPolicy,
+  validatePolicyJson,
+  generateKeyPair,
+  MockSettlementProvider,
+  InMemoryProviderDirectory,
+} from "@pact/sdk";
+import bs58 from "bs58";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, "../..");
+
+async function main() {
+  console.log("=== PACT Example: Basic Happy Path ===\n");
+
+  // Generate keypairs
+  const buyerKeyPair = generateKeyPair();
+  const sellerKeyPair = generateKeyPair();
+  const buyerId = bs58.encode(Buffer.from(buyerKeyPair.publicKey));
+  const sellerId = bs58.encode(Buffer.from(sellerKeyPair.publicKey));
+
+  // Create in-memory provider directory and register a provider
+  const directory = new InMemoryProviderDirectory();
+  directory.registerProvider({
+    provider_id: sellerId,
+    intentType: "weather.data",
+    pubkey_b58: sellerId,
+    region: "us-east",
+    credentials: ["sla_verified"],
+    baseline_latency_ms: 50,
+  });
+
+  // Create settlement provider
+  const settlement = new MockSettlementProvider();
+  settlement.credit(buyerId, 1.0);
+  settlement.credit(sellerId, 0.1);
+
+  // Create and validate policy
+  const policy = createDefaultPolicy();
+  const validated = validatePolicyJson(policy);
+  if (!validated.ok) {
+    console.error("❌ Policy validation failed:", validated.errors);
+    process.exit(1);
+  }
+
+  // Run acquisition
+  console.log("Running acquisition...");
+  const nowFn = () => Date.now();
+  const result = await acquire({
+    input: {
+      intentType: "weather.data",
+      scope: "NYC",
+      constraints: { latency_ms: 50, freshness_sec: 10 },
+      maxPrice: 0.0001,
+      saveTranscript: true,
+      transcriptDir: path.join(repoRoot, ".pact", "transcripts"),
+    },
+    buyerKeyPair,
+    sellerKeyPair,
+    buyerId,
+    sellerId,
+    policy: validated.policy,
+    settlement,
+    directory,
+    sellerKeyPairsByPubkeyB58: {
+      [sellerId]: sellerKeyPair,
+    },
+    now: nowFn,
+  });
+
+  // Print results
+  if (result.ok && result.receipt) {
+    console.log("\n✅ Acquisition successful!");
+    console.log(`Receipt ID: ${result.receipt.receipt_id}`);
+    console.log(`Fulfilled: ${result.receipt.fulfilled}`);
+    console.log(`Paid Amount: ${result.receipt.paid_amount || result.receipt.agreed_price}`);
+    
+    if (result.transcriptPath) {
+      console.log(`\n📄 Transcript: ${result.transcriptPath}`);
+    }
+    
+    // Show balances
+    const buyerBalance = settlement.getBalance(buyerId);
+    const sellerBalance = settlement.getBalance(sellerId);
+    console.log(`\n💰 Balances:`);
+    console.log(`  Buyer:  ${buyerBalance.toFixed(8)}`);
+    console.log(`  Seller: ${sellerBalance.toFixed(8)}`);
+    
+    process.exit(0);
+  } else {
+    console.error("\n❌ Acquisition failed!");
+    console.error(`Code: ${result.code}`);
+    console.error(`Reason: ${result.reason}`);
+    
+    if (result.transcriptPath) {
+      console.error(`\n📄 Transcript: ${result.transcriptPath}`);
+    }
+    
+    process.exit(1);
+  }
+}
+
+main().catch((error) => {
+  console.error("Fatal error:", error);
+  process.exit(1);
+});
+

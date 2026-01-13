@@ -280,12 +280,179 @@ Production providers **must**:
 
 ---
 
+## Stable Public Entrypoints (v1.7.2+)
+
+The following APIs are **stable** and will not change in v1.x:
+
+### Core Acquisition
+- `acquire(input, buyerKeyPair, sellerKeyPair, buyerId, sellerId, policy, settlement, directory, ...)` — Main entrypoint for negotiation and settlement
+  - Returns: `AcquireResult` with `ok`, `receipt`, `code`, `reason`, `transcriptPath`
+  - Input schema: `AcquireInput` (stable fields: `intentType`, `scope`, `constraints`, `maxPrice`, `modeOverride`, `saveTranscript`)
+  - **Guarantee**: Input/output schema will not change in v1.x (new optional fields may be added)
+
+### Settlement Providers
+- `SettlementProvider` interface — Base interface for settlement execution
+  - Required methods: `getBalance()`, `lock()`, `release()`, `pay()`, `prepare()`, `commit()`, `abort()`
+  - Optional methods: `poll()` (for async settlement), `refund()` (for disputes)
+  - **Guarantee**: Interface methods will not be removed or change signatures in v1.x
+- `MockSettlementProvider`, `StripeLikeSettlementProvider`, `ExternalSettlementProvider` — Concrete implementations
+  - **Guarantee**: Constructor signatures and core behavior stable in v1.x
+
+### Dispute Resolution
+- `openDispute(params)` — Opens a dispute against a receipt
+  - Returns: `DisputeRecord`
+  - **Guarantee**: Function signature and return type stable in v1.x
+- `resolveDispute(params)` — Resolves a dispute with outcome and optional refund
+  - Returns: `{ ok: boolean; record?: DisputeRecord; code?: string; reason?: string }`
+  - **Guarantee**: Function signature and return type stable in v1.x
+
+### Reconciliation
+- `reconcile(input)` — Polls pending settlement handles and updates transcripts
+  - Input: `ReconcileInput` with `transcriptPath` or `transcript`, `now`, `settlement`
+  - Returns: `ReconcileResult` with `ok`, `status`, `updatedTranscriptPath`, `reconciledHandles`
+  - **Guarantee**: Function signature and return type stable in v1.x
+
+### Transcript Replay
+- `replayTranscript(transcript)` — Replays a transcript and validates invariants
+  - Returns: `ReplayResult` with `ok`, `failures[]`
+  - **Guarantee**: Function signature and return type stable in v1.x
+- `verifyTranscriptFile(path)` — Verifies a transcript file with stronger invariants
+  - Returns: `{ ok: boolean; errors: string[]; warnings: string[] }`
+  - **Guarantee**: Function signature and return type stable in v1.x
+
+### Policy
+- `createDefaultPolicy()` — Creates a default policy configuration
+- `validatePolicyJson(policy)` — Validates policy JSON
+- `compilePolicy(policy)` — Compiles policy for execution
+- **Guarantee**: Policy schema and compilation behavior stable in v1.x
+
+---
+
+## Transcript Invariants (v1.7.2+)
+
+Transcripts (`TranscriptV1`) must satisfy the following invariants:
+
+### Schema Version
+- `transcript_version?: "1.0"` — Schema version (defaults to "1.0" if missing)
+- **Guarantee**: New transcripts must include `transcript_version: "1.0"`
+
+### Settlement Attempts
+- If `settlement_attempts` exists and is non-empty:
+  - Last attempt's `outcome` must match overall `outcome.ok` status
+  - If overall outcome is failure, last attempt's `failure_code` must match overall `outcome.code` (if present)
+
+### Streaming Attempts
+- If `streaming_attempts` and `streaming_summary` exist:
+  - Sum of successful attempt `paid_amount` values must equal `streaming_summary.total_paid_amount` (within epsilon)
+  - `streaming_summary.total_paid_amount` must not exceed `receipt.agreed_price + epsilon`
+
+### Settlement Segments (Split Settlement)
+- If `settlement_split_summary.enabled` is true:
+  - Sum of committed segment `amount` values must equal `settlement_split_summary.total_paid` (within epsilon)
+  - `settlement_split_summary.total_paid` must not exceed `settlement_split_summary.target_amount + epsilon`
+
+### Dispute Events
+- If `dispute_events` exists:
+  - Each resolved dispute's `refund_amount` must not exceed `receipt.paid_amount` or `receipt.agreed_price`
+  - No duplicate `dispute_id` entries should sum to more than the paid amount
+
+### Reconcile Events
+- If `reconcile_events` exists:
+  - Each event must have `handle_id` matching `settlement_lifecycle.handle_id`
+  - Status transitions must be valid (e.g., `pending` → `committed` or `failed`)
+
+**Guarantee**: These invariants are enforced by `verifyTranscriptFile()` and will not change in v1.x.
+
+---
+
+## Stable Failure Codes (v1.7.2+)
+
+The following failure codes are **stable** and will not change meaning or be removed in v1.x:
+
+### Discovery / Selection
+- `DIRECTORY_EMPTY` — No providers available for the intent type
+- `NO_PROVIDERS` — Directory returned no providers
+- `NO_ELIGIBLE_PROVIDERS` — Providers existed but all were rejected
+
+### Identity / Verification
+- `PROVIDER_SIGNATURE_INVALID` — Provider envelope signature verification failed
+- `PROVIDER_SIGNER_MISMATCH` — Signer pubkey doesn't match expected provider pubkey
+- `PROVIDER_CREDENTIAL_INVALID` — (v1.5+) Credential verification failed
+- `UNTRUSTED_ISSUER` — Provider credential issuer not in trusted issuers list
+- `FAILED_IDENTITY` — Identity verification failed
+
+### Policy / Constraints
+- `PROVIDER_MISSING_REQUIRED_CREDENTIALS` — Provider lacked required credentials
+- `PROVIDER_QUOTE_POLICY_REJECTED` — Quote rejected by policy guard
+- `PROVIDER_QUOTE_OUT_OF_BAND` — Price violated reference band constraints
+- `FAILED_REFERENCE_BAND` — Quote price outside acceptable reference price band
+- `PROVIDER_TRUST_TIER_TOO_LOW` — Provider trust tier below minimum required
+
+### Settlement
+- `FAILED_ESCROW` — Insufficient funds or lock failure
+- `FAILED_PROOF` — Commit/reveal hash verification failed
+- `BUYER_STOPPED` — Buyer halted streaming early (not necessarily a provider fault)
+- `SELLER_STOPPED` — Seller halted streaming early
+- `HTTP_STREAMING_ERROR` — HTTP streaming endpoint failed
+- `HTTP_PROVIDER_ERROR` — HTTP provider endpoint error
+- `STREAMING_NOT_CONFIGURED` — Streaming policy not configured
+- `STREAMING_SPEND_CAP_EXCEEDED` — Budget exhausted during streaming
+- `NO_AGREEMENT` — No agreement found after ACCEPT
+- `NO_RECEIPT` — No receipt generated after settlement
+- `SETTLEMENT_PENDING` — Settlement is pending (async mode)
+
+### Other
+- `INVALID_POLICY` — Policy validation failed
+
+**Guarantee**: These codes are stable. New codes may be added in v1.x, but existing codes will not change meaning or be removed without a major version bump.
+
+---
+
+## What Can Change in v1.7.x vs v2.0.0
+
+### v1.7.x (Backward-Compatible Changes)
+
+The following may change in v1.7.x without breaking compatibility:
+
+- **New optional fields** in `AcquireInput`, `AcquireResult`, `TranscriptV1`, `Receipt`, `DisputeRecord`
+- **New failure codes** (existing codes remain stable)
+- **New optional methods** in `SettlementProvider` interface
+- **New optional parameters** in function signatures (with defaults)
+- **New transcript fields** (optional, backward-compatible)
+- **New settlement provider implementations** (additive only)
+- **Performance improvements** (behavior unchanged)
+- **Bug fixes** (correcting incorrect behavior)
+- **New utility functions** (additive only)
+- **Enhanced error messages** (same codes, better descriptions)
+
+**Guarantee**: v1.7.x changes will not break existing code that uses stable APIs.
+
+### v2.0.0 (Breaking Changes)
+
+The following changes **require** a major version bump to v2.0.0:
+
+- **Removal or renaming** of stable public entrypoints
+- **Signature changes** to stable functions (removing required parameters, changing return types)
+- **Removal of failure codes** or changes to their meaning
+- **New required fields** in stable input/output types
+- **New settlement modes** (beyond `hash_reveal` and `streaming`)
+- **Changes to protocol invariants** (e.g., removing signer verification)
+- **Breaking changes to transcript schema** (removing required fields, changing field types)
+- **Breaking changes to receipt schema** (removing required fields, changing field types)
+- **Breaking changes to policy schema** (removing required fields, changing validation rules)
+- **Removal of methods** from `SettlementProvider` interface
+
+**Guarantee**: v2.0.0 will include migration guides for all breaking changes.
+
+---
+
 ## Versioning
 
 PACT follows semantic versioning:
 
 - **v1.0.0** — Initial stable release with these exact guarantees
 - **v1.x.x** — Backward-compatible additions (new optional fields, new error codes)
+- **v1.7.2+** — API freeze: stable public entrypoints documented and guaranteed
 - **v2.0.0** — Breaking changes (new settlement modes, schema changes, invariant changes)
 
 **Guarantee**: All guarantees in this document hold for the entire v1 major version.

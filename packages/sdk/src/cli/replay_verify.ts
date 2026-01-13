@@ -15,6 +15,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
+import minimist from "minimist";
 import { verifyTranscriptFile } from "../transcript/replay";
 
 /**
@@ -42,15 +43,19 @@ function findJsonFiles(dir: string): string[] {
 }
 
 async function main() {
-  const args = process.argv.slice(2);
+  const raw = process.argv.slice(2).filter((x) => x !== "--");
+  const args = minimist(raw);
   
-  if (args.length === 0) {
+  // Get positional arguments (paths to verify)
+  const paths = args._;
+  
+  if (paths.length === 0) {
     console.error("Usage: pnpm replay:verify -- <path>");
     console.error("  <path> can be a file or directory");
     process.exit(1);
   }
   
-  const inputPath = args[0];
+  const inputPath = paths[0];
   
   // Resolve files to verify
   let files: string[] = [];

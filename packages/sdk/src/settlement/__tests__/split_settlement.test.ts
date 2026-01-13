@@ -75,12 +75,8 @@ describe("split settlement (B3)", () => {
       now: () => Date.now(),
     });
 
-    // Check result - if it failed, log the error
-    if (!result.ok) {
-      console.log("Acquire failed:", result.code, result.reason);
-    }
-    
-    // For now, just verify that split config is accepted (may fail for other reasons)
+    // Check result - split config should be accepted (may fail for other reasons)
+    // Note: Expected failures are handled via assertions below
     // The split logic requires specific conditions that may not be met in this simple test
     // Note: Split settlement may fail if conditions aren't met (e.g., no routing, no candidates)
     // This is expected behavior - split is opt-in and requires proper setup

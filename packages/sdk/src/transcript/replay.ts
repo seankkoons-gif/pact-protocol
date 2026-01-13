@@ -746,9 +746,14 @@ export async function verifyTranscriptFile(path: string): Promise<{
   // Run existing replay validation
   const replayResult = await replayTranscript(transcript);
   
-  // Convert replay failures to errors
+  // Convert replay failures to errors or warnings
+  // Expired credentials in historical transcripts are expected and should be warnings, not errors
   for (const failure of replayResult.failures) {
-    errors.push(`${failure.code}: ${failure.reason}`);
+    if (failure.code === "CREDENTIAL_EXPIRED") {
+      warnings.push(`Credential expired: ${failure.reason} (expected for historical transcripts)`);
+    } else {
+      errors.push(`${failure.code}: ${failure.reason}`);
+    }
   }
   
   // H1: Stronger invariants for settlement_attempts

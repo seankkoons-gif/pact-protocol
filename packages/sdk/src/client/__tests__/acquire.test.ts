@@ -1406,17 +1406,8 @@ describe("acquire", () => {
           now: createClock(),
         });
         
-        // Debug: Check what happened
-        if (!result.ok) {
-          console.log("Acquire failed:", result);
-          if (result.transcriptPath) {
-            const transcriptContent = fs.readFileSync(result.transcriptPath, "utf-8");
-            const transcript = JSON.parse(transcriptContent);
-            console.log("Transcript settlement_attempts:", JSON.stringify(transcript.settlement_attempts, null, 2));
-          }
-        }
-        
         // Assertions: Should succeed (either provider1 fails and provider2 succeeds, or provider2 succeeds first)
+        // Note: Expected failures are handled via assertions below
         expect(result.ok).toBe(true);
         expect(result.transcriptPath).toBeDefined();
         

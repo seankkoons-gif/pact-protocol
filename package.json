@@ -23,7 +23,12 @@
     "demo:bad-reveal": "PACT_TRANSCRIPT_DIR=.pact/transcripts pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --demo bad-reveal",
     "demo:streaming": "PACT_TRANSCRIPT_DIR=.pact/transcripts pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --mode streaming",
     "replay:verify": "tsx packages/sdk/src/cli/replay_verify.ts",
-    "doctor": "node scripts/doctor.mjs"
+    "doctor": "node scripts/doctor.mjs",
+    "pack:check": "node scripts/pack-check.mjs",
+    "example:happy": "tsx examples/basic-happy/run.ts",
+    "example:timeout": "tsx examples/timeout-streaming/run.ts",
+    "example:dispute": "tsx examples/dispute-refund/run.ts",
+    "example:reconcile": "tsx examples/reconcile-pending/run.ts"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",

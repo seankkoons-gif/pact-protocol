@@ -24,12 +24,14 @@
     "ajv": "^8.12.0",
     "ajv-formats": "^3.0.1",
     "bs58": "^5.0.0",
+    "minimist": "^1.2.8",
     "tweetnacl": "^1.0.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@pact/provider-adapter": "workspace:*",
     "@types/bs58": "^5.0.0",
+    "@types/minimist": "^1.2.5",
     "@types/node": "^20.10.6",
     "tsup": "^8.5.1",
     "tsx": "^4.7.0",

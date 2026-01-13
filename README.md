@@ -30,6 +30,57 @@ If two agents both implement PACT, they can transact **without prior trust**.
 
 ---
 
+## Public API
+
+PACT v1.7.2+ provides a **stable public API** with guaranteed backward compatibility within the v1 major version. See [V1_CONTRACT.md](./V1_CONTRACT.md) for complete API stability guarantees.
+
+### Quickstart
+
+```bash
+# Install dependencies
+pnpm install
+
+# Build packages
+pnpm build
+
+# Run tests
+pnpm test
+
+# Start provider server
+PACT_DEV_IDENTITY_SEED=pact-provider-default-seed-v1 pnpm provider:serve
+
+# Run examples
+pnpm example:happy          # Basic happy path
+pnpm example:timeout        # Streaming with timeout
+pnpm example:dispute        # Dispute resolution
+pnpm example:reconcile      # Reconcile pending settlement
+```
+
+### Documentation
+
+- **[QUICKSTART.md](./docs/QUICKSTART.md)** — Get started in <10 minutes
+- **[V1_CONTRACT.md](./V1_CONTRACT.md)** — API stability guarantees and contract
+- **[PROTOCOL.md](./PROTOCOL.md)** — Protocol semantics and behavior
+- **[examples/](./examples/)** — Working code examples
+
+### Stable Entrypoints
+
+- **`acquire()`** — Main entrypoint for negotiation and settlement
+- **`SettlementProvider`** — Interface for settlement execution
+- **`openDispute()` / `resolveDispute()`** — Dispute resolution
+- **`reconcile()`** — Reconciliation for pending settlements
+- **`replayTranscript()` / `verifyTranscriptFile()`** — Transcript validation
+
+### Version Recommendation
+
+For production use, we recommend:
+- **v1.7.2+** — API freeze with stable public entrypoints
+- **v1.6.0-alpha+** — Includes reconciliation and signed dispute decisions
+
+See [CHANGELOG.md](./CHANGELOG.md) for detailed version history.
+
+---
+
 ## Core Concepts
 
 ### 1. Intent

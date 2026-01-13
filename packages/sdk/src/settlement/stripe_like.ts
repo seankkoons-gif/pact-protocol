@@ -22,6 +22,7 @@ export interface StripeLikeSettlementProviderConfig {
   asyncCommit?: boolean; // v1.7.2+: enable async commit (default: false)
   commitDelayTicks?: number; // v1.7.2+: number of poll calls before commit resolves (default: 3)
   failCommit?: boolean; // v1.7.2+: if true, poll resolves to failed instead of committed (default: false)
+  forcePendingUntilPoll?: number; // v1.7.3+: force pending until this many polls (overrides commitDelayTicks for first N polls)
 }
 
 export class StripeLikeSettlementProvider implements SettlementProvider {
@@ -399,6 +400,21 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
       // Increment poll count
       pendingState.pollCount = (pendingState.pollCount || 0) + 1;
       pendingState.last_attempt_ms = Date.now();
+
+      // Check if we should force pending (v1.7.3+)
+      const forcePendingUntil = this.config.forcePendingUntilPoll;
+      if (forcePendingUntil !== undefined && pendingState.pollCount < forcePendingUntil) {
+        // Force pending - return pending status regardless of commitDelayTicks
+        return {
+          ok: false,
+          status: "pending",
+          paid_amount: 0,
+          handle_id: handle.handle_id,
+          attempts: pendingState.pollCount,
+          last_attempt_ms: pendingState.last_attempt_ms,
+          meta: handle.meta,
+        };
+      }
 
       // Check if delay has elapsed
       const delayTicks = this.config.commitDelayTicks || 3;
