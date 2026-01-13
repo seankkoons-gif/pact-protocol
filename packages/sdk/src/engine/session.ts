@@ -774,11 +774,15 @@ export class NegotiationSession {
             if (this.params.settlementAutoPollMs !== undefined) {
               const pollResult = await this.pollSettlementUntilResolved(handle.handle_id);
               if (!pollResult.ok) {
-                // Poll failed or timed out - abort settlement
-                try {
-                  await this.params.settlement.abort(handle.handle_id, pollResult.reason);
-                } catch (e) {
-                  // Ignore abort errors
+                // Poll failed or timed out
+                // For SETTLEMENT_POLL_TIMEOUT, leave handle pending (don't abort) so it can be reconciled
+                // For other failures, abort the settlement
+                if (pollResult.code !== "SETTLEMENT_POLL_TIMEOUT") {
+                  try {
+                    await this.params.settlement.abort(handle.handle_id, pollResult.reason);
+                  } catch (e) {
+                    // Ignore abort errors
+                  }
                 }
                 // Use the error code from pollResult, not BOND_INSUFFICIENT
                 const errorCode = (pollResult.code as FailureCode) || "SETTLEMENT_FAILED";

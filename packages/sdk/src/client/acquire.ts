@@ -94,7 +94,8 @@ export async function acquire(params: {
     intentId: string,
     failureCode: string,
     failureReason: string,
-    attemptEntry?: AttemptEntryType
+    attemptEntry?: AttemptEntryType,
+    settlementHandleId?: string // v1.7.3+: Optional handle_id for SETTLEMENT_POLL_TIMEOUT
   ): Promise<string | undefined> => {
     if (!saveTranscript || !transcriptData || !input.transcriptDir) {
       return undefined;
@@ -130,21 +131,62 @@ export async function acquire(params: {
 
     // Ensure settlement lifecycle status is set if lifecycle exists
     if (transcriptData.settlement_lifecycle) {
-      // If status is not already terminal, set to "failed" for settlement-related errors
-      if (failureCode.includes("SETTLEMENT") || failureCode === "SETTLEMENT_FAILED" || 
-          failureCode === "FAILED_PROOF" || failureCode === "NO_RECEIPT") {
-        if (!transcriptData.settlement_lifecycle.status || 
-            (transcriptData.settlement_lifecycle.status !== "committed" && 
-             transcriptData.settlement_lifecycle.status !== "aborted" &&
-             transcriptData.settlement_lifecycle.status !== "failed")) {
-          transcriptData.settlement_lifecycle.status = "failed";
-        }
-        // Set failure code/reason if not already set
+      // Handle settlement-related errors
+      // EXCEPT for SETTLEMENT_POLL_TIMEOUT which should preserve/set "pending" status
+      // (SETTLEMENT_POLL_TIMEOUT means settlement is still pending, we just gave up polling)
+      const isSettlementError = failureCode.includes("SETTLEMENT") || 
+                                 failureCode === "SETTLEMENT_FAILED" || 
+                                 failureCode === "FAILED_PROOF" || 
+                                 failureCode === "NO_RECEIPT";
+      
+      if (isSettlementError) {
+        // Set failure code/reason if not already set (for all settlement errors including timeout)
         if (!transcriptData.settlement_lifecycle.failure_code) {
           transcriptData.settlement_lifecycle.failure_code = failureCode;
         }
         if (!transcriptData.settlement_lifecycle.failure_reason) {
           transcriptData.settlement_lifecycle.failure_reason = failureReason;
+        }
+        
+        // Special handling for SETTLEMENT_POLL_TIMEOUT: set status to "pending" if not already terminal
+        if (failureCode === "SETTLEMENT_POLL_TIMEOUT") {
+          if (!transcriptData.settlement_lifecycle.status || 
+              (transcriptData.settlement_lifecycle.status !== "committed" && 
+               transcriptData.settlement_lifecycle.status !== "aborted" &&
+               transcriptData.settlement_lifecycle.status !== "failed")) {
+            transcriptData.settlement_lifecycle.status = "pending";
+            // Also set handle_id if provided (for SETTLEMENT_POLL_TIMEOUT, we need the handle to reconcile)
+            if (settlementHandleId && !transcriptData.settlement_lifecycle.handle_id) {
+              transcriptData.settlement_lifecycle.handle_id = settlementHandleId;
+            }
+            // If handle_id still not set, try to get it from settlement provider
+            if (!transcriptData.settlement_lifecycle.handle_id) {
+              // Try to get from explicitSettlement (available in closure)
+              // Note: This is a workaround - ideally the session would return handle_id in the error
+              try {
+                const settlementAny = (explicitSettlement as any);
+                if (settlementAny && settlementAny.handles && typeof settlementAny.handles.get === 'function') {
+                  // StripeLikeSettlementProvider has a handles Map
+                  for (const [handleId, handle] of settlementAny.handles.entries()) {
+                    if (handle.status === "pending") {
+                      transcriptData.settlement_lifecycle.handle_id = handleId;
+                      break;
+                    }
+                  }
+                }
+              } catch (e) {
+                // Ignore errors - handle_id might not be accessible this way
+              }
+            }
+          }
+        } else {
+          // Set status to "failed" for other settlement errors
+          if (!transcriptData.settlement_lifecycle.status || 
+              (transcriptData.settlement_lifecycle.status !== "committed" && 
+               transcriptData.settlement_lifecycle.status !== "aborted" &&
+               transcriptData.settlement_lifecycle.status !== "failed")) {
+            transcriptData.settlement_lifecycle.status = "failed";
+          }
         }
       }
     }
@@ -1778,6 +1820,19 @@ export async function acquire(params: {
         // ACCEPT failures (settlement failures) are retryable
         const action = handleAttemptFailure(acceptResult.code, acceptResult.reason || "ACCEPT failed", attemptEntry);
         
+        // For SETTLEMENT_POLL_TIMEOUT, get handle_id from session BEFORE it gets aborted
+        // (The session will abort the handle when poll times out, so we need to capture it now)
+        if ((acceptResult.code as string) === "SETTLEMENT_POLL_TIMEOUT" && transcriptData?.settlement_lifecycle && !transcriptData.settlement_lifecycle.handle_id) {
+          try {
+            const sessionAny = session as any;
+            if (sessionAny.settlementHandle?.handle_id) {
+              transcriptData.settlement_lifecycle.handle_id = sessionAny.settlementHandle.handle_id;
+            }
+          } catch (e) {
+            // Ignore - handle_id might not be accessible
+          }
+        }
+        
         // Record settlement lifecycle failure (v1.7.2+) if applicable
         if (acceptResult.code === "SETTLEMENT_FAILED" && transcriptData?.settlement_lifecycle) {
           recordLifecycleEvent("poll", "failed", {
@@ -1802,11 +1857,24 @@ export async function acquire(params: {
           }
           
           // Save transcript for non-retryable ACCEPT failure (v1.7.2+)
+          // For SETTLEMENT_POLL_TIMEOUT, try to get handle_id from session's settlementHandle
+          let handleIdForTimeout: string | undefined;
+          if (acceptResult.code === "SETTLEMENT_POLL_TIMEOUT" as any) {
+            try {
+              const sessionAny = session as any;
+              if (sessionAny.settlementHandle?.handle_id) {
+                handleIdForTimeout = sessionAny.settlementHandle.handle_id;
+              }
+            } catch (e) {
+              // Ignore - handle_id might not be accessible
+            }
+          }
           const transcriptPath = await saveTranscriptOnEarlyReturn(
             intentId,
             acceptResult.code,
             acceptResult.reason || "ACCEPT failed",
-            attemptEntry
+            attemptEntry,
+            handleIdForTimeout
           );
           
           return {
@@ -2864,6 +2932,9 @@ export async function acquire(params: {
       } else if (errorMsg.includes("INVALID_MESSAGE_TYPE")) {
         failureCode = "INVALID_MESSAGE_TYPE";
         failureReason = errorMsg;
+      } else if (errorMsg.includes("SETTLEMENT_POLL_TIMEOUT")) {
+        failureCode = "SETTLEMENT_POLL_TIMEOUT";
+        failureReason = errorMsg;
       }
       
       // Record attempt failure
@@ -2929,6 +3000,7 @@ export async function acquire(params: {
     const failureCode = lastFailure?.code || "NO_ELIGIBLE_PROVIDERS";
     const failureReason = lastFailure?.reason || "All provider attempts failed";
     
+    
     // Save transcript if requested (v1.7.2+)
     let transcriptPath: string | undefined;
     if (saveTranscript && transcriptData && input.transcriptDir) {
@@ -2944,20 +3016,54 @@ export async function acquire(params: {
       
       // Finalize settlement lifecycle metadata when all attempts fail (v1.7.2+)
       if (transcriptData.settlement_lifecycle) {
-        // If status is not already set to a terminal state, set it to "failed"
-        if (!transcriptData.settlement_lifecycle.status || 
-            (transcriptData.settlement_lifecycle.status !== "committed" && 
-             transcriptData.settlement_lifecycle.status !== "aborted" &&
-             transcriptData.settlement_lifecycle.status !== "failed")) {
-          transcriptData.settlement_lifecycle.status = "failed";
-        }
-        // Set failure code/reason if settlement-related failure
-        if (failureCode.includes("SETTLEMENT") || failureCode === "SETTLEMENT_FAILED") {
+        // Handle settlement-related failures
+        // EXCEPT for SETTLEMENT_POLL_TIMEOUT which should preserve/set "pending" status
+        // (SETTLEMENT_POLL_TIMEOUT means settlement is still pending, we just gave up polling)
+        const isSettlementFailure = failureCode.includes("SETTLEMENT") || failureCode === "SETTLEMENT_FAILED";
+        
+        if (isSettlementFailure) {
+          // Set failure code/reason if not already set (for all settlement failures including timeout)
           if (!transcriptData.settlement_lifecycle.failure_code) {
             transcriptData.settlement_lifecycle.failure_code = failureCode;
           }
           if (!transcriptData.settlement_lifecycle.failure_reason) {
             transcriptData.settlement_lifecycle.failure_reason = failureReason;
+          }
+        }
+        
+        // Special handling for SETTLEMENT_POLL_TIMEOUT: set status to "pending" if not already terminal
+        if (failureCode === "SETTLEMENT_POLL_TIMEOUT") {
+          if (!transcriptData.settlement_lifecycle.status || 
+              (transcriptData.settlement_lifecycle.status !== "committed" && 
+               transcriptData.settlement_lifecycle.status !== "aborted" &&
+               transcriptData.settlement_lifecycle.status !== "failed")) {
+            transcriptData.settlement_lifecycle.status = "pending";
+            // Try to get handle_id from settlement provider if not already set
+            // (For StripeLikeSettlementProvider, we can check for pending handles)
+            if (!transcriptData.settlement_lifecycle.handle_id && explicitSettlement) {
+              try {
+                const settlementAny = explicitSettlement as any;
+                if (settlementAny.handles && typeof settlementAny.handles.get === 'function') {
+                  // StripeLikeSettlementProvider has a handles Map
+                  for (const [handleId, handle] of settlementAny.handles.entries()) {
+                    if (handle.status === "pending") {
+                      transcriptData.settlement_lifecycle.handle_id = handleId;
+                      break;
+                    }
+                  }
+                }
+              } catch (e) {
+                  // Ignore errors - handle_id might not be accessible this way
+                }
+            }
+          }
+        } else {
+          // Set status to "failed" for other settlement failures
+          if (!transcriptData.settlement_lifecycle.status || 
+              (transcriptData.settlement_lifecycle.status !== "committed" && 
+               transcriptData.settlement_lifecycle.status !== "aborted" &&
+               transcriptData.settlement_lifecycle.status !== "failed")) {
+            transcriptData.settlement_lifecycle.status = "failed";
           }
         }
         // Ensure errors array exists and includes this failure if not already present

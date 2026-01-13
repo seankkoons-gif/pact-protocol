@@ -172,3 +172,4 @@ This verifies:
 - Provider registry is `providers.jsonl` at repo root
 - All examples write transcripts automatically
 
+

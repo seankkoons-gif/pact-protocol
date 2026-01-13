@@ -34,3 +34,4 @@ export interface ProviderCredentialResponse {
   envelope: import("../protocol/envelope").SignedEnvelope<CredentialMessage>;
 }
 
+
