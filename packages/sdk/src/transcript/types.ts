@@ -10,6 +10,7 @@ import type { Receipt } from "../exchange/receipt";
 
 export type TranscriptV1 = {
   version: "1";
+  transcript_version?: "1.0"; // H1: Transcript schema version (defaults to "1.0" if missing)
   intent_id: string;
   intent_type: string;
   timestamp_ms: number;

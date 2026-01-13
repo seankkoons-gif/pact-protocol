@@ -709,3 +709,142 @@ export async function replayTranscript(
   };
 }
 
+/**
+ * H1: Verify a transcript file with stronger invariants.
+ * 
+ * @param path File path to transcript JSON
+ * @returns Verification result with errors and warnings
+ */
+export async function verifyTranscriptFile(path: string): Promise<{
+  ok: boolean;
+  errors: string[];
+  warnings: string[];
+}> {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  
+  // Load transcript
+  let transcript: TranscriptV1;
+  try {
+    const content = fs.readFileSync(path, "utf-8");
+    transcript = JSON.parse(content);
+  } catch (error: any) {
+    return {
+      ok: false,
+      errors: [`Failed to load transcript: ${error.message}`],
+      warnings: [],
+    };
+  }
+  
+  // H1: Check transcript_version (warn if missing, not error)
+  if (!transcript.transcript_version) {
+    warnings.push("transcript_version missing, assuming '1.0'");
+  } else if (transcript.transcript_version !== "1.0") {
+    warnings.push(`transcript_version is '${transcript.transcript_version}', expected '1.0'`);
+  }
+  
+  // Run existing replay validation
+  const replayResult = await replayTranscript(transcript);
+  
+  // Convert replay failures to errors
+  for (const failure of replayResult.failures) {
+    errors.push(`${failure.code}: ${failure.reason}`);
+  }
+  
+  // H1: Stronger invariants for settlement_attempts
+  if (transcript.settlement_attempts && Array.isArray(transcript.settlement_attempts)) {
+    const attempts = transcript.settlement_attempts;
+    
+    // Check: last success/failed should match overall outcome
+    if (attempts.length > 0) {
+      const lastAttempt = attempts[attempts.length - 1];
+      const overallOk = transcript.outcome?.ok;
+      
+      if (overallOk === true && lastAttempt.outcome !== "success") {
+        errors.push(`settlement_attempts: overall outcome is ok=true but last attempt outcome is '${lastAttempt.outcome}'`);
+      } else if (overallOk === false && lastAttempt.outcome === "success") {
+        errors.push(`settlement_attempts: overall outcome is ok=false but last attempt outcome is 'success'`);
+      }
+      
+      // Check: if last attempt is success, overall should be ok
+      if (lastAttempt.outcome === "success" && overallOk !== true) {
+        errors.push(`settlement_attempts: last attempt is success but overall outcome is not ok=true`);
+      }
+    }
+  }
+  
+  // H1: Stronger invariants for streaming_attempts
+  if (transcript.streaming_attempts && Array.isArray(transcript.streaming_attempts)) {
+    const attempts = transcript.streaming_attempts;
+    const summary = transcript.streaming_summary;
+    const agreedPrice = transcript.receipt?.agreed_price ?? 0;
+    const epsilon = 0.00000001;
+    
+    if (summary) {
+      // Check: total_paid_amount equals sum of successful attempts paid_amount
+      const sumPaidAmounts = attempts
+        .filter(a => a.outcome === "success")
+        .reduce((sum, a) => sum + a.paid_amount, 0);
+      
+      if (Math.abs(sumPaidAmounts - summary.total_paid_amount) > epsilon) {
+        errors.push(`streaming_attempts: sum of successful attempt paid_amounts (${sumPaidAmounts}) does not match total_paid_amount (${summary.total_paid_amount})`);
+      }
+      
+      // Check: total_paid_amount never exceeds agreed_price + epsilon
+      if (summary.total_paid_amount > agreedPrice + epsilon) {
+        errors.push(`streaming_attempts: total_paid_amount (${summary.total_paid_amount}) exceeds agreed_price (${agreedPrice})`);
+      }
+    }
+  }
+  
+  // H1: Stronger invariants for settlement_segments (already in replay, but ensure it's checked)
+  // The replay function already checks these, so we rely on those errors
+  
+  // H1: Stronger invariants for dispute_events
+  if (transcript.dispute_events && Array.isArray(transcript.dispute_events)) {
+    const disputeEvents = transcript.dispute_events;
+    const paidAmount = transcript.receipt?.paid_amount ?? transcript.receipt?.agreed_price ?? 0;
+    
+    // Check: refund_amount <= paid_amount/agreed_price (already in replay)
+    // Check: no duplicate dispute_id summing above paid (already in replay)
+    
+    // Additional check: if dispute resolved, refund_amount should be reasonable
+    for (const event of disputeEvents) {
+      if (event.status === "resolved" && event.refund_amount > 0) {
+        if (event.refund_amount > paidAmount) {
+          errors.push(`dispute_events: dispute ${event.dispute_id} refund_amount (${event.refund_amount}) exceeds paid_amount (${paidAmount})`);
+        }
+      }
+    }
+  }
+  
+  // H1: Stronger invariants for reconcile_events
+  if (transcript.reconcile_events && Array.isArray(transcript.reconcile_events)) {
+    const reconcileEvents = transcript.reconcile_events;
+    const lifecycle = transcript.settlement_lifecycle;
+    
+    for (const event of reconcileEvents) {
+      // Check: handle_id present (already in replay)
+      if (!event.handle_id) {
+        errors.push(`reconcile_events: event missing handle_id`);
+      }
+      
+      // Check: handle_id matches lifecycle handle_id (already in replay)
+      if (lifecycle && event.handle_id && lifecycle.handle_id !== event.handle_id) {
+        errors.push(`reconcile_events: event handle_id (${event.handle_id}) does not match settlement_lifecycle.handle_id (${lifecycle.handle_id})`);
+      }
+      
+      // Check: valid transitions (already in replay)
+      if (event.from_status === "pending" && event.to_status !== "committed" && event.to_status !== "failed") {
+        errors.push(`reconcile_events: invalid transition from ${event.from_status} to ${event.to_status}`);
+      }
+    }
+  }
+  
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
+

@@ -21,7 +21,9 @@
     "demo:price-too-high": "PACT_TRANSCRIPT_DIR=.pact/transcripts pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --demo price-too-high",
     "demo:timeout": "PACT_TRANSCRIPT_DIR=.pact/transcripts pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --demo timeout",
     "demo:bad-reveal": "PACT_TRANSCRIPT_DIR=.pact/transcripts pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --demo bad-reveal",
-    "demo:streaming": "PACT_TRANSCRIPT_DIR=.pact/transcripts pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --mode streaming"
+    "demo:streaming": "PACT_TRANSCRIPT_DIR=.pact/transcripts pnpm demo -- --registry ./providers.jsonl --intent weather.data --explain coarse --mode streaming",
+    "replay:verify": "tsx packages/sdk/src/cli/replay_verify.ts",
+    "doctor": "node scripts/doctor.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",

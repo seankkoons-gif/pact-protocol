@@ -25,6 +25,7 @@ export interface ProviderServerOptions {
   sellerKeyPair: Keypair;
   sellerId: string; // pubkey b58
   baseline_latency_ms?: number;
+  mode?: "env-secret-key" | "keypair-file" | "dev-seed" | "ephemeral"; // H2: Identity mode
 }
 
 export interface ProviderServer {
@@ -35,7 +36,7 @@ export interface ProviderServer {
 export function startProviderServer(
   opts: ProviderServerOptions
 ): ProviderServer {
-  const { port = 0, sellerId, sellerKeyPair } = opts;
+  const { port = 0, sellerId, sellerKeyPair, mode } = opts;
   
   // Create deterministic clock function
   let now = 1000;
@@ -58,11 +59,16 @@ export function startProviderServer(
         return;
       }
 
-      // Health check
+      // Health check (H2)
       if (req.method === "GET" && req.url === "/health") {
         const sellerPubkeyB58 = sellerId; // sellerId is already pubkey b58
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: true, sellerId, seller_pubkey_b58: sellerPubkeyB58 }));
+        res.end(JSON.stringify({ 
+          ok: true, 
+          sellerId, 
+          seller_pubkey_b58: sellerPubkeyB58,
+          mode: mode || "ephemeral" // H2: Include identity mode
+        }));
         return;
       }
 
@@ -180,6 +186,7 @@ if (process.argv[1]?.includes("server.ts")) {
     port,
     sellerKeyPair: keypair,
     sellerId,
+    mode, // H2: Pass identity mode
   });
 
   const url = server.url;

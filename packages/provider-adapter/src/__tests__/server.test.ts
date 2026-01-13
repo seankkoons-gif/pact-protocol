@@ -23,6 +23,7 @@ describe("Provider Server", () => {
       port: 0,
       sellerKeyPair: keyPair,
       sellerId,
+      mode: "ephemeral", // H2: Add mode for consistency
     });
     
     expect(server.url).toMatch(/^http:\/\/(localhost|127\.0\.0\.1):\d+$/);
@@ -36,6 +37,7 @@ describe("Provider Server", () => {
       port: 0,
       sellerKeyPair: keyPair,
       sellerId,
+      mode: "ephemeral", // H2: Test mode field
     });
     
     const response = await fetch(`${server.url}/health`);
@@ -44,6 +46,7 @@ describe("Provider Server", () => {
     expect(data.ok).toBe(true);
     expect(data.sellerId).toBe(sellerId);
     expect(data.seller_pubkey_b58).toBe(sellerId);
+    expect(data.mode).toBe("ephemeral"); // H2: Verify mode field
   });
 
   it("should handle POST /quote and return signed ASK envelope", async () => {
@@ -54,6 +57,7 @@ describe("Provider Server", () => {
       port: 0,
       sellerKeyPair: keyPair,
       sellerId,
+      mode: "ephemeral", // H2: Add mode for consistency
     });
     
     const quoteReq: ProviderQuoteRequest = {
@@ -98,6 +102,7 @@ describe("Provider Server", () => {
       port: 0,
       sellerKeyPair: keyPair,
       sellerId,
+      mode: "ephemeral", // H2: Add mode for consistency
     });
     
     const quoteReq: ProviderQuoteRequest = {
@@ -134,6 +139,7 @@ describe("Provider Server", () => {
       port: 0,
       sellerKeyPair: keyPair,
       sellerId,
+      mode: "ephemeral", // H2: Add mode for consistency
     });
     
     const payloadB64 = Buffer.from("test payload").toString("base64");
@@ -173,6 +179,7 @@ describe("Provider Server", () => {
       port: 0,
       sellerKeyPair: keyPair,
       sellerId,
+      mode: "ephemeral", // H2: Add mode for consistency
     });
     
     const payloadB64 = Buffer.from("test payload").toString("base64");
@@ -223,6 +230,7 @@ describe("Provider Server", () => {
       port: 0,
       sellerKeyPair: keyPair,
       sellerId,
+      mode: "ephemeral", // H2: Add mode for consistency
     });
     
     const payloadB64 = Buffer.from("test payload").toString("base64");
@@ -277,6 +285,7 @@ describe("Provider Server", () => {
       port: 0,
       sellerKeyPair: keyPair,
       sellerId,
+      mode: "ephemeral", // H2: Add mode for consistency
     });
     
     const chunkReq: StreamChunkRequest = {
@@ -311,6 +320,7 @@ describe("Provider Server", () => {
       port: 0,
       sellerKeyPair: keyPair,
       sellerId,
+      mode: "ephemeral", // H2: Add mode for consistency
     });
     
     const response = await fetch(`${server.url}/credential?intent=weather.data`);
@@ -347,6 +357,7 @@ describe("Provider Server", () => {
       port: 0,
       sellerKeyPair: keyPair,
       sellerId,
+      mode: "ephemeral", // H2: Add mode for consistency
     });
     
     const response = await fetch(`${server.url}/credential?intent=weather.data`);
@@ -383,6 +394,7 @@ describe("Provider Server", () => {
       port: 0,
       sellerKeyPair: keyPair,
       sellerId,
+      mode: "ephemeral", // H2: Add mode for consistency
     });
     
     const chunkReq: StreamChunkRequest = {

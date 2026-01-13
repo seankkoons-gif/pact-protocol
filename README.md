@@ -99,6 +99,10 @@ The `acquire()` API can optionally return **explanations**, describing:
 
 Additionally, `acquire()` can save **transcripts** (v1.5.4+) — complete JSON audit trails of each acquisition, including directory, credential checks, quotes, selection, settlement, and receipt. Enable with `saveTranscript: true`.
 
+**Reconciliation (v1.6.0-alpha)**: The `reconcile()` function polls pending settlement handles and updates transcripts with final settlement status (committed/failed), enabling post-transaction status updates for async settlement providers.
+
+**Signed Dispute Decisions (v1.6.0-alpha)**: Dispute resolution now supports cryptographically signed decision artifacts with arbiter Ed25519 signatures, enabling verifiable dispute outcomes and audit trails.
+
 This is critical for debugging, auditing, and governance.
 
 ### Error Codes (Handling Failures)

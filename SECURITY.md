@@ -80,6 +80,21 @@ Explainability does **not** override correctness.
 
 ---
 
+### 6. Signed Dispute Decisions (v1.6.0-alpha)
+Dispute resolution decisions can be cryptographically signed by arbiters using Ed25519 signatures.
+
+This provides:
+- **Non-repudiation**: Signed decisions cannot be denied by the arbiter
+- **Verification**: Anyone can verify decision authenticity using the arbiter's public key
+- **Audit trails**: Decision hashes link disputes to signed artifacts
+
+Security relies on:
+- Arbiter keypair secrecy (private key must be protected)
+- Canonical JSON serialization for deterministic hashing
+- Ed25519 signature verification
+
+---
+
 ## Threat Model
 
 PACT assumes the following adversarial behaviors are possible:

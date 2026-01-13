@@ -58,7 +58,7 @@ export * from "./kya/index";
 // Transcript (v1.5.4+)
 export * from "./transcript/types";
 export { TranscriptStore } from "./transcript/store";
-export { replayTranscript } from "./transcript/replay";
+export { replayTranscript, verifyTranscriptFile } from "./transcript/replay";
 export type { ReplayResult, ReplayFailure, ReplayOptions } from "./transcript/replay";
 
 // Reconciliation (v1.6+, D2)

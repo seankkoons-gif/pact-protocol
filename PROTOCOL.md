@@ -601,6 +601,187 @@ PACT guarantees correctness, not market conditions.
 
 ---
 
+## Reconciliation (v1.6.0-alpha, D2)
+
+PACT v1.6.0-alpha introduces reconciliation helpers for pending settlement handles.
+
+### Purpose
+
+Reconciliation enables post-transaction status updates for async settlement providers (e.g., on-chain confirmations, payment processor webhooks).
+
+### API
+
+```typescript
+import { reconcile } from "@pact/sdk";
+
+const result = await reconcile({
+  transcriptPath: "/path/to/transcript.json",  // or transcript: TranscriptV1
+  now: Date.now,
+  settlement: settlementProvider,  // Must implement poll() method
+  disputeDir: ".pact/disputes",  // Optional
+});
+```
+
+### Behavior
+
+1. **Load transcript**: Reads transcript from path or uses provided object
+2. **Check pending**: Verifies `settlement_lifecycle.status === "pending"`
+3. **Poll once**: Calls `settlement.poll(handle_id)` to check current status
+4. **Update if changed**: If status changed (pending → committed/failed):
+   - Updates `settlement_lifecycle.status`
+   - Records reconciliation event in `reconcile_events[]`
+   - Updates lifecycle metadata (committed_at_ms, paid_amount, failure_code, etc.)
+   - Writes updated transcript with `-reconciled-<hash>.json` suffix
+5. **Return result**: Returns `NOOP` (no change), `UPDATED` (status changed), or `FAILED` (error)
+
+### Transcript Schema
+
+```typescript
+{
+  reconcile_events?: Array<{
+    ts_ms: number;
+    handle_id: string;
+    from_status: "pending";
+    to_status: "committed" | "failed";
+    note?: string;
+  }>;
+  settlement_lifecycle?: {
+    status: "prepared" | "committed" | "aborted" | "pending" | "failed";
+    handle_id?: string;
+    committed_at_ms?: number;
+    paid_amount?: number;
+    failure_code?: string;
+    failure_reason?: string;
+  };
+}
+```
+
+### Constraints
+
+- Requires settlement provider to implement `poll()` method
+- Only reconciles handles in `pending` status
+- Single poll per call (no looping)
+- Deterministic: same handle_id + status → same result
+
+---
+
+## Signed Dispute Decisions (v1.6.0-alpha, C3)
+
+PACT v1.6.0-alpha introduces cryptographically signed dispute resolution artifacts.
+
+### Purpose
+
+Signed decisions provide non-repudiable, verifiable dispute outcomes with arbiter accountability.
+
+### API
+
+```typescript
+import { hashDecision, signDecision, verifyDecision, writeDecision, loadDecision } from "@pact/sdk";
+import nacl from "tweetnacl";
+
+// Create decision
+const decision: DisputeDecision = {
+  decision_id: "decision-123",
+  dispute_id: "dispute-456",
+  receipt_id: "receipt-789",
+  intent_id: "intent-abc",
+  buyer_agent_id: "buyer-pubkey",
+  seller_agent_id: "seller-pubkey",
+  outcome: "REFUND_FULL",
+  refund_amount: 0.1,
+  issued_at_ms: Date.now(),
+  notes: "Service not delivered",
+};
+
+// Generate arbiter keypair
+const arbiterKeyPair = nacl.sign.keyPair();
+
+// Sign decision
+const signedDecision = signDecision(decision, arbiterKeyPair);
+
+// Verify decision
+const isValid = verifyDecision(signedDecision);  // true
+
+// Store decision
+const decisionPath = writeDecision(signedDecision, ".pact/disputes/decisions");
+
+// Load decision
+const loaded = loadDecision("decision-123", ".pact/disputes/decisions");
+```
+
+### Integration with Dispute Resolution
+
+```typescript
+import { resolveDispute } from "@pact/sdk";
+
+const result = await resolveDispute({
+  dispute_id: "dispute-456",
+  outcome: "REFUND_FULL",
+  refund_amount: 0.1,
+  now: Date.now,
+  policy: myPolicy,
+  disputeStore: disputeStore,
+  settlement: settlementProvider,
+  receipt: receiptRecord,
+  arbiterKeyPair: arbiterKeyPair,  // Optional: enables signing
+  disputeDir: ".pact/disputes",
+});
+```
+
+If `arbiterKeyPair` is provided:
+1. Creates `DisputeDecision` from dispute + receipt + resolution
+2. Signs decision with arbiter keypair
+3. Writes signed decision to `.pact/disputes/decisions/{decision_id}.json`
+4. Updates `DisputeRecord` with decision metadata (`decision_path`, `decision_hash_hex`, `decision_signature_b58`, `arbiter_pubkey_b58`)
+5. Updates transcript `dispute_events` with `decision_hash_hex` and `arbiter_pubkey_b58`
+
+### Cryptography
+
+- **Hashing**: SHA-256 of canonical JSON representation
+- **Signing**: Ed25519 detached signature over hash bytes
+- **Encoding**: Base58 for public keys and signatures
+- **Determinism**: Canonical JSON ensures same decision → same hash
+
+### Verification
+
+`verifyDecision()` checks:
+1. `decision_hash_hex` matches recomputed `hashDecision(decision)`
+2. `signature_b58` verifies over hash bytes using `arbiter_pubkey_b58`
+
+### Storage
+
+Signed decisions are stored as JSON files:
+- **Location**: `.pact/disputes/decisions/` (configurable)
+- **Filename**: `{decision_id}.json`
+- **Format**: `SignedDecision` JSON object
+
+### Transcript Linkage
+
+```typescript
+{
+  dispute_events: [
+    {
+      ts_ms: 1234567890,
+      dispute_id: "dispute-456",
+      outcome: "REFUND_FULL",
+      refund_amount: 0.1,
+      status: "resolved",
+      decision_hash_hex: "abc123...",  // C3: Hash of signed decision
+      arbiter_pubkey_b58: "xyz789...",  // C3: Arbiter public key
+    },
+  ],
+}
+```
+
+### Constraints
+
+- Requires arbiter keypair (Ed25519)
+- Decision hashing is deterministic (canonical JSON)
+- Verification is stateless (no external dependencies)
+- Storage is filesystem-based (no database required)
+
+---
+
 ## 📐 Appendix: Protocol Diagrams
 
 ### Negotiation Sequence

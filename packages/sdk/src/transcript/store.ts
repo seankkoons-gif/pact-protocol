@@ -78,6 +78,11 @@ export class TranscriptStore {
       fs.mkdirSync(targetDir, { recursive: true });
     }
     
+    // H1: Set transcript_version if not already set
+    if (!transcript.transcript_version) {
+      transcript.transcript_version = "1.0";
+    }
+    
     // Sanitize intentId for filename (remove invalid chars)
     const sanitizedId = intentId.replace(/[^a-zA-Z0-9_-]/g, "_");
     
