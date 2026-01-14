@@ -7,6 +7,7 @@
 import type { AcquireInput } from "../client/types";
 import type { ProviderDecision } from "../client/explain";
 import type { Receipt } from "../exchange/receipt";
+import type { AssetId, ChainId } from "../assets/types";
 
 export type TranscriptV1 = {
   version: "1";
@@ -14,6 +15,9 @@ export type TranscriptV1 = {
   intent_id: string;
   intent_type: string;
   timestamp_ms: number;
+  // Asset metadata (v2.2+)
+  asset_id?: AssetId; // Defaults to "USDC" if omitted (backward compatible)
+  chain_id?: ChainId;
   
   // Sanitized input (remove sensitive data if needed)
   input: AcquireInput;
@@ -122,6 +126,14 @@ export type TranscriptV1 = {
         reason?: string;
       };
     }>;
+  };
+  
+  // Wallet connection (v2.3+)
+  wallet?: {
+    provider: string; // Wallet provider (e.g., "external")
+    address?: string; // Wallet address
+    chain_id?: string; // Chain ID
+    connected_at_ms?: number; // Timestamp when wallet was connected
   };
   
   // Outcome summary

@@ -35,6 +35,16 @@ export type AcquireInput = {
     strategy?: "baseline"; // Negotiation strategy (default: "baseline")
     params?: Record<string, unknown>; // Parameters for negotiation strategy
   };
+  // Optional asset specification (v2.2+)
+  asset?: {
+    asset_id?: "USDC" | "USDT" | "BTC" | "ETH" | "SOL" | "HYPE" | "XRP"; // Default: "USDC"
+    chain_id?: "solana" | "ethereum" | "base" | "polygon" | "arbitrum" | "unknown";
+  };
+  // Optional wallet adapter (v2.3+)
+  wallet?: {
+    provider?: "external" | "test"; // Wallet provider (default: "external", "test" for testing only)
+    params?: Record<string, unknown>; // Parameters for wallet provider
+  };
   // Optional identity/verification (v1: for policy enforcement)
   identity?: {
     buyer?: {

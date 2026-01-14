@@ -66,3 +66,9 @@ export * from "./reconcile/index";
 
 // Negotiation (v2.1+)
 export * from "./negotiation/index";
+
+// Assets (v2.2+)
+export * from "./assets/index";
+
+// Wallets (v2.3+)
+export * from "./wallets/index";

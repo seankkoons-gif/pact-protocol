@@ -29,6 +29,17 @@ import { isRetryableFailure, buildFallbackPlan, type ProviderCandidate } from ".
 import type { NegotiationStrategy } from "../negotiation/strategy";
 import { BaselineNegotiationStrategy } from "../negotiation/baseline";
 import type { NegotiationResult } from "../negotiation/types";
+import type { WalletAdapter, WalletConnectResult } from "../wallets/types";
+import { ExternalWalletAdapter } from "../wallets/external";
+// Import test adapter only in test environment
+// Use dynamic require to avoid issues in production builds
+let TestWalletAdapter: any;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  TestWalletAdapter = require("../wallets/__tests__/test-adapter")?.TestWalletAdapter;
+} catch {
+  // Test adapter not available (normal in production)
+}
 
 const round8 = (x: number) => Math.round(x * 1e8) / 1e8;
 
@@ -51,6 +62,78 @@ export async function acquire(params: {
 }): Promise<AcquireResult> {
   const { input, buyerKeyPair, sellerKeyPair, buyerId, sellerId, policy, settlement: explicitSettlement, store, directory, rfq, now: nowFn } = params;
   
+  // Extract asset metadata (v2.2+)
+  const assetId = input.asset?.asset_id ?? "USDC";
+  const chainId = input.asset?.chain_id;
+  
+  // Wallet adapter connection (v2.3+)
+  let walletAdapter: WalletAdapter | undefined;
+  let walletConnectResult: WalletConnectResult | undefined;
+  
+  if (input.wallet) {
+    const walletProvider = input.wallet.provider ?? "external";
+    
+    // Create wallet adapter based on provider
+    if (walletProvider === "test") {
+      // Test-only provider for integration tests
+      if (!TestWalletAdapter) {
+        // Test adapter not available - try to load it dynamically
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          const testAdapterModule = require("../wallets/__tests__/test-adapter");
+          if (testAdapterModule && testAdapterModule.TestWalletAdapter) {
+            TestWalletAdapter = testAdapterModule.TestWalletAdapter;
+          } else {
+            return {
+              ok: false,
+              code: "WALLET_CONNECT_FAILED",
+              reason: "Test wallet adapter not available",
+            };
+          }
+        } catch (e) {
+          // Test adapter not available
+          return {
+            ok: false,
+            code: "WALLET_CONNECT_FAILED",
+            reason: "Test wallet adapter not available",
+          };
+        }
+      }
+      walletAdapter = new TestWalletAdapter(
+        input.wallet.params?.address as string | undefined,
+        input.wallet.params?.chain_id as string | undefined
+      );
+    } else if (walletProvider === "external") {
+      walletAdapter = new ExternalWalletAdapter(input.wallet.params);
+    } else {
+      // Unknown provider - default to external
+      walletAdapter = new ExternalWalletAdapter(input.wallet.params);
+    }
+    
+    // Attempt to connect
+    if (walletAdapter) {
+      try {
+        walletConnectResult = await walletAdapter.connect();
+        
+        if (!walletConnectResult.ok) {
+          // Wallet connection failed - return error
+          return {
+            ok: false,
+            code: "WALLET_CONNECT_FAILED",
+            reason: walletConnectResult.error || "Wallet connection failed",
+          };
+        }
+      } catch (error: any) {
+        // Wallet connection threw an error
+        return {
+          ok: false,
+          code: "WALLET_CONNECT_FAILED",
+          reason: error?.message || "Wallet connection error",
+        };
+      }
+    }
+  }
+  
   // Initialize transcript collection if requested (needed for recordLifecycleError)
   const saveTranscript = input.saveTranscript ?? false;
   const transcriptData: Partial<TranscriptV1> | null = saveTranscript ? {
@@ -62,6 +145,16 @@ export async function acquire(params: {
     credential_checks: [],
     quotes: [],
     outcome: { ok: false },
+    // Asset metadata (v2.2+)
+    asset_id: assetId,
+    chain_id: chainId,
+    // Wallet connection (v2.3+)
+    wallet: walletConnectResult ? {
+      provider: input.wallet?.provider ?? "external",
+      address: walletConnectResult.address,
+      chain_id: walletConnectResult.chain_id,
+      connected_at_ms: nowFn ? nowFn() : Date.now(),
+    } : undefined,
     // Initialize settlement lifecycle metadata (v1.6.3+)
     settlement_lifecycle: input.settlement?.provider ? {
       provider: input.settlement.provider,
@@ -2046,6 +2139,8 @@ export async function acquire(params: {
             timestamp_ms: violation.ts_ms,
             failure_code: "SETTLEMENT_SLA_VIOLATION",
             paid_amount: 0,
+            asset_id: assetId,
+            chain_id: chainId,
           });
           (penaltyReceipt as any).intent_type = input.intentType;
           store.ingest(penaltyReceipt);
@@ -2433,6 +2528,11 @@ export async function acquire(params: {
       }
 
       receipt = session.getReceipt() ?? null;
+      // Add asset metadata to receipt from session (v2.2+)
+      if (receipt) {
+        receipt.asset_id = assetId;
+        receipt.chain_id = chainId;
+      }
       }
 
       if (chosenMode === "streaming") {
@@ -2696,6 +2796,9 @@ export async function acquire(params: {
           // If receipt indicates completion, we're done
           if (tickResult.receipt.fulfilled && (tickResult.receipt.paid_amount || 0) >= totalBudget - epsilon) {
             streamingReceipt = tickResult.receipt;
+            // Add asset metadata (v2.2+)
+            streamingReceipt.asset_id = assetId;
+            streamingReceipt.chain_id = chainId;
             streamingSuccess = true;
             // Record successful attempt
             streamingAttempts.push({
@@ -2722,6 +2825,9 @@ export async function acquire(params: {
             } else {
               // Non-retryable - fail overall
               streamingReceipt = tickResult.receipt;
+              // Add asset metadata (v2.2+)
+              streamingReceipt.asset_id = assetId;
+              streamingReceipt.chain_id = chainId;
               // Assign receipt before breaking out of loop
               receipt = streamingReceipt;
               break; // Break out of streaming attempt loop
@@ -2802,6 +2908,8 @@ export async function acquire(params: {
             ticks: streamingTotalTicks,
             chunks: streamingTotalChunks,
             failure_code: attemptFailureCode,
+            asset_id: assetId,
+            chain_id: chainId,
           });
           // Assign receipt before breaking out of loop
           receipt = streamingReceipt;
@@ -2832,6 +2940,8 @@ export async function acquire(params: {
             paid_amount: round8(streamingTotalPaidAmount),
             ticks: streamingTotalTicks,
             chunks: streamingTotalChunks,
+            asset_id: assetId,
+            chain_id: chainId,
           });
           streamingSuccess = true;
           // Record successful attempt
@@ -2880,6 +2990,8 @@ export async function acquire(params: {
             ticks: streamingTotalTicks,
             chunks: streamingTotalChunks,
             failure_code: streamingAttempts[streamingAttempts.length - 1]?.failure_code || "SETTLEMENT_FAILED",
+            asset_id: assetId,
+            chain_id: chainId,
           });
         } else if (!streamingReceipt) {
           // No receipt yet - create one based on final cumulative state
@@ -2897,6 +3009,8 @@ export async function acquire(params: {
               paid_amount: round8(streamingTotalPaidAmount),
               ticks: streamingTotalTicks,
               chunks: streamingTotalChunks,
+              asset_id: assetId,
+              chain_id: chainId,
             });
           } else {
             // Stream completed naturally (all ticks processed) - fulfilled receipt
@@ -2910,6 +3024,8 @@ export async function acquire(params: {
               paid_amount: round8(streamingTotalPaidAmount),
               ticks: streamingTotalTicks,
               chunks: streamingTotalChunks,
+              asset_id: assetId,
+              chain_id: chainId,
             });
           }
         }
@@ -3078,6 +3194,8 @@ export async function acquire(params: {
               timestamp_ms: violation.ts_ms,
               failure_code: "SETTLEMENT_SLA_VIOLATION",
               paid_amount: 0,
+              asset_id: assetId,
+              chain_id: chainId,
             });
             (penaltyReceipt as any).intent_type = input.intentType;
             store.ingest(penaltyReceipt);
