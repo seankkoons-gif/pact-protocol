@@ -48,6 +48,9 @@ export interface NegotiationSessionParams {
   settlement?: SettlementProvider;
   buyerAgentId?: string;
   sellerAgentId?: string;
+  // v2 Phase 2+: Chain and asset for settlement operations
+  settlementChain?: string;
+  settlementAsset?: string;
   // v1.7.2+: Settlement lifecycle configuration
   settlementIdempotencyKey?: string;
   settlementAutoPollMs?: number; // If set, poll until resolved (0 = immediate loop, >0 = delay)
@@ -104,10 +107,17 @@ export class NegotiationSession {
     handle_id?: string;
     provider?: string;
   }> = [];
+  // v2 Phase 2+: Chain and asset for settlement operations
+  private settlementChain?: string;
+  private settlementAsset?: string;
 
   constructor(
     private params: NegotiationSessionParams
-  ) {}
+  ) {
+    // Store chain/asset from params
+    this.settlementChain = params.settlementChain;
+    this.settlementAsset = params.settlementAsset;
+  }
 
   /**
    * Check if settlement provider supports lifecycle API (v1.7.2+)
@@ -592,6 +602,9 @@ export class NegotiationSession {
                 amount: segmentAmount,
                 mode: "hash_reveal",
                 idempotency_key: this.params.settlementIdempotencyKey ? `${this.params.settlementIdempotencyKey}-seg${segmentIdx}` : undefined,
+                // v2 Phase 2+: Include chain and asset
+                chain: this.settlementChain,
+                asset: this.settlementAsset,
                 meta: { agreement_id: message.intent_id, segment_idx: segmentIdx },
               });
               
@@ -761,6 +774,9 @@ export class NegotiationSession {
             amount: message.agreed_price,
             mode: "hash_reveal",
             idempotency_key: this.params.settlementIdempotencyKey,
+            // v2 Phase 2+: Include chain and asset
+            chain: this.settlementChain,
+            asset: this.settlementAsset,
             meta: { agreement_id: intent_id },
           });
 
@@ -813,26 +829,25 @@ export class NegotiationSession {
         }
       } else {
         // Legacy settlement methods
-        const fundsLocked = this.params.settlement.lockFunds(buyerAgentId, message.agreed_price);
-        if (!fundsLocked) {
-          this.terminate("FAILED_ESCROW", "BOND_INSUFFICIENT", "Insufficient buyer balance");
-          return { ok: false, code: "BOND_INSUFFICIENT", reason: "Insufficient buyer balance" };
-        }
+        // v2 Phase 2+: Pass chain/asset to lock operations
+        this.params.settlement.lock(buyerAgentId, message.agreed_price, this.settlementChain, this.settlementAsset);
       }
 
       // Lock seller bond (always use legacy method for bonds)
-      const bondLocked = this.params.settlement.lockBond(sellerAgentId, sellerBond);
-      if (!bondLocked) {
+      // v2 Phase 2+: Pass chain/asset to lock operations
+      try {
+        this.params.settlement.lock(sellerAgentId, sellerBond, this.settlementChain, this.settlementAsset);
+      } catch (error) {
         // Unlock buyer funds on failure (abort if lifecycle, unlock if legacy)
         if (this.settlementHandle) {
           try {
             await this.params.settlement.abort(this.settlementHandle.handle_id, "Seller bond insufficient");
           } catch (e) {
             // Fallback to legacy unlock
-            this.params.settlement.unlock(buyerAgentId, message.agreed_price);
+            this.params.settlement.release(buyerAgentId, message.agreed_price, this.settlementChain, this.settlementAsset);
           }
         } else {
-          this.params.settlement.unlock(buyerAgentId, message.agreed_price);
+          this.params.settlement.release(buyerAgentId, message.agreed_price, this.settlementChain, this.settlementAsset);
         }
         this.terminate("FAILED_ESCROW", "BOND_INSUFFICIENT", "Insufficient seller bond");
         return { ok: false, code: "BOND_INSUFFICIENT", reason: "Insufficient seller bond" };
@@ -1126,15 +1141,17 @@ export class NegotiationSession {
         // If no poll method, assume committed (legacy behavior)
       } else {
         // Legacy settlement: unlock, debit, credit
+        // v2 Phase 2+: Pass chain/asset to settlement operations
         // Unlock buyer payment (adds back to balance)
-        this.params.settlement.unlock(buyerAgentId, this.agreement.agreed_price);
+        this.params.settlement.release(buyerAgentId, this.agreement.agreed_price, this.settlementChain, this.settlementAsset);
         // Debit from buyer and credit to seller
-        this.params.settlement.debit(buyerAgentId, this.agreement.agreed_price);
-        this.params.settlement.credit(sellerAgentId, this.agreement.agreed_price);
+        this.params.settlement.debit(buyerAgentId, this.agreement.agreed_price, this.settlementChain, this.settlementAsset);
+        this.params.settlement.credit(sellerAgentId, this.agreement.agreed_price, this.settlementChain, this.settlementAsset);
       }
 
       // Unlock seller bond (always use legacy method for bonds)
-      this.params.settlement.unlock(sellerAgentId, this.agreement.seller_bond);
+      // v2 Phase 2+: Pass chain/asset to settlement operations
+      this.params.settlement.release(sellerAgentId, this.agreement.seller_bond, this.settlementChain, this.settlementAsset);
     }
 
     // Create receipt
@@ -1171,16 +1188,19 @@ export class NegotiationSession {
         await this.params.settlement.abort(this.settlementHandle.handle_id, reason);
       } catch {
         // Abort failed (likely already committed) - reverse the transfer manually
-        this.params.settlement.credit(buyerAgentId, this.agreement.agreed_price);
-        this.params.settlement.debit(sellerAgentId, this.agreement.agreed_price);
+        // v2 Phase 2+: Pass chain/asset to settlement operations
+        this.params.settlement.credit(buyerAgentId, this.agreement.agreed_price, this.settlementChain, this.settlementAsset);
+        this.params.settlement.debit(sellerAgentId, this.agreement.agreed_price, this.settlementChain, this.settlementAsset);
       }
     } else {
       // Legacy settlement: unlock buyer payment
-      this.params.settlement.unlock(buyerAgentId, this.agreement.agreed_price);
+      // v2 Phase 2+: Pass chain/asset to settlement operations
+      this.params.settlement.release(buyerAgentId, this.agreement.agreed_price, this.settlementChain, this.settlementAsset);
     }
 
     // Slash seller bond to buyer
-    this.params.settlement.slash(sellerAgentId, buyerAgentId, this.agreement.seller_bond);
+    // v2 Phase 2+: Pass chain/asset to settlement operations
+    this.params.settlement.slashBond(sellerAgentId, this.agreement.seller_bond, buyerAgentId, this.settlementChain, this.settlementAsset);
 
     // Update agreement status
     this.agreement.status = "SLASHED";

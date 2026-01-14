@@ -8,8 +8,7 @@
  * It only provides wallet functionality (address, signing) without network access.
  */
 
-import type { WalletAdapter, WalletConnectResult, Chain, Address, WalletCapabilities, WalletAction, WalletSignature, WalletCapabilitiesResponse } from "./types";
-import type { AddressInfo } from "./ethers";
+import type { WalletAdapter, WalletConnectResult, Chain, Address, WalletCapabilities, WalletAction, WalletSignature, WalletCapabilitiesResponse, AddressInfo } from "./types";
 import nacl from "tweetnacl";
 import bs58 from "bs58";
 
@@ -294,6 +293,9 @@ export class SolanaWalletAdapter {
    * @returns true if signature is valid, false otherwise
    */
   verify(signature: WalletSignature, action: WalletAction): boolean {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'solana.ts:295',message:'SolanaWalletAdapter.verify() entry',data:{signer:signature.signer.substring(0,20),actionFrom:action.from.substring(0,20),payloadHash:signature.payload_hash,messageReconstructed:`PACT Wallet Action\n${signature.payload_hash}`.substring(0,50),signatureLength:signature.signature.length},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'B,C,D'})}).catch(()=>{});
+    // #endregion
     try {
       // Reconstruct the message that was signed
       const message = `PACT Wallet Action\n${signature.payload_hash}`;
@@ -305,19 +307,32 @@ export class SolanaWalletAdapter {
       // Verify signature using ed25519
       const isValid = nacl.sign.detached.verify(messageBytes, signature.signature, signerPublicKey);
       
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'solana.ts:305',message:'nacl signature verification result',data:{isValid,messageLength:messageBytes.length},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      
       if (!isValid) {
         return false;
       }
       
       // Verify signer matches action.from
       if (signature.signer !== action.from) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'solana.ts:312',message:'signer mismatch',data:{signer:signature.signer,actionFrom:action.from},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
         return false;
       }
       
       // Verify payload_hash matches (we trust the hash in the signature, but could recompute for extra safety)
       // For now, we'll trust it since we verified the signature itself
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'solana.ts:318',message:'returning true',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       return true;
     } catch (error: any) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'solana.ts:320',message:'verify() exception',data:{error:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       return false;
     }
   }

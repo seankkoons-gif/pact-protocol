@@ -51,39 +51,47 @@ export class ExternalSettlementProvider implements SettlementProvider {
     this.config = config;
   }
 
-  getBalance(agentId: string): number {
+  getBalance(agentId: string, _chain?: string, _asset?: string): number {
+    // v2 Phase 2+: chain/asset parameters accepted (real implementation would use them)
     // Read-only: return 0 for consistency (real implementation would query rail)
     return 0;
   }
 
-  getLocked(agentId: string): number {
+  getLocked(agentId: string, _chain?: string, _asset?: string): number {
+    // v2 Phase 2+: chain/asset parameters accepted (real implementation would use them)
     // Read-only: return 0 for consistency (real implementation would query rail)
     return 0;
   }
 
   // Core operations
-  lock(agentId: string, amount: number): void {
+  lock(agentId: string, amount: number, _chain?: string, _asset?: string): void {
+    // v2 Phase 2+: chain/asset parameters accepted (real implementation would use them)
     throw new Error(this.errorMessage);
   }
 
-  release(agentId: string, amount: number): void {
+  release(agentId: string, amount: number, _chain?: string, _asset?: string): void {
+    // v2 Phase 2+: chain/asset parameters accepted (real implementation would use them)
     throw new Error(this.errorMessage);
   }
 
-  pay(from: string, to: string, amount: number, meta?: Record<string, unknown>): void {
+  pay(from: string, to: string, amount: number, _chain?: string, _asset?: string, meta?: Record<string, unknown>): void {
+    // v2 Phase 2+: chain/asset parameters accepted (real implementation would use them)
     throw new Error(this.errorMessage);
   }
 
-  slashBond(providerId: string, amount: number, beneficiaryId: string, meta?: Record<string, unknown>): void {
+  slashBond(providerId: string, amount: number, beneficiaryId: string, _chain?: string, _asset?: string, meta?: Record<string, unknown>): void {
+    // v2 Phase 2+: chain/asset parameters accepted (real implementation would use them)
     throw new Error(this.errorMessage);
   }
 
   // Legacy methods (for backward compatibility)
-  credit(agentId: string, amount: number): void {
+  credit(agentId: string, amount: number, _chain?: string, _asset?: string): void {
+    // v2 Phase 2+: chain/asset parameters accepted (real implementation would use them)
     throw new Error(`NotImplemented: credit() - ${this.errorMessage}`);
   }
 
-  debit(agentId: string, amount: number): void {
+  debit(agentId: string, amount: number, _chain?: string, _asset?: string): void {
+    // v2 Phase 2+: chain/asset parameters accepted (real implementation would use them)
     throw new Error(`NotImplemented: debit() - ${this.errorMessage}`);
   }
 

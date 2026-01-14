@@ -13,6 +13,14 @@ export interface IdentityContext {
   reputation?: number;
   failure_rate?: number;
   timeout_rate?: number;
+  // v2 Phase 2+: Wallet information for on-chain identity binding
+  wallet_address?: string;
+  wallet_chain?: string;
+  wallet_proof?: {
+    signature: string;
+    message: string;
+    scheme: string;
+  };
 }
 
 export interface IntentContext {
@@ -59,6 +67,13 @@ export interface NegotiationContext {
     timeout_rate: number;
     is_new: boolean;
   };
+  // v2 Phase 2+: Wallet information for wallet-aware negotiation
+  buyer_wallet_address?: string;
+  buyer_wallet_chain?: string;
+  buyer_wallet_balance?: number;
+  seller_wallet_address?: string;
+  seller_wallet_chain?: string;
+  seller_wallet_balance?: number;
   // Legacy fields for backward compatibility (may be removed)
   intent?: string;
   firm_quote?: {
@@ -74,6 +89,12 @@ export interface LockContext {
   is_new_agent?: boolean;
   lock_established?: boolean;
   bond_amount?: number;
+  // v2 Phase 2+: Wallet information for Phase 3 wallet-based locking (on-chain escrow)
+  buyer_wallet_address?: string;
+  buyer_wallet_chain?: string;
+  seller_wallet_address?: string;
+  seller_wallet_chain?: string;
+  wallet_lock_tx_hash?: string; // Transaction hash if wallet-based locking was used
 }
 
 export interface ExchangeContext {

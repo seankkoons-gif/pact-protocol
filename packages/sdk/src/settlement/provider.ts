@@ -22,16 +22,20 @@ export interface SettlementProvider {
   /**
    * Get available (unlocked) balance for an agent.
    * @param agentId Agent identifier (pubkey_b58 or similar)
+   * @param chain Optional chain identifier (e.g., "ethereum", "solana")
+   * @param asset Optional asset symbol (e.g., "USDC", "ETH", "SOL")
    * @returns Available balance (>= 0)
    */
-  getBalance(agentId: string): number;
+  getBalance(agentId: string, chain?: string, asset?: string): number;
 
   /**
    * Get locked balance for an agent.
    * @param agentId Agent identifier
+   * @param chain Optional chain identifier (e.g., "ethereum", "solana")
+   * @param asset Optional asset symbol (e.g., "USDC", "ETH", "SOL")
    * @returns Locked balance (>= 0)
    */
-  getLocked(agentId: string): number;
+  getLocked(agentId: string, chain?: string, asset?: string): number;
 
   // ============================================================================
   // Core Settlement Operations (Formalized)
@@ -43,15 +47,17 @@ export interface SettlementProvider {
    * 
    * @param agentId Agent identifier
    * @param amount Amount to lock (must be >= 0)
+   * @param chain Optional chain identifier (e.g., "ethereum", "solana")
+   * @param asset Optional asset symbol (e.g., "USDC", "ETH", "SOL")
    * @throws Error if amount < 0 or if insufficient balance
    * 
    * Invariants:
-   * - getBalance(agentId) decreases by amount
-   * - getLocked(agentId) increases by amount
+   * - getBalance(agentId, chain, asset) decreases by amount
+   * - getLocked(agentId, chain, asset) increases by amount
    * - Total (balance + locked) remains constant
    * - locked cannot go negative
    */
-  lock(agentId: string, amount: number): void;
+  lock(agentId: string, amount: number, chain?: string, asset?: string): void;
 
   /**
    * Release locked funds back to available balance.
@@ -59,15 +65,17 @@ export interface SettlementProvider {
    * 
    * @param agentId Agent identifier
    * @param amount Amount to release (must be >= 0)
+   * @param chain Optional chain identifier (e.g., "ethereum", "solana")
+   * @param asset Optional asset symbol (e.g., "USDC", "ETH", "SOL")
    * @throws Error if amount < 0 or if amount > locked balance
    * 
    * Invariants:
-   * - getLocked(agentId) decreases by amount
-   * - getBalance(agentId) increases by amount
+   * - getLocked(agentId, chain, asset) decreases by amount
+   * - getBalance(agentId, chain, asset) increases by amount
    * - Total (balance + locked) remains constant
    * - Release restores locked → balance
    */
-  release(agentId: string, amount: number): void;
+  release(agentId: string, amount: number, chain?: string, asset?: string): void;
 
   /**
    * Transfer funds from one agent to another.
@@ -76,16 +84,18 @@ export interface SettlementProvider {
    * @param from Source agent identifier
    * @param to Destination agent identifier
    * @param amount Amount to transfer (must be > 0)
+   * @param chain Optional chain identifier (e.g., "ethereum", "solana")
+   * @param asset Optional asset symbol (e.g., "USDC", "ETH", "SOL")
    * @param meta Optional metadata for the payment (intent_id, receipt_id, etc.)
    * @throws Error if amount <= 0 or if insufficient balance
    * 
    * Invariants:
-   * - getBalance(from) decreases by amount
-   * - getBalance(to) increases by amount
+   * - getBalance(from, chain, asset) decreases by amount
+   * - getBalance(to, chain, asset) increases by amount
    * - Total balance across all agents remains constant
    * - Requires sufficient locked or balance (match current behavior)
    */
-  pay(from: string, to: string, amount: number, meta?: Record<string, unknown>): void;
+  pay(from: string, to: string, amount: number, chain?: string, asset?: string, meta?: Record<string, unknown>): void;
 
   /**
    * Slash a provider's bond and transfer to beneficiary.
@@ -95,16 +105,18 @@ export interface SettlementProvider {
    * @param providerId Provider agent identifier (bond holder)
    * @param amount Amount to slash (must be > 0)
    * @param beneficiaryId Beneficiary agent identifier (typically buyer)
+   * @param chain Optional chain identifier (e.g., "ethereum", "solana")
+   * @param asset Optional asset symbol (e.g., "USDC", "ETH", "SOL")
    * @param meta Optional metadata for the slash (failure_code, receipt_id, etc.)
    * @throws Error if amount <= 0 or if provider has insufficient total balance
    * 
    * Invariants:
-   * - getBalance(providerId) + getLocked(providerId) decreases by amount
-   * - getBalance(beneficiaryId) increases by amount
+   * - getBalance(providerId, chain, asset) + getLocked(providerId, chain, asset) decreases by amount
+   * - getBalance(beneficiaryId, chain, asset) increases by amount
    * - Prefers slashing from locked funds first
    * - Reduces provider funds and credits beneficiary (buyer)
    */
-  slashBond(providerId: string, amount: number, beneficiaryId: string, meta?: Record<string, unknown>): void;
+  slashBond(providerId: string, amount: number, beneficiaryId: string, chain?: string, asset?: string, meta?: Record<string, unknown>): void;
 
   // ============================================================================
   // Legacy/Convenience Methods (for backward compatibility)
@@ -116,9 +128,11 @@ export interface SettlementProvider {
    * 
    * @param agentId Agent identifier
    * @param amount Amount to credit (must be >= 0)
+   * @param chain Optional chain identifier (e.g., "ethereum", "solana")
+   * @param asset Optional asset symbol (e.g., "USDC", "ETH", "SOL")
    * @throws Error if amount < 0
    */
-  credit(agentId: string, amount: number): void;
+  credit(agentId: string, amount: number, chain?: string, asset?: string): void;
 
   /**
    * Debit funds from an agent's available balance.
@@ -126,9 +140,11 @@ export interface SettlementProvider {
    * 
    * @param agentId Agent identifier
    * @param amount Amount to debit (must be >= 0)
+   * @param chain Optional chain identifier (e.g., "ethereum", "solana")
+   * @param asset Optional asset symbol (e.g., "USDC", "ETH", "SOL")
    * @throws Error if amount < 0 or if insufficient balance
    */
-  debit(agentId: string, amount: number): void;
+  debit(agentId: string, amount: number, chain?: string, asset?: string): void;
 
   /**
    * Lock funds (legacy alias for lock()).

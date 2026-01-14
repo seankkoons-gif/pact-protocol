@@ -47,36 +47,44 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
   // Core Settlement Provider Interface (delegate to mock)
   // ============================================================================
 
-  getBalance(agentId: string): number {
-    return this.mockProvider.getBalance(agentId);
+  getBalance(agentId: string, chain?: string, asset?: string): number {
+    // v2 Phase 2+: chain/asset parameters passed through to mock provider
+    return this.mockProvider.getBalance(agentId, chain, asset);
   }
 
-  getLocked(agentId: string): number {
-    return this.mockProvider.getLocked(agentId);
+  getLocked(agentId: string, chain?: string, asset?: string): number {
+    // v2 Phase 2+: chain/asset parameters passed through to mock provider
+    return this.mockProvider.getLocked(agentId, chain, asset);
   }
 
-  lock(agentId: string, amount: number): void {
-    this.mockProvider.lock(agentId, amount);
+  lock(agentId: string, amount: number, chain?: string, asset?: string): void {
+    // v2 Phase 2+: chain/asset parameters passed through to mock provider
+    this.mockProvider.lock(agentId, amount, chain, asset);
   }
 
-  release(agentId: string, amount: number): void {
-    this.mockProvider.release(agentId, amount);
+  release(agentId: string, amount: number, chain?: string, asset?: string): void {
+    // v2 Phase 2+: chain/asset parameters passed through to mock provider
+    this.mockProvider.release(agentId, amount, chain, asset);
   }
 
-  pay(from: string, to: string, amount: number, meta?: Record<string, unknown>): void {
-    this.mockProvider.pay(from, to, amount, meta);
+  pay(from: string, to: string, amount: number, chain?: string, asset?: string, meta?: Record<string, unknown>): void {
+    // v2 Phase 2+: chain/asset parameters passed through to mock provider
+    this.mockProvider.pay(from, to, amount, chain, asset, meta);
   }
 
-  slashBond(providerId: string, amount: number, beneficiaryId: string, meta?: Record<string, unknown>): void {
-    this.mockProvider.slashBond(providerId, amount, beneficiaryId, meta);
+  slashBond(providerId: string, amount: number, beneficiaryId: string, chain?: string, asset?: string, meta?: Record<string, unknown>): void {
+    // v2 Phase 2+: chain/asset parameters passed through to mock provider
+    this.mockProvider.slashBond(providerId, amount, beneficiaryId, chain, asset, meta);
   }
 
-  credit(agentId: string, amount: number): void {
-    this.mockProvider.credit(agentId, amount);
+  credit(agentId: string, amount: number, chain?: string, asset?: string): void {
+    // v2 Phase 2+: chain/asset parameters passed through to mock provider
+    this.mockProvider.credit(agentId, amount, chain, asset);
   }
 
-  debit(agentId: string, amount: number): void {
-    this.mockProvider.debit(agentId, amount);
+  debit(agentId: string, amount: number, chain?: string, asset?: string): void {
+    // v2 Phase 2+: chain/asset parameters passed through to mock provider
+    this.mockProvider.debit(agentId, amount, chain, asset);
   }
 
   lockFunds(agentId: string, amount: number): boolean {
@@ -88,7 +96,8 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
   }
 
   unlock(agentId: string, amount: number): void {
-    this.mockProvider.unlock(agentId, amount);
+    // Legacy method - delegate to release() (which matches interface)
+    this.mockProvider.release(agentId, amount);
   }
 
   releaseFunds(toAgentId: string, amount: number): void {
@@ -161,7 +170,8 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
     }
 
     // Lock funds (authorize)
-    this.mockProvider.lock(intent.from, intent.amount);
+    // v2 Phase 2+: Pass chain/asset to lock operations
+    this.mockProvider.lock(intent.from, intent.amount, intent.chain, intent.asset);
 
     // Generate auth_id (simulate Stripe payment_intent id)
     // For idempotency, use handle_id as base (same handle_id = same auth_id)
@@ -179,6 +189,9 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
         ...intent.meta,
         from: intent.from,
         to: intent.to,
+        // v2 Phase 2+: Store chain/asset in handle metadata
+        chain: intent.chain,
+        asset: intent.asset,
         auth_id, // Stripe-like payment_intent id
         payment_intent_id: auth_id, // Alias for clarity
       },
@@ -262,11 +275,14 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
     }
 
     // Synchronous commit: Transfer locked funds from buyer to seller immediately
-    // First release locked (unlock decreases locked, increases balance)
-    this.mockProvider.unlock(intentFrom, handle.locked_amount);
+    // v2 Phase 2+: Get chain/asset from handle metadata and pass to settlement operations
+    const chain = handle.meta?.chain as string | undefined;
+    const asset = handle.meta?.asset as string | undefined;
+    // First release locked (release decreases locked, increases balance)
+    this.mockProvider.release(intentFrom, handle.locked_amount, chain, asset);
     // Then debit from buyer and credit to seller (transfer)
-    this.mockProvider.debit(intentFrom, handle.locked_amount);
-    this.mockProvider.credit(intentTo, handle.locked_amount);
+    this.mockProvider.debit(intentFrom, handle.locked_amount, chain, asset);
+    this.mockProvider.credit(intentTo, handle.locked_amount, chain, asset);
 
     // Generate capture_id (deterministic for idempotency)
     const capture_id = this.generateCaptureId(handle_id);
@@ -329,7 +345,10 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
     }
 
     // Void authorization: Release locked funds back to available balance
-    this.mockProvider.unlock(intentFrom, handle.locked_amount);
+    // v2 Phase 2+: Get chain/asset from handle metadata and pass to settlement operations
+    const chain = handle.meta?.chain as string | undefined;
+    const asset = handle.meta?.asset as string | undefined;
+    this.mockProvider.release(intentFrom, handle.locked_amount, chain, asset);
 
     // Update handle status
     handle.status = "aborted";
@@ -427,9 +446,13 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
           throw new Error(`Handle missing from/to information`);
         }
 
+        // v2 Phase 2+: Get chain/asset from handle metadata and pass to settlement operations
+        const chain = handle.meta?.chain as string | undefined;
+        const asset = handle.meta?.asset as string | undefined;
+
         if (this.config.failCommit) {
           // Resolve to failed: release locked funds, do NOT pay seller
-          this.mockProvider.unlock(intentFrom, handle.locked_amount);
+          this.mockProvider.release(intentFrom, handle.locked_amount, chain, asset);
           // Keep handle status as "pending" but mark as failed in pendingCommits
           pendingState.failedAtMs = Date.now();
           this.pendingCommits.set(handle_id, pendingState); // Update state
@@ -447,9 +470,9 @@ export class StripeLikeSettlementProvider implements SettlementProvider {
           };
         } else {
           // Resolve to committed: transfer funds (only once)
-          this.mockProvider.unlock(intentFrom, handle.locked_amount);
-          this.mockProvider.debit(intentFrom, handle.locked_amount);
-          this.mockProvider.credit(intentTo, handle.locked_amount);
+          this.mockProvider.release(intentFrom, handle.locked_amount, chain, asset);
+          this.mockProvider.debit(intentFrom, handle.locked_amount, chain, asset);
+          this.mockProvider.credit(intentTo, handle.locked_amount, chain, asset);
 
           const capture_id = this.generateCaptureId(handle_id);
           this.captureIds.set(handle_id, capture_id);

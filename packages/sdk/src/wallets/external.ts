@@ -5,8 +5,7 @@
  * Throws unless properly configured with a real wallet implementation.
  */
 
-import type { WalletAdapter, Chain, Address, WalletConnectResult, WalletCapabilities, WalletAction, WalletSignature, WalletCapabilitiesResponse } from "./types";
-import type { AddressInfo } from "./ethers";
+import type { WalletAdapter, Chain, Address, WalletConnectResult, WalletCapabilities, WalletAction, WalletSignature, WalletCapabilitiesResponse, AddressInfo } from "./types";
 
 export class ExternalWalletAdapter implements WalletAdapter {
   private params?: Record<string, unknown>;

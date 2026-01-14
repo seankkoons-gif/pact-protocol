@@ -33,7 +33,8 @@ import { AggressiveIfUrgentStrategy } from "../negotiation/aggressive_if_urgent"
 import type { NegotiationResult } from "../negotiation/types";
 import type { WalletAdapter, WalletConnectResult, WalletCapabilities, WalletAction, WalletSignature } from "../wallets/types";
 import { ExternalWalletAdapter } from "../wallets/external";
-import { EthersWalletAdapter, type AddressInfo } from "../wallets/ethers";
+import { EthersWalletAdapter } from "../wallets/ethers";
+import type { AddressInfo } from "../wallets/types";
 import { SolanaWalletAdapter, SOLANA_WALLET_KIND } from "../wallets/solana";
 // Import test adapter only in test environment
 // Use dynamic require to avoid issues in production builds
@@ -1375,6 +1376,17 @@ export async function acquire(params: {
     // Build negotiation context (same shape as policy vectors)
     // Note: intentNow will be set when we create the session
     const intentNowEstimate = nowFunction() - 1000; // Estimate - will be set properly later
+    
+    // v2 Phase 2+: Get wallet balances for wallet-aware negotiation
+    let buyerWalletBalance: number | undefined;
+    if (walletAdapter && walletAdapter.getBalance && assetSymbol) {
+      try {
+        buyerWalletBalance = await walletAdapter.getBalance(assetSymbol);
+      } catch (error) {
+        // Ignore balance check errors - wallet might not support balance queries
+      }
+    }
+    
     const negotiationCtx: NegotiationContext = {
       now_ms: askNow,
       intent_type: input.intentType,
@@ -1395,6 +1407,10 @@ export async function acquire(params: {
         timeout_rate: 0,
         is_new: false,
       },
+      // v2 Phase 2+: Wallet information for wallet-aware negotiation
+      buyer_wallet_address: walletAddress,
+      buyer_wallet_chain: walletChain,
+      buyer_wallet_balance: buyerWalletBalance,
     };
 
     // Check negotiation phase (side-effect free, no session)
@@ -1785,6 +1801,9 @@ export async function acquire(params: {
         settlement: attemptSettlement, // Use attemptSettlement, not settlement
     buyerAgentId: buyerId,
     sellerAgentId: selectedProviderPubkey, // Use selected provider's pubkey
+    // v2 Phase 2+: Chain and asset for settlement operations
+    settlementChain: chainId,
+    settlementAsset: assetSymbol ?? assetId,
     // v1.7.2+: Settlement lifecycle configuration
     settlementIdempotencyKey: input.settlement?.idempotency_key,
     settlementAutoPollMs: input.settlement?.auto_poll_ms,
@@ -1819,6 +1838,35 @@ export async function acquire(params: {
   // 8.5) Check buyer identity (if policy requires it)
   const buyerCredentials = input.identity?.buyer?.credentials || [];
   const buyerIssuers = input.identity?.buyer?.issuer_ids || [];
+  
+  // v2 Phase 2+: Generate wallet proof for on-chain identity binding
+  let walletProof: { signature: string; message: string; scheme: string } | undefined;
+  if (walletAdapter && walletAddress && input.identity?.require_wallet_proof) {
+    try {
+      const { generateWalletProof } = await import("../wallets/proof");
+      const proof = await generateWalletProof(walletAdapter, buyerId);
+      walletProof = {
+        signature: Buffer.from(proof.signature).toString("hex"),
+        message: proof.message,
+        scheme: proof.scheme,
+      };
+    } catch (error) {
+      // Wallet proof generation failed - this is a non-retryable error if required
+      if (input.identity?.require_wallet_proof) {
+        const action = handleAttemptFailure("WALLET_PROOF_FAILED", `Failed to generate wallet proof: ${error}`, attemptEntry);
+        if (action === "return") {
+          return {
+            ok: false,
+            code: "WALLET_PROOF_FAILED",
+            reason: `Failed to generate wallet proof: ${error}`,
+            offers_eligible: evaluations.length,
+            ...(explain ? { explain } : {}),
+          };
+        }
+      }
+    }
+  }
+  
   const buyerIdentityCtx: IdentityContext = {
     agent_id: buyerId,
     credentials: [
@@ -1830,6 +1878,10 @@ export async function acquire(params: {
       const score = agentScore(buyerId, store.list({ agentId: buyerId }));
       return score.reputation;
     })() : 0.5,
+    // v2 Phase 2+: Wallet information for on-chain identity binding
+    wallet_address: walletAddress,
+    wallet_chain: walletChain,
+    wallet_proof: walletProof,
   };
 
   // Buyer identity check: only check non-credential requirements (reputation, region, etc.)
@@ -1918,19 +1970,20 @@ export async function acquire(params: {
       // This is needed especially when routing creates a new empty settlement provider
       try {
         // Credit buyer if needed (buyer needs balance to lock payment amount)
-        const buyerBal = attemptSettlement.getBalance(buyerId);
+        // v2 Phase 2+: Pass chain/asset to settlement operations
+        const buyerBal = attemptSettlement.getBalance(buyerId, chainId, assetSymbol ?? assetId);
         const paymentAmount = selectedAskPrice;
         const buyerBufferAmount = 0.1; // Buffer for tests/demo to ensure sufficient balance
         if (buyerBal < paymentAmount) {
           // v1: top-up buyer so lock can succeed during tests/demo
-          attemptSettlement.credit(buyerId, paymentAmount - buyerBal + buyerBufferAmount);
+          attemptSettlement.credit(buyerId, paymentAmount - buyerBal + buyerBufferAmount, chainId, assetSymbol ?? assetId);
         }
         
         // Credit seller if needed (seller needs balance for bond)
-        const sellerBal = attemptSettlement.getBalance(selectedProviderPubkey);
+        const sellerBal = attemptSettlement.getBalance(selectedProviderPubkey, chainId, assetSymbol ?? assetId);
   if (sellerBal < sellerBondRequired) {
     // v1: top-up seller so lockBond can succeed during tests/demo
-          attemptSettlement.credit(selectedProviderPubkey, sellerBondRequired - sellerBal);
+          attemptSettlement.credit(selectedProviderPubkey, sellerBondRequired - sellerBal, chainId, assetSymbol ?? assetId);
     }
   } catch (error: any) {
     // Handle settlement provider errors (e.g., ExternalSettlementProvider NotImplemented)
@@ -2038,6 +2091,9 @@ export async function acquire(params: {
         bond_required: sellerBondRequired,
         sent_at_ms: askNow,
         expires_at_ms: askNow + 20000,
+        // v2 Phase 2+: Wallet information for wallet-aware negotiation
+        seller_wallet_address: undefined, // Seller wallet not available in buyer-initiated flow
+        seller_wallet_chain: undefined,
       };
       askEnvelope = await signEnvelope(askMsg, selectedSellerKp);
     }
@@ -2053,6 +2109,9 @@ export async function acquire(params: {
       valid_for_ms: 20000,
       bond_required: sellerBondRequired,
       sent_at_ms: askNow,
+      // v2 Phase 2+: Wallet information for wallet-aware negotiation
+      seller_wallet_address: undefined, // Seller wallet not available in buyer-initiated flow
+      seller_wallet_chain: undefined,
       expires_at_ms: askNow + 20000,
     };
     askEnvelope = await signEnvelope(askMsg, selectedSellerKp);
@@ -2320,6 +2379,11 @@ export async function acquire(params: {
     delivery_deadline_ms: acceptNow + 30000, // 30 seconds to allow for commit/reveal process
     sent_at_ms: acceptNow,
     expires_at_ms: acceptNow + 10000,
+    // v2 Phase 2+: Wallet information for wallet-aware negotiation and Phase 3 locking
+    buyer_wallet_address: walletAddress,
+    buyer_wallet_chain: walletChain,
+    seller_wallet_address: undefined, // Seller wallet not available in buyer-initiated flow
+    seller_wallet_chain: undefined,
   };
 
   const acceptEnvelope = await signEnvelope(acceptMsg, buyerKeyPair);
@@ -2922,8 +2986,9 @@ export async function acquire(params: {
 
     // Unlock what the agreement locked (pay-as-you-go)
       try {
-          attemptSettlement.unlock(buyerId, agreement.agreed_price);
-          attemptSettlement.unlock(selectedProviderPubkey, agreement.seller_bond);
+          // v2 Phase 2+: Pass chain/asset to settlement operations
+          attemptSettlement.release(buyerId, agreement.agreed_price, chainId, assetSymbol ?? assetId);
+          attemptSettlement.release(selectedProviderPubkey, agreement.seller_bond, chainId, assetSymbol ?? assetId);
       } catch (error: any) {
         // Handle settlement provider errors (e.g., ExternalSettlementProvider NotImplemented)
         const errorMsg = error?.message || String(error);

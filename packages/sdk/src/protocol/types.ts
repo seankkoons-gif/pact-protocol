@@ -35,6 +35,9 @@ export interface AskMessage {
   bond_required: number;
   sent_at_ms: number;
   expires_at_ms: number;
+  // v2 Phase 2+: Wallet information for wallet-aware negotiation (optional)
+  seller_wallet_address?: string;
+  seller_wallet_chain?: string;
 }
 
 export interface BidMessage {
@@ -49,6 +52,9 @@ export interface BidMessage {
   bond_offered?: number;
   sent_at_ms: number;
   expires_at_ms: number;
+  // v2 Phase 2+: Wallet information for wallet-aware negotiation (optional)
+  buyer_wallet_address?: string;
+  buyer_wallet_chain?: string;
 }
 
 export interface AcceptMessage {
@@ -62,6 +68,11 @@ export interface AcceptMessage {
   delivery_deadline_ms: number;
   sent_at_ms: number;
   expires_at_ms: number;
+  // v2 Phase 2+: Wallet information for wallet-aware negotiation and Phase 3 locking (optional)
+  buyer_wallet_address?: string;
+  buyer_wallet_chain?: string;
+  seller_wallet_address?: string;
+  seller_wallet_chain?: string;
 }
 
 export interface RejectMessage {

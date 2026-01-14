@@ -5,8 +5,6 @@
  * MetaMask, Coinbase Wallet, Solana wallets, etc. This is a seam for wallet connectivity.
  */
 
-import type { AddressInfo } from "./ethers";
-
 /**
  * Chain identifier (e.g., "ethereum", "solana", "base", "polygon")
  */
@@ -16,6 +14,15 @@ export type Chain = string;
  * Wallet address as a byte array (chain-agnostic representation)
  */
 export type Address = Uint8Array;
+
+/**
+ * Address information with chain and value
+ * Used by all wallet adapters to return address information
+ */
+export interface AddressInfo {
+  chain: string;
+  value: string; // Address value (hex for EVM, base58 for Solana, etc.)
+}
 
 /**
  * Public wallet information

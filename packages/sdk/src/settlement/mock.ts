@@ -51,11 +51,13 @@ export class MockSettlementProvider implements SettlementProvider {
   }
 
   // --- core interface ---
-  getBalance(agentId: string): number {
+  getBalance(agentId: string, _chain?: string, _asset?: string): number {
+    // v2 Phase 2+: chain/asset parameters accepted but ignored in mock implementation
     return this.acct(agentId).balance;
   }
 
-  getLocked(agentId: string): number {
+  getLocked(agentId: string, _chain?: string, _asset?: string): number {
+    // v2 Phase 2+: chain/asset parameters accepted but ignored in mock implementation
     return this.acct(agentId).locked;
   }
 
@@ -63,18 +65,21 @@ export class MockSettlementProvider implements SettlementProvider {
   // Core Settlement Operations (Formalized)
   // ============================================================================
 
-  lock(agentId: string, amount: number): void {
+  lock(agentId: string, amount: number, _chain?: string, _asset?: string): void {
+    // v2 Phase 2+: chain/asset parameters accepted but ignored in mock implementation
     const success = this.lockFunds(agentId, amount);
     if (!success) {
       throw new Error(`Insufficient balance to lock ${amount} for agent ${agentId}`);
     }
   }
 
-  release(agentId: string, amount: number): void {
+  release(agentId: string, amount: number, _chain?: string, _asset?: string): void {
+    // v2 Phase 2+: chain/asset parameters accepted but ignored in mock implementation
     this.unlock(agentId, amount);
   }
 
-  pay(from: string, to: string, amount: number, meta?: Record<string, unknown>): void {
+  pay(from: string, to: string, amount: number, _chain?: string, _asset?: string, meta?: Record<string, unknown>): void {
+    // v2 Phase 2+: chain/asset parameters accepted but ignored in mock implementation
     if (!(amount > 0)) throw new Error("amount must be > 0");
     const fromAcct = this.acct(from);
     if (fromAcct.balance < amount) {
@@ -85,18 +90,21 @@ export class MockSettlementProvider implements SettlementProvider {
     // meta is ignored in mock implementation but available for external providers
   }
 
-  slashBond(providerId: string, amount: number, beneficiaryId: string, meta?: Record<string, unknown>): void {
+  slashBond(providerId: string, amount: number, beneficiaryId: string, _chain?: string, _asset?: string, meta?: Record<string, unknown>): void {
+    // v2 Phase 2+: chain/asset parameters accepted but ignored in mock implementation
     this.slash(providerId, beneficiaryId, amount);
     // meta is ignored in mock implementation but available for external providers
   }
 
-  credit(agentId: string, amount: number): void {
+  credit(agentId: string, amount: number, _chain?: string, _asset?: string): void {
+    // v2 Phase 2+: chain/asset parameters accepted but ignored in mock implementation
     if (!(amount >= 0)) throw new Error("amount must be >= 0");
     // balance represents available balance
     this.acct(agentId).balance += amount;
   }
 
-  debit(agentId: string, amount: number): void {
+  debit(agentId: string, amount: number, _chain?: string, _asset?: string): void {
+    // v2 Phase 2+: chain/asset parameters accepted but ignored in mock implementation
     if (!(amount >= 0)) throw new Error("amount must be >= 0");
     const a = this.acct(agentId);
     // balance represents available balance
@@ -216,11 +224,14 @@ export class MockSettlementProvider implements SettlementProvider {
       status: "prepared",
       locked_amount: intent.amount,
       created_at_ms: now,
-      // Store from/to in meta for commit/abort operations
+      // Store from/to and chain/asset in meta for commit/abort operations
       meta: {
         ...intent.meta,
         from: intent.from,
         to: intent.to,
+        // v2 Phase 2+: Store chain/asset in handle metadata
+        chain: intent.chain,
+        asset: intent.asset,
       },
     };
 

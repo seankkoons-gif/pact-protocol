@@ -8,7 +8,7 @@
  * It only provides wallet functionality (address, signing) without network access.
  */
 
-import type { WalletAdapter, WalletConnectResult, Chain, Address, WalletCapabilities, WalletAction, WalletSignature, WalletCapabilitiesResponse } from "./types";
+import type { WalletAdapter, WalletConnectResult, Chain, Address, WalletCapabilities, WalletAction, WalletSignature, WalletCapabilitiesResponse, AddressInfo } from "./types";
 
 // Type-safe error codes
 export const WALLET_CONNECT_FAILED = "WALLET_CONNECT_FAILED";
@@ -24,11 +24,6 @@ export interface EthersWalletOptions {
   privateKey?: string;
   /** Existing ethers.Wallet instance */
   wallet?: any; // Using any to avoid requiring ethers as a peer dependency in types
-}
-
-export interface AddressInfo {
-  chain: string;
-  value: string; // 0x-prefixed hex address
 }
 
 // Helper to convert hex string to Uint8Array
@@ -342,9 +337,15 @@ export class EthersWalletAdapter {
    * @returns true if signature is valid, false otherwise
    */
   verify(signature: WalletSignature, action: WalletAction): boolean {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ethers.ts:339',message:'EthersWalletAdapter.verify() entry',data:{signer:signature.signer.substring(0,20),actionFrom:action.from.substring(0,20),payloadHash:signature.payload_hash,messageReconstructed:`PACT Wallet Action\n${signature.payload_hash}`.substring(0,50),signatureLength:signature.signature.length,scheme:signature.scheme},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A,C,D'})}).catch(()=>{});
+    // #endregion
     try {
       // Verify signer matches action.from
       if (signature.signer.toLowerCase() !== action.from.toLowerCase()) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ethers.ts:343',message:'signer mismatch',data:{signer:signature.signer.toLowerCase(),actionFrom:action.from.toLowerCase()},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         return false;
       }
       
@@ -356,19 +357,31 @@ export class EthersWalletAdapter {
       // and verify it matches. For now, we'll verify the signature format and basic checks.
       // The signature should be 65 bytes (r + s + v) for EIP-191
       if (signature.signature.length !== 65) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ethers.ts:353',message:'signature length check failed',data:{length:signature.signature.length,expected:65},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         return false;
       }
       
       // Verify scheme matches
       if (signature.scheme !== "eip191") {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ethers.ts:359',message:'scheme mismatch',data:{scheme:signature.scheme,expected:'eip191'},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
         return false;
       }
       
       // TODO: Implement full signature recovery using ethers to verify the signer
       // For now, we trust that if the signer address matches and format is correct, it's valid
       // In production, you'd want to use: ethers.utils.verifyMessage(messageBytes, signature) === signer
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ethers.ts:365',message:'returning true (stub - no crypto verification)',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       return true;
     } catch (error: any) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ethers.ts:367',message:'verify() exception',data:{error:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       return false;
     }
   }

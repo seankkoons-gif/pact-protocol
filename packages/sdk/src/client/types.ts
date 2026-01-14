@@ -74,6 +74,8 @@ export type AcquireInput = {
       credentials?: string[];
       issuer_ids?: string[];
     };
+    // v2 Phase 2+: Wallet-based identity binding
+    require_wallet_proof?: boolean; // If true, require wallet proof for identity binding
   };
 };
 

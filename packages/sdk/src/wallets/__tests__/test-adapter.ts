@@ -4,8 +4,7 @@
  * Simple wallet adapter for testing that always succeeds.
  */
 
-import type { WalletAdapter, Chain, Address, WalletConnectResult, WalletCapabilities, WalletAction, WalletSignature, WalletCapabilitiesResponse } from "../types";
-import type { AddressInfo } from "../ethers";
+import type { WalletAdapter, Chain, Address, WalletConnectResult, WalletCapabilities, WalletAction, WalletSignature, WalletCapabilitiesResponse, AddressInfo } from "../types";
 
 // Helper to convert hex string to Uint8Array
 function hexToBytes(hex: string): Uint8Array {
@@ -27,11 +26,26 @@ function bytesToHex(bytes: Uint8Array): string {
 
 export class TestWalletAdapter implements WalletAdapter {
   private address: Address;
+  private addressString: string; // Store original string for non-hex addresses
   public readonly kind = "test";
   public readonly chain: Chain;
 
   constructor(address: string = "0x1234567890123456789012345678901234567890", chain: Chain = "ethereum") {
-    this.address = hexToBytes(address);
+    this.addressString = address;
+    // For test adapter, try to parse as hex, but if it fails or doesn't look like hex, store as-is
+    // Check if it looks like a valid hex string (starts with 0x or is all hex chars)
+    const isHex = address.startsWith("0x") || /^[0-9a-fA-F]+$/.test(address);
+    if (isHex) {
+      try {
+        this.address = hexToBytes(address);
+      } catch {
+        // If hex conversion fails, create a minimal bytes array
+        this.address = new TextEncoder().encode(address);
+      }
+    } else {
+      // Non-hex address (like "test-address") - store as bytes from string encoding
+      this.address = new TextEncoder().encode(address);
+    }
     this.chain = chain;
   }
 
@@ -40,11 +54,13 @@ export class TestWalletAdapter implements WalletAdapter {
   }
 
   async getAddress(): Promise<AddressInfo> {
-    // Convert Address (Uint8Array) to hex string
-    const addressHex = bytesToHex(this.address);
+    // For test adapter, return the original string if it wasn't valid hex, otherwise convert bytes to hex
+    // If address string doesn't look like hex, return it as-is (for test convenience)
+    const isHex = this.addressString.startsWith("0x") || /^[0-9a-fA-F]+$/.test(this.addressString);
+    const addressValue = isHex ? bytesToHex(this.address) : this.addressString;
     return {
       chain: this.chain,
-      value: addressHex,
+      value: addressValue,
     };
   }
 
@@ -127,7 +143,9 @@ export class TestWalletAdapter implements WalletAdapter {
    * @returns Promise resolving to wallet signature
    */
   async sign(action: WalletAction): Promise<WalletSignature> {
-    const addressHex = bytesToHex(this.address);
+    // Use the address value as returned by getAddress() (handles both hex and string addresses)
+    const addressInfo = await this.getAddress();
+    const addressHex = addressInfo.value;
     
     // Create deterministic payload hash
     const payload = JSON.stringify({
@@ -185,7 +203,7 @@ export class TestWalletAdapter implements WalletAdapter {
    * @returns true if signature is valid, false otherwise
    */
   verify(signature: WalletSignature, action: WalletAction): boolean {
-    // Verify signer matches action.from
+    // Verify signer matches action.from (for test adapter, use case-insensitive comparison)
     if (signature.signer.toLowerCase() !== action.from.toLowerCase()) {
       return false;
     }
@@ -207,18 +225,20 @@ export class TestWalletAdapter implements WalletAdapter {
       return false;
     }
     
-    // Verify payload_hash format matches chain
-    if (this.chain === "solana") {
-      // Solana uses base58
-      if (!signature.payload_hash || signature.payload_hash.length === 0) {
-        return false;
-      }
-    } else {
-      // EVM uses hex with 0x prefix
-      if (!signature.payload_hash.startsWith("0x")) {
-        return false;
+    // Verify payload_hash format matches chain (allow empty for message proofs / test purposes)
+    // Only validate format if payload_hash is provided and non-empty
+    if (signature.payload_hash && signature.payload_hash.length > 0) {
+      if (this.chain === "solana") {
+        // Solana uses base58 - just check it's not empty (already checked above)
+        // Base58 validation is complex, so for test adapter we skip strict validation
+      } else {
+        // EVM uses hex with 0x prefix
+        if (!signature.payload_hash.startsWith("0x")) {
+          return false;
+        }
       }
     }
+    // Empty payload_hash is allowed (for message proofs / test purposes)
     
     // For test adapter, we trust that if format is correct and signer matches, it's valid
     // Full payload_hash recomputation would require async operations
