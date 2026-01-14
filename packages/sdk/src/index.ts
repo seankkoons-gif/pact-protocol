@@ -63,3 +63,6 @@ export type { ReplayResult, ReplayFailure, ReplayOptions } from "./transcript/re
 
 // Reconciliation (v1.6+, D2)
 export * from "./reconcile/index";
+
+// Negotiation (v2.1+)
+export * from "./negotiation/index";

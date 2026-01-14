@@ -26,6 +26,9 @@ import { createSettlementProvider } from "../settlement/factory";
 import { MockSettlementProvider } from "../settlement/mock";
 import { selectSettlementProvider } from "../settlement/routing";
 import { isRetryableFailure, buildFallbackPlan, type ProviderCandidate } from "../settlement/fallback";
+import type { NegotiationStrategy } from "../negotiation/strategy";
+import { BaselineNegotiationStrategy } from "../negotiation/baseline";
+import type { NegotiationResult } from "../negotiation/types";
 
 const round8 = (x: number) => Math.round(x * 1e8) / 1e8;
 
@@ -1799,13 +1802,100 @@ export async function acquire(params: {
         continue;
   }
 
+  // 6.5) Negotiate price using negotiation strategy (v2.1+)
+  const negotiationStrategyName = input.negotiation?.strategy ?? "baseline";
+  let negotiationStrategy: NegotiationStrategy;
+  if (negotiationStrategyName === "baseline") {
+    negotiationStrategy = new BaselineNegotiationStrategy();
+  } else {
+    // Default to baseline for unknown strategies
+    negotiationStrategy = new BaselineNegotiationStrategy();
+  }
+
+  const negotiationInput = {
+    intent_type: input.intentType,
+    buyer_id: buyerId,
+    provider_id: selectedProvider.provider_id || selectedProviderPubkey,
+    reference_price: referenceP50,
+    quote_price: selectedAskPrice,
+    max_price: input.maxPrice,
+    band_pct: input.negotiation?.params?.band_pct as number | undefined,
+    max_rounds: input.negotiation?.params?.max_rounds as number | undefined,
+    max_total_duration_ms: input.negotiation?.params?.max_total_duration_ms as number | undefined,
+    urgent: input.urgent,
+  };
+
+  const negotiationResult: NegotiationResult = await negotiationStrategy.negotiate(negotiationInput);
+
+  if (!negotiationResult.ok) {
+    // Negotiation failed - treat as non-retryable failure
+    const action = handleAttemptFailure(
+      "NEGOTIATION_FAILED",
+      negotiationResult.reason || "Negotiation failed",
+      attemptEntry
+    );
+    if (action === "return") {
+      if (explain) {
+        explain.regime = plan.regime;
+        explain.settlement = chosenMode;
+        explain.fanout = plan.fanout;
+        pushDecision(
+          selectedProvider,
+          "policy",
+          false,
+          "PROVIDER_QUOTE_POLICY_REJECTED",
+          negotiationResult.reason || "Negotiation failed",
+          explainLevel === "full" ? { rounds_used: negotiationResult.rounds_used } : undefined
+        );
+      }
+      return {
+        ok: false,
+        plan: {
+          ...plan,
+          overrideActive,
+          offers_considered: evaluations.length,
+        },
+        code: "NEGOTIATION_FAILED",
+        reason: negotiationResult.reason || "Negotiation failed",
+        offers_eligible: evaluations.length,
+        ...(explain ? { explain } : {}),
+      };
+    }
+    continue;
+  }
+
+  // Use negotiated price instead of quote price
+  const negotiatedPrice = negotiationResult.agreed_price;
+
+  // Record negotiation in transcript
+  if (transcriptData) {
+    transcriptData.negotiation = {
+      strategy: negotiationStrategyName,
+      rounds_used: negotiationResult.rounds_used,
+      log: negotiationResult.log.map(entry => ({
+        round: entry.round,
+        timestamp_ms: entry.timestamp_ms,
+        decision: {
+          type: entry.decision.type,
+          quote_price: "quote_price" in entry.decision ? entry.decision.quote_price : undefined,
+          max_price: "max_price" in entry.decision ? entry.decision.max_price : undefined,
+          buyer_price: "buyer_price" in entry.decision ? entry.decision.buyer_price : undefined,
+          provider_price: "provider_price" in entry.decision ? entry.decision.provider_price : undefined,
+          price: "price" in entry.decision ? entry.decision.price : undefined,
+          final_price: "final_price" in entry.decision ? entry.decision.final_price : undefined,
+          reason: "reason" in entry.decision ? entry.decision.reason : undefined,
+        },
+      })),
+    };
+  }
+
   // 7) Build and sign ACCEPT envelope
   const acceptNow = nowFunction();
   const acceptMsg = {
     protocol_version: "pact/1.0" as const,
     type: "ACCEPT" as const,
     intent_id: intentId,
-    agreed_price: selectedAskPrice,
+    agreed_price: negotiatedPrice,
     settlement_mode: (chosenMode === "streaming" ? "streaming" : "hash_reveal") as SettlementMode,
     proof_type: (chosenMode === "streaming" ? "streaming" : "hash_reveal") as SettlementMode,
     challenge_window_ms: 150,
@@ -1922,7 +2012,7 @@ export async function acquire(params: {
       transcriptData.settlement_segments = segments;
       transcriptData.settlement_split_summary = {
         enabled: true,
-        target_amount: selectedAskPrice,
+        target_amount: negotiatedPrice,
         total_paid: totalPaid,
         segments_used: segments.filter(s => s.status === "committed").length,
       };

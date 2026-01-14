@@ -30,6 +30,11 @@ export type AcquireInput = {
       max_segments?: number; // Maximum number of segments (default: unlimited)
     };
   };
+  // Optional negotiation strategy (v2.1+)
+  negotiation?: {
+    strategy?: "baseline"; // Negotiation strategy (default: "baseline")
+    params?: Record<string, unknown>; // Parameters for negotiation strategy
+  };
   // Optional identity/verification (v1: for policy enforcement)
   identity?: {
     buyer?: {

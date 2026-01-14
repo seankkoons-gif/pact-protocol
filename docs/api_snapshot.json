@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-01-13T23:47:37.032Z",
+  "generated_at": "2026-01-14T18:32:07.090Z",
   "exports": {
     "values": [
       "* from ./adapters/http/index",
@@ -13,6 +13,7 @@
       "* from ./exchange/reveal",
       "* from ./exchange/streaming",
       "* from ./kya/index",
+      "* from ./negotiation/index",
       "* from ./policy/compiler",
       "* from ./policy/context",
       "* from ./policy/defaultGuard",

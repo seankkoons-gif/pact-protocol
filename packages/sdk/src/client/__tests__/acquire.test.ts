@@ -42,6 +42,7 @@ describe("acquire", () => {
         scope: "NYC",
         constraints: { latency_ms: 50, freshness_sec: 10 },
         maxPrice: 0.0001,
+        saveTranscript: true,
       },
       buyerKeyPair: buyer.keyPair,
       sellerKeyPair: seller.keyPair,
@@ -58,6 +59,16 @@ describe("acquire", () => {
       expect(result.receipt.fulfilled).toBe(true);
       expect(result.receipt.intent_id).toBeDefined();
       expect(result.plan.settlement).toBeDefined();
+      
+      // Verify negotiation log in transcript (v2.1+)
+      if (result.transcriptPath) {
+        const transcriptContent = fs.readFileSync(result.transcriptPath, "utf-8");
+        const transcript = JSON.parse(transcriptContent);
+        expect(transcript.negotiation).toBeDefined();
+        expect(transcript.negotiation.strategy).toBe("baseline");
+        expect(transcript.negotiation.rounds_used).toBeGreaterThanOrEqual(1);
+        expect(transcript.negotiation.log.length).toBeGreaterThan(0);
+      }
     }
   });
 

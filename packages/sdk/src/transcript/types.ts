@@ -104,6 +104,26 @@ export type TranscriptV1 = {
     decisions?: ProviderDecision[];
   };
   
+  // Negotiation log (v2.1+)
+  negotiation?: {
+    strategy: string; // Negotiation strategy used (e.g., "baseline")
+    rounds_used: number; // Number of negotiation rounds
+    log: Array<{
+      round: number;
+      timestamp_ms: number;
+      decision: {
+        type: "start" | "counteroffer" | "accepted_quote" | "rejected" | "timeout" | "done";
+        quote_price?: number;
+        max_price?: number;
+        buyer_price?: number;
+        provider_price?: number;
+        price?: number;
+        final_price?: number;
+        reason?: string;
+      };
+    }>;
+  };
+  
   // Outcome summary
   outcome: {
     ok: boolean;
