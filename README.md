@@ -30,6 +30,14 @@ If two agents both implement PACT, they can transact **without prior trust**.
 
 ---
 
+## Status
+
+**v1** is frozen at `v1.7.0-rc6` (read-only, critical fixes only). See [V1_READ_ONLY.md](./docs/V1_READ_ONLY.md) for details.
+
+**v2** is active development on branch `v2` (architectural reset, breaking changes). See [v2 Architecture](./docs/v2/ARCHITECTURE.md) for design.
+
+---
+
 ## Getting Started
 
 ### Clone & Checkout
