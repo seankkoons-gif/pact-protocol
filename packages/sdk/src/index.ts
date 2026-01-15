@@ -72,3 +72,6 @@ export * from "./assets/index";
 
 // Wallets (v2.3+)
 export * from "./wallets/index";
+
+// Security (v2 Phase 4)
+export * from "./security/index";

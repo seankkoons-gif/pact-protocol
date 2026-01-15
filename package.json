@@ -37,6 +37,7 @@
     "example:solana-wallet-sign": "tsx examples/solana-wallet-sign/run.ts",
     "api:snapshot": "node scripts/api-snapshot.mjs",
     "api:check": "node scripts/api-check.mjs",
+    "secret:scan": "node scripts/secret-scan.mjs",
     "release:gate": "node scripts/release-gate.mjs"
   },
   "devDependencies": {

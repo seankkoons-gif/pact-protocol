@@ -6,9 +6,10 @@
  * 1. Clean .pact directory
  * 2. Build packages
  * 3. Run tests
- * 4. Check pack
- * 5. Run all examples
- * 6. Verify transcripts (strict + terminal-only)
+ * 4. Scan for secrets
+ * 5. Check pack
+ * 6. Run all examples
+ * 7. Verify transcripts (strict + terminal-only)
  * 
  * Fails fast on any nonzero exit.
  */
@@ -54,13 +55,16 @@ runCommand("pnpm build", "Build");
 // Step 3: Test
 runCommand("pnpm test", "Tests");
 
-// Step 4: Pack check
+// Step 4: Secret scan
+runCommand("pnpm secret:scan", "Secret Scan");
+
+// Step 5: Pack check
 runCommand("pnpm pack:check", "Pack Check");
 
-// Step 5: Run all examples
+// Step 6: Run all examples
 runCommand("pnpm examples:all", "Examples");
 
-// Step 6: Verify transcripts (strict + terminal-only)
+// Step 7: Verify transcripts (strict + terminal-only)
 runCommand("pnpm replay:verify:strict-terminal", "Transcript Verification");
 
 console.log("\n✅ Release Gate: All checks passed!");

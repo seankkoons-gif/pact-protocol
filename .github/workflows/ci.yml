@@ -35,6 +35,9 @@ jobs:
       - name: Check API surface
         run: pnpm api:check
       
+      - name: Scan for secrets
+        run: pnpm secret:scan
+      
       - name: Run release gate
         run: pnpm release:gate
 
