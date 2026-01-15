@@ -15,9 +15,11 @@ export type TranscriptV1 = {
   intent_id: string;
   intent_type: string;
   timestamp_ms: number;
-  // Asset metadata (v2.2+)
-  asset_id?: AssetId; // Defaults to "USDC" if omitted (backward compatible)
-  chain_id?: ChainId;
+  // Asset metadata (v2 Phase 2C: normalized)
+  asset_id?: AssetId; // Legacy: defaults to "USDC" if omitted (backward compatible)
+  chain_id?: ChainId; // Legacy: backward compatible
+  asset?: string; // v2 Phase 2C: normalized asset symbol (e.g., "ETH", "USDC")
+  chain?: string; // v2 Phase 2C: normalized chain (e.g., "evm", "solana", "bitcoin")
   
   // Sanitized input (remove sensitive data if needed)
   input: AcquireInput;
@@ -141,8 +143,8 @@ export type TranscriptV1 = {
   
   // Wallet connection (v2.3+)
   wallet?: {
-    kind: string; // Wallet kind/provider (e.g., "external", "ethers", "test")
-    chain: string; // Chain identifier (e.g., "ethereum", "solana")
+    kind: string; // Wallet kind/provider (e.g., "external", "ethers", "test", "metamask", "coinbase_wallet")
+    chain: string; // Chain identifier (e.g., "ethereum", "solana", "evm") - v2 Phase 2C: normalized
     address: string; // Wallet address (hex string for display)
     used: boolean; // Whether wallet was used in this acquisition
     // Wallet capabilities (v2 Phase 2+)
@@ -153,6 +155,7 @@ export type TranscriptV1 = {
     };
     // Wallet execution layer (v2 Phase 2 Execution Layer)
     adapter?: string; // Wallet adapter kind
+    assets_supported?: string[]; // v2 Phase 2C: Public list of supported assets (e.g., ["ETH", "USDC", "USDT"])
     asset?: string; // Asset symbol used (v2 asset selection)
     asset_chain?: string; // Asset chain (v2 asset selection)
     asset_decimals?: number; // Asset decimals (v2 asset selection)

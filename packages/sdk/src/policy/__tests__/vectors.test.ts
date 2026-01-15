@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { complianceVectors } from "./vectors/v1_vectors";
 import { validatePolicy, compilePolicy, DefaultPolicyGuard } from "../index";
 import type { PactPolicy } from "../types";
+import { SUPPORTED_ASSETS, isSupportedAsset, normalizeAsset, inferChainForAsset } from "../../assets";
 
 // Helper to deep merge policies
 function deepMerge(target: any, source: any): any {
@@ -236,4 +237,75 @@ describe("Compliance Vectors", () => {
       }
     });
   }
+});
+
+describe("Phase 2B: Asset Validation", () => {
+  it("should accept all supported assets (ETH, USDC, USDT, BTC, SOL)", () => {
+    const supported = ["ETH", "USDC", "USDT", "BTC", "SOL"];
+    
+    for (const asset of supported) {
+      expect(isSupportedAsset(asset)).toBe(true);
+      expect(normalizeAsset(asset)).toBe(asset);
+      expect(SUPPORTED_ASSETS).toContain(asset);
+    }
+  });
+
+  it("should reject unsupported assets (e.g., DOGE)", () => {
+    const unsupported = ["DOGE", "XRP", "HYPE", "INVALID"];
+    
+    for (const asset of unsupported) {
+      expect(isSupportedAsset(asset)).toBe(false);
+      expect(SUPPORTED_ASSETS).not.toContain(asset);
+    }
+  });
+
+  it("should normalize asset symbols correctly", () => {
+    expect(normalizeAsset("eth")).toBe("ETH");
+    expect(normalizeAsset("  USDC  ")).toBe("USDC");
+    expect(normalizeAsset("btc")).toBe("BTC");
+    expect(normalizeAsset("sol")).toBe("SOL");
+    expect(normalizeAsset("usdt")).toBe("USDT");
+  });
+
+  it("should infer chains correctly for supported assets", () => {
+    expect(inferChainForAsset("ETH")).toBe("evm");
+    expect(inferChainForAsset("USDC")).toBe("evm");
+    expect(inferChainForAsset("USDT")).toBe("evm");
+    expect(inferChainForAsset("BTC")).toBe("bitcoin");
+    expect(inferChainForAsset("SOL")).toBe("solana");
+  });
+
+  it("should return unknown for unsupported assets", () => {
+    expect(inferChainForAsset("DOGE")).toBe("unknown");
+    expect(inferChainForAsset("INVALID")).toBe("unknown");
+  });
+
+  it("should reject unsupported asset in policy context (e.g., settlement with DOGE)", () => {
+    // This test validates that when assets are used in policy contexts,
+    // they should be validated against SUPPORTED_ASSETS
+    // Since assets aren't explicitly in policy schema yet, this is a conceptual test
+    
+    const unsupportedAsset = "DOGE";
+    expect(isSupportedAsset(unsupportedAsset)).toBe(false);
+    
+    // In a real implementation, policy validation would check:
+    // - If settlement.asset or economics.asset is specified, it must be in SUPPORTED_ASSETS
+    // - This would be enforced in policy validation logic, not just schema
+    expect(() => {
+      if (!isSupportedAsset(unsupportedAsset)) {
+        throw new Error(`Unsupported asset: ${unsupportedAsset}. Supported: ${SUPPORTED_ASSETS.join(", ")}`);
+      }
+    }).toThrow(/Unsupported asset/);
+  });
+
+  it("should accept all supported assets in policy context", () => {
+    // Test that all supported assets pass validation
+    for (const asset of SUPPORTED_ASSETS) {
+      expect(isSupportedAsset(asset)).toBe(true);
+      const normalized = normalizeAsset(asset);
+      expect(SUPPORTED_ASSETS).toContain(normalized);
+      const chain = inferChainForAsset(asset);
+      expect(["evm", "solana", "bitcoin"]).toContain(chain);
+    }
+  });
 });

@@ -1,11 +1,10 @@
 #!/usr/bin/env tsx
 /**
- * Example: Ethers Wallet Signing
+ * Example: Ethers Wallet
  * 
- * Demonstrates using EthersWalletAdapter with acquire() and WalletAction signing.
- * Shows wallet creation, WalletAction signing, and transcript recording with signature metadata.
+ * Demonstrates using EthersWalletAdapter with acquire().
+ * Shows wallet injection, address retrieval, and transcript recording.
  * 
- * This example uses a deterministic private key for testing purposes.
  * This example does NOT send transactions - signing only.
  */
 
@@ -28,7 +27,7 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../..");
 
 async function main() {
-  console.log("=== PACT Example: Ethers Wallet Signing ===\n");
+  console.log("=== PACT Example: Ethers Wallet ===\n");
 
   // Generate keypairs
   const buyerKeyPair = generateKeyPair();
@@ -36,44 +35,22 @@ async function main() {
   const buyerId = bs58.encode(Buffer.from(buyerKeyPair.publicKey));
   const sellerId = bs58.encode(Buffer.from(sellerKeyPair.publicKey));
 
-  // Create Ethers wallet adapter with a deterministic private key for testing
+  // Create wallet adapter with a dev private key
   // WARNING: This is a development key - never use in production!
   const devPrivateKey = "0x59c6995e998f97a5a0044976f094538c5f4f7e2f3c0d6b5e0c3e2d1b1a0f0001";
+  
+  // Use static factory method for ESM compatibility
   const wallet = await EthersWalletAdapter.create(devPrivateKey);
 
-  // Get wallet address and capabilities
-  const addressInfo = await wallet.getAddress();
-  const capabilities = wallet.capabilities();
-  console.log(`Wallet Chain: ${addressInfo.chain}`);
-  console.log(`Wallet Address: ${addressInfo.value}`);
-  console.log(`Capabilities:`, JSON.stringify(capabilities, null, 2));
-  console.log();
-
-  // Sign a WalletAction deterministically
-  const walletAction = {
-    action: "authorize" as const,
-    asset_symbol: "USDC",
-    amount: 0.0001,
-    from: addressInfo.value,
-    to: sellerId, // Will be set to actual seller after acquisition
-    memo: "PACT acquisition authorization",
-    idempotency_key: "test-example-001",
-  };
-
-  console.log("Signing WalletAction:");
-  console.log(JSON.stringify(walletAction, null, 2));
-  console.log();
-
-  const signature = await wallet.sign(walletAction);
-  console.log(`✅ WalletAction signed successfully`);
-  console.log(`Signature scheme: ${signature.scheme}`);
-  console.log(`Payload hash: ${signature.payload_hash}`);
-  console.log(`Signature (hex): ${signature.signer}`);
-  console.log();
-
-  // Verify the signature
-  const isValid = wallet.verify(signature, walletAction);
-  console.log(`Signature verification: ${isValid ? "✅ Valid" : "❌ Invalid"}\n`);
+  // Get wallet address and chain (no network call - deterministic)
+  const walletAddressBytes = wallet.getAddress();
+  const walletChain = wallet.getChain();
+  // Convert address bytes to hex string for display
+  const walletAddressHex = "0x" + Array.from(walletAddressBytes)
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
+  console.log(`Wallet Chain: ${walletChain}`);
+  console.log(`Wallet Address: ${walletAddressHex}\n`);
 
   // Create in-memory provider directory and register a provider
   const directory = new InMemoryProviderDirectory();
@@ -102,8 +79,8 @@ async function main() {
     process.exit(1);
   }
 
-  // Run acquisition with Ethers wallet injected and signing enabled
-  console.log("Running acquisition with Ethers wallet and WalletAction signing...\n");
+  // Run acquisition with wallet injected
+  console.log("Running acquisition with ethers wallet...\n");
   const nowFn = () => Date.now();
   const result = await acquire({
     input: {
@@ -117,12 +94,6 @@ async function main() {
         provider: "ethers",
         params: {
           privateKey: devPrivateKey,
-        },
-        requires_signature: true, // Enable wallet signing
-        signature_action: {
-          action: "authorize",
-          asset_symbol: "USDC",
-          memo: "PACT acquisition authorization",
         },
       },
     },
@@ -144,10 +115,9 @@ async function main() {
   if (result.ok && result.receipt) {
     console.log("✅ Acquisition successful!\n");
 
-    // Print wallet info
-    console.log(`Wallet Chain: ${addressInfo.chain}`);
-    console.log(`Wallet Address: ${addressInfo.value}`);
-    console.log(`Capabilities:`, JSON.stringify(capabilities, null, 2));
+    // Print wallet address
+    console.log(`Wallet Chain: ${walletChain}`);
+    console.log(`Wallet Address: ${walletAddressHex}`);
 
     // Print receipt
     console.log("\nReceipt:");
@@ -163,16 +133,6 @@ async function main() {
       if (transcript.wallet) {
         console.log("\nWallet metadata in transcript:");
         console.log(JSON.stringify(transcript.wallet, null, 2));
-        
-        // Highlight signature metadata
-        if (transcript.wallet.signature_metadata) {
-          console.log("\n✅ Wallet signature metadata recorded:");
-          console.log(`  Chain: ${transcript.wallet.signature_metadata.chain}`);
-          console.log(`  Scheme: ${transcript.wallet.signature_metadata.scheme}`);
-          console.log(`  Signer: ${transcript.wallet.signature_metadata.signer}`);
-          console.log(`  Payload Hash: ${transcript.wallet.signature_metadata.payload_hash}`);
-          console.log(`  Signature (hex): ${transcript.wallet.signature_metadata.signature_hex.substring(0, 20)}...`);
-        }
       }
     }
 
@@ -202,6 +162,4 @@ main().catch((error) => {
   console.error("Error:", error);
   process.exit(1);
 });
-
-
 

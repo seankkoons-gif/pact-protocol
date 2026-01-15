@@ -268,3 +268,5 @@ This first slice is the minimal viable architecture reset. Once proven, we can a
 
 v2 resets the core abstraction from stateless function calls to a persistent runtime with agent sessions. The runtime manages state, coordinates multi-party interactions, and enforces protocol invariants. New primitives (AgentRuntime, NegotiationSession, SettlementGraph, TranscriptStream, PolicyEngineV2) enable long-lived workflows, multi-party negotiations, and extensible implementations. Core invariants (determinism, replayability, explicit failure modes, auditability) are preserved. The first slice proves the architecture with minimal runtime, transcript streams, and one session type.
 
+
+

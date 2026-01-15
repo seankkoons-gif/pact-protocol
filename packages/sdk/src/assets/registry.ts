@@ -1,22 +1,84 @@
 /**
- * Asset Registry
+ * Asset Registry (v2 Phase 2B)
  * 
  * Static registry of asset metadata. Default asset is USDC.
+ * Canonical source of truth for supported assets in Phase 2.
  */
 
 import type { AssetId, AssetMeta, ChainId } from "./types";
+
+/**
+ * Canonical list of supported assets for Phase 2
+ */
+export const SUPPORTED_ASSETS: readonly string[] = ["USDC", "USDT", "BTC", "ETH", "SOL"] as const;
+
+/**
+ * Check if an asset is supported (v2 Phase 2B)
+ * 
+ * @param asset - Asset symbol (case-insensitive)
+ * @returns true if asset is supported
+ */
+export function isSupportedAsset(asset: string): boolean {
+  if (!asset) return false;
+  const normalized = asset.toUpperCase().trim();
+  return SUPPORTED_ASSETS.includes(normalized as any);
+}
+
+/**
+ * Normalize asset symbol to canonical form (v2 Phase 2B)
+ * 
+ * @param asset - Asset symbol (case-insensitive, may have whitespace)
+ * @returns Canonical asset symbol or original if not supported
+ */
+export function normalizeAsset(asset: string): string {
+  if (!asset) return "USDC"; // Default
+  const normalized = asset.toUpperCase().trim();
+  if (SUPPORTED_ASSETS.includes(normalized as any)) {
+    return normalized;
+  }
+  // Return uppercase trimmed version even if not supported (for consistency)
+  return normalized || "USDC";
+}
+
+/**
+ * Infer chain for an asset (v2 Phase 2B)
+ * 
+ * @param asset - Asset symbol
+ * @returns Chain identifier or "unknown"
+ */
+export function inferChainForAsset(asset: string): "evm" | "solana" | "bitcoin" | "unknown" {
+  const normalized = normalizeAsset(asset);
+  
+  // EVM assets
+  if (normalized === "ETH" || normalized === "USDC" || normalized === "USDT") {
+    return "evm";
+  }
+  
+  // Solana assets
+  if (normalized === "SOL") {
+    return "solana";
+  }
+  
+  // Bitcoin
+  if (normalized === "BTC") {
+    return "bitcoin";
+  }
+  
+  // Unknown
+  return "unknown";
+}
 
 const ASSET_REGISTRY: Record<AssetId, AssetMeta> = {
   USDC: {
     asset_id: "USDC",
     decimals: 6,
-    chain_id: "solana",
+    chain_id: "evm", // v2 Phase 2B: Changed from "solana" to "evm" to match inferChainForAsset
     symbol: "USDC",
   },
   USDT: {
     asset_id: "USDT",
     decimals: 6,
-    chain_id: "solana",
+    chain_id: "evm", // v2 Phase 2B: Changed from "solana" to "evm" to match inferChainForAsset
     symbol: "USDT",
   },
   BTC: {

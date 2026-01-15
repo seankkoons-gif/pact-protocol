@@ -260,7 +260,7 @@ describe("acquire", () => {
       
       // Verify wallet object only contains expected fields (v2 Phase 2+ includes capabilities and asset metadata)
       const walletKeys = Object.keys(transcript.wallet);
-      expect(walletKeys.sort()).toEqual(["address", "asset", "asset_chain", "asset_decimals", "capabilities", "chain", "kind", "used"]);
+      expect(walletKeys.sort()).toEqual(["address", "asset", "asset_chain", "asset_decimals", "assets_supported", "capabilities", "chain", "kind", "used"]);
       
       // Verify capabilities are included (v2 Phase 2+)
       expect(transcript.wallet.capabilities).toBeDefined();

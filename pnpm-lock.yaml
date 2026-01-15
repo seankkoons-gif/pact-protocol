@@ -20,9 +20,6 @@ importers:
 
   examples:
     dependencies:
-      '@pact/provider-adapter':
-        specifier: workspace:*
-        version: link:../packages/provider-adapter
       '@pact/sdk':
         specifier: workspace:*
         version: link:../packages/sdk

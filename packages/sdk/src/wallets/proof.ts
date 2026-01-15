@@ -67,25 +67,15 @@ export async function verifyWalletProof(
   agentId: string,
   walletAdapter?: WalletAdapter
 ): Promise<boolean> {
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'proof.ts:58',message:'verifyWalletProof entry',data:{hasAdapter:!!walletAdapter,hasVerify:!!walletAdapter?.verify,chain:proof.chain,scheme:proof.scheme,agentId,message:proof.message.substring(0,50)},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A,B,C,D,E'})}).catch(()=>{});
-  // #endregion
-  
   // Parse timestamp from message
   const timestampMatch = proof.message.match(/@ (\d+)$/);
   if (!timestampMatch) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'proof.ts:66',message:'timestamp parse failed',data:{message:proof.message},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A,B,C,D,E'})}).catch(()=>{});
-    // #endregion
     return false;
   }
   
   // Verify message format
   const expectedMessage = `Pact Identity Binding: ${agentId} @ ${timestampMatch[1]}`;
   if (proof.message !== expectedMessage) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'proof.ts:72',message:'message format mismatch',data:{expected:expectedMessage.substring(0,50),actual:proof.message.substring(0,50)},timestamp:Date.now(),sessionId:'debug-session',runId:'pre-fix',hypothesisId:'A,B,C,D,E'})}).catch(()=>{});
-    // #endregion
     return false;
   }
   
@@ -95,32 +85,22 @@ export async function verifyWalletProof(
   // Check if this is a test adapter (TestWalletAdapter returns all-zero signatures)
   const isTestAdapter = walletAdapter && (walletAdapter as any).kind === "test";
   
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'proof.ts:88',message:'verifying signature',data:{chain:proof.chain,signer:proof.signer.substring(0,20),signatureLength:proof.signature.length,hasAdapter:!!walletAdapter,isTestAdapter},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A,B,C,D'})}).catch(()=>{});
-  // #endregion
-  
   // For test adapters or when no adapter is provided, use fallback validation
   // (TestWalletAdapter doesn't produce real cryptographic signatures, and without an adapter
   // we can't determine the adapter type or perform cryptographic verification)
   if (isTestAdapter || !walletAdapter) {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'proof.ts:94',message:'using fallback validation',data:{reason:isTestAdapter?'test adapter':'no adapter'},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     // Fall through to fallback validation below
-  } else if (proof.chain === "evm" || proof.chain === "ethereum" || proof.chain.startsWith("evm")) {
+  } else if (proof.chain === "evm" || proof.chain === "ethereum" || proof.chain.startsWith("evm") || 
+             proof.chain === "base" || proof.chain === "polygon" || proof.chain === "arbitrum") {
     // EVM signature verification using ethers
+    // Note: ethers verifyMessage expects the original message string (not bytes)
+    // because it internally applies EIP-191 encoding
     try {
       const { verifyMessage } = await import("ethers");
       const signatureHex = bytesToHex(proof.signature);
-      const recoveredAddress = await verifyMessage(messageBytes, signatureHex);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'proof.ts:100',message:'EVM signature recovery',data:{recoveredAddress:recoveredAddress.substring(0,20),expectedSigner:proof.signer.substring(0,20),match:recoveredAddress.toLowerCase()===proof.signer.toLowerCase()},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
+      const recoveredAddress = await verifyMessage(proof.message, signatureHex);
       return recoveredAddress.toLowerCase() === proof.signer.toLowerCase();
     } catch (error: any) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'proof.ts:104',message:'EVM verification error',data:{error:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A'})}).catch(()=>{});
-      // #endregion
       return false;
     }
   } else if (proof.chain === "solana") {
@@ -130,28 +110,15 @@ export async function verifyWalletProof(
       const bs58 = await import("bs58");
       const signerPublicKey = bs58.default.decode(proof.signer);
       const isValid = nacl.default.sign.detached.verify(messageBytes, proof.signature, signerPublicKey);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'proof.ts:112',message:'Solana signature verification',data:{isValid,signer:proof.signer.substring(0,20)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       return isValid;
     } catch (error: any) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'proof.ts:116',message:'Solana verification error',data:{error:error?.message},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
       return false;
     }
   }
   
   // Fallback: Basic validation (signature format, message format)
-  // Real implementation should use cryptographic verification
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'proof.ts:116',message:'using fallback validation',data:{signatureLength:proof.signature.length,messageContainsAgentId:proof.message.includes(agentId)},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A,B,C,D'})}).catch(()=>{});
-  // #endregion
-  const fallbackResult = proof.signature.length > 0 && proof.message.includes(agentId);
-  // #region agent log
-  fetch('http://127.0.0.1:7242/ingest/d6fd9176-2481-40f5-93f3-71356369ce4a',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'proof.ts:118',message:'fallback result',data:{fallbackResult},timestamp:Date.now(),sessionId:'debug-session',runId:'post-fix',hypothesisId:'A,B,C,D'})}).catch(()=>{});
-  // #endregion
-  return fallbackResult;
+  // Used for test adapters or when adapter is not provided
+  return proof.signature.length > 0 && proof.message.includes(agentId);
 }
 
 /**

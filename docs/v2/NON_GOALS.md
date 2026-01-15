@@ -144,3 +144,5 @@ What stays stable: determinism, replayability, explicit failure modes, auditabil
 
 v2 is a protocol and runtime, not an application, infrastructure, or AI framework. Integrators build on top of v2 to create applications, marketplaces, and agent ecosystems.
 
+
+

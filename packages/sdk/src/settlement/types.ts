@@ -21,9 +21,9 @@ export interface SettlementIntent {
   mode: "hash_reveal" | "streaming";
   meta?: Record<string, unknown>;
   idempotency_key?: string; // Optional idempotency key for retries
-  // v2 Phase 2+: Chain and asset awareness
-  chain?: string; // Chain identifier (e.g., "ethereum", "solana", "base")
-  asset?: string; // Asset symbol (e.g., "USDC", "ETH", "SOL")
+  // v2 Phase 2C+: Optional chain/asset for multi-asset settlement
+  chain?: string; // Chain identifier (e.g., "evm", "solana", "bitcoin")
+  asset?: string; // Asset symbol (e.g., "ETH", "USDC", "BTC")
 }
 
 export interface SettlementHandle {

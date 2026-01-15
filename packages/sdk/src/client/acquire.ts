@@ -36,6 +36,8 @@ import { ExternalWalletAdapter } from "../wallets/external";
 import { EthersWalletAdapter } from "../wallets/ethers";
 import type { AddressInfo } from "../wallets/types";
 import { SolanaWalletAdapter, SOLANA_WALLET_KIND } from "../wallets/solana";
+import { MetaMaskWalletAdapter, METAMASK_WALLET_KIND } from "../wallets/metamask";
+import { CoinbaseWalletAdapter, COINBASE_WALLET_KIND } from "../wallets/coinbase_wallet";
 // Import test adapter only in test environment
 // Use dynamic require to avoid issues in production builds
 let TestWalletAdapter: any;
@@ -67,11 +69,10 @@ export async function acquire(params: {
 }): Promise<AcquireResult> {
   const { input, buyerKeyPair, sellerKeyPair, buyerId, sellerId, policy, settlement: explicitSettlement, store, directory, rfq, now: nowFn } = params;
   
-  // Extract and resolve asset metadata (v2.2+)
+  // Extract and normalize asset/chain (v2 Phase 2C)
   // Support new format: { symbol, chain, decimals }
   // Also support legacy format: { asset_id, chain_id } for backward compatibility
-  // Map to internal asset_id and chain_id for backward compatibility
-  const { resolveAssetFromSymbol, getAssetMeta } = await import("../assets/registry");
+  const { resolveAssetFromSymbol, getAssetMeta, normalizeAsset, inferChainForAsset } = await import("../assets/registry");
   let assetMeta;
   // Support both new format (symbol) and legacy format (asset_id) for backward compatibility
   if (input.asset?.symbol) {
@@ -91,9 +92,14 @@ export async function acquire(params: {
     // No asset specified - use default
     assetMeta = resolveAssetFromSymbol();
   }
+  
+  // Normalize asset symbol and infer chain if not explicitly provided (v2 Phase 2C)
+  const normalizedAssetSymbol = normalizeAsset(assetMeta.symbol);
+  const normalizedChain = assetMeta.chain_id || inferChainForAsset(normalizedAssetSymbol);
+  
   const assetId = assetMeta.asset_id;
-  const chainId = assetMeta.chain_id;
-  const assetSymbol = assetMeta.symbol;
+  const chainId = normalizedChain; // Use normalized chain
+  const assetSymbol = normalizedAssetSymbol; // Use normalized symbol
   const assetDecimals = assetMeta.decimals;
   
   // Wallet adapter connection (v2.3+)
@@ -205,6 +211,32 @@ export async function acquire(params: {
           ok: false,
           code: "WALLET_CONNECT_FAILED",
           reason: error?.message || "Failed to create Solana wallet adapter",
+        };
+      }
+    } else if ((walletProvider as string) === METAMASK_WALLET_KIND || (walletProvider as string) === "metamask") {
+      // MetaMask wallet adapter (v2 Phase 2A)
+      try {
+        const injected = input.wallet.params?.injected as any;
+        walletAdapter = new MetaMaskWalletAdapter({ injected });
+        walletKind = METAMASK_WALLET_KIND;
+      } catch (error: any) {
+        return {
+          ok: false,
+          code: "WALLET_CONNECT_FAILED",
+          reason: error?.message || "Failed to create MetaMask wallet adapter",
+        };
+      }
+    } else if ((walletProvider as string) === COINBASE_WALLET_KIND || (walletProvider as string) === "coinbase_wallet" || (walletProvider as string) === "coinbase") {
+      // Coinbase Wallet adapter (v2 Phase 2A)
+      try {
+        const injected = input.wallet.params?.injected as any;
+        walletAdapter = new CoinbaseWalletAdapter({ injected });
+        walletKind = COINBASE_WALLET_KIND;
+      } catch (error: any) {
+        return {
+          ok: false,
+          code: "WALLET_CONNECT_FAILED",
+          reason: error?.message || "Failed to create Coinbase Wallet adapter",
         };
       }
     } else if (walletProvider === "external") {
@@ -347,18 +379,21 @@ export async function acquire(params: {
     credential_checks: [],
     quotes: [],
     outcome: { ok: false },
-    // Asset metadata (v2.2+)
-    asset_id: assetId,
-    chain_id: chainId,
-    // Wallet connection (v2.3+)
+    // Asset metadata (v2 Phase 2C: normalized)
+    asset_id: assetId, // Legacy: keep for backward compatibility
+    chain_id: chainId, // Legacy: keep for backward compatibility
+    asset: normalizedAssetSymbol, // v2 Phase 2C: normalized asset symbol
+    chain: normalizedChain, // v2 Phase 2C: normalized chain
+    // Wallet connection (v2 Phase 2C: normalized)
     wallet: walletAddress ? {
       kind: walletKind ?? (input.wallet?.provider ?? "external"),
-      chain: walletChain ?? "evm", // Default to evm if chain not available (ethers uses evm)
+      chain: walletChain ?? normalizedChain, // v2 Phase 2C: use normalized chain if wallet chain not available
       address: walletAddress,
       used: true,
       // Wallet capabilities (v2 Phase 2+)
       capabilities: walletCapabilities,
-      // Asset metadata in wallet block (v2 asset selection)
+      // Asset metadata in wallet block (v2 Phase 2C)
+      assets_supported: walletCapabilitiesResponse?.assets || [], // v2 Phase 2C: public list of supported assets
       asset: assetSymbol ?? assetId,
       asset_chain: chainId,
       asset_decimals: assetDecimals,

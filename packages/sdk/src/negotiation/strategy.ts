@@ -17,3 +17,5 @@ export interface NegotiationStrategy {
   negotiate(input: NegotiationInput): Promise<NegotiationResult>;
 }
 
+
+

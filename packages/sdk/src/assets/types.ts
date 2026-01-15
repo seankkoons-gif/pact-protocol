@@ -7,7 +7,7 @@
 
 export type AssetId = "USDC" | "USDT" | "BTC" | "ETH" | "SOL" | "HYPE" | "XRP";
 
-export type ChainId = "solana" | "ethereum" | "base" | "polygon" | "arbitrum" | "unknown";
+export type ChainId = "solana" | "ethereum" | "evm" | "bitcoin" | "base" | "polygon" | "arbitrum" | "unknown"; // v2 Phase 2B+: Added "evm" and "bitcoin" for multi-asset support
 
 export interface AssetMeta {
   asset_id: AssetId;
@@ -15,4 +15,6 @@ export interface AssetMeta {
   chain_id?: ChainId;
   symbol: string;
 }
+
+
 

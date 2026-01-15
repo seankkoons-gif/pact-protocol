@@ -193,3 +193,5 @@ v2's goals are interconnected: long-lived sessions enable multi-party negotiatio
 
 Together, these goals transform PACT from a transaction protocol into an agent runtime: a platform where agents can form persistent relationships, negotiate complex terms, coordinate multi-party interactions, and settle transactions—all with determinism, auditability, and extensibility.
 
+
+
