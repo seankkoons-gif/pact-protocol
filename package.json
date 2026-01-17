@@ -40,10 +40,21 @@
     "example:v3:01": "tsx examples/v3/01-basic-negotiation.ts",
     "example:v3:02": "tsx examples/v3/02-wallet-escrow-boundary.ts",
     "example:v3:03": "tsx examples/v3/03-ml-assisted-negotiation.ts",
+    "example:v3:04": "tsx examples/v3/04-stripe-integration.ts",
+    "example:v3:05": "tsx examples/v3/05-zk-kya-verification.ts",
+    "example:v3:06": "tsx examples/v3/06-weather-api-agent.ts",
+    "demo:v3:quickstart": "tsx examples/v3/quickstart-demo.ts",
+    "example:provider:weather": "cd examples/providers/weather-provider && tsx src/server.ts",
+    "example:provider:llm": "cd examples/providers/llm-verifier-provider && tsx src/server.ts",
+    "example:buyer:weather": "tsx examples/providers/weather-provider/buyer-demo.ts",
+    "example:buyer:llm": "tsx examples/providers/llm-verifier-provider/buyer-demo.ts",
+    "demo:v3:canonical": "tsx examples/v3/quickstart-demo.ts",
     "api:snapshot": "node scripts/api-snapshot.mjs",
     "api:check": "node scripts/api-check.mjs",
     "secret:scan": "node scripts/secret-scan.mjs",
-    "release:gate": "node scripts/release-gate.mjs"
+    "release:gate": "node scripts/release-gate.mjs",
+    "create:pact-provider": "pnpm -C packages/create-pact-provider build && node packages/create-pact-provider/dist/cli.js",
+    "scaffold:smoke": "node scripts/scaffold-smoke.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",

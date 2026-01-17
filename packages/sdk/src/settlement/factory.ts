@@ -9,7 +9,7 @@ import type { SettlementProvider } from "./provider";
 import { MockSettlementProvider } from "./mock";
 import { ExternalSettlementProvider, type ExternalSettlementProviderConfig } from "./external";
 import { StripeLikeSettlementProvider, type StripeLikeSettlementProviderConfig } from "./stripe_like";
-import { StripeLiveSettlementProvider, validateStripeLiveConfig } from "./stripe_live";
+import { StripeSettlementProvider, validateStripeConfig } from "./stripe_live";
 
 export interface SettlementProviderConfig {
   provider: "mock" | "external" | "stripe_like" | "stripe_live";
@@ -62,15 +62,17 @@ export function createSettlementProvider(config: SettlementProviderConfig): Sett
     }
     
     case "stripe_live": {
-      // v2 Phase 3: Stripe Live boundary provider
+      // v2 Phase 3: Stripe settlement provider
+      // Note: "stripe_live" is the identifier; provider name is "Stripe" (not "Stripe Live")
+      // Mode ("sandbox" vs "live") is configured via StripeConfig.mode
       // Validate config from params + env
-      const validation = validateStripeLiveConfig(config.params || {});
+      const validation = validateStripeConfig(config.params || {});
       
       if (!validation.ok) {
-        throw new Error(`Stripe Live settlement provider configuration invalid: ${validation.reason}`);
+        throw new Error(`Stripe settlement provider configuration invalid: ${validation.reason}`);
       }
       
-      return new StripeLiveSettlementProvider(validation.config);
+      return new StripeSettlementProvider(validation.config);
     }
     
     default:

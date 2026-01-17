@@ -1,0 +1,17 @@
+{
+  "name": "pact-cloudflare-worker-provider",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:prod": "wrangler deploy --env production"
+  },
+  "dependencies": {
+    "@pact/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240125.0",
+    "typescript": "^5.x",
+    "wrangler": "^3.0.0"
+  }
+}

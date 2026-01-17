@@ -21,6 +21,7 @@ export * from "./settlement/provider";
 export * from "./settlement/mock";
 export * from "./settlement/external";
 export * from "./settlement/stripe_like";
+export * from "./settlement/stripe_live"; // v2 Phase 3: Stripe settlement provider
 export * from "./settlement/factory";
 
 // Exchange

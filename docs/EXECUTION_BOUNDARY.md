@@ -147,8 +147,8 @@ const settlement = createSettlementProvider({
 
 ✅ **Interface Definition**:
 - Implements `SettlementProvider` interface
-- Defines `StripeLiveConfig` type
-- Provides `validateStripeLiveConfig()` function
+- Defines `StripeConfig` type (supports both sandbox and live modes)
+- Provides `validateStripeConfig()` function
 
 ❌ **What It Doesn't Do**:
 - No network calls
@@ -184,7 +184,7 @@ async commit(_handle_id: string): Promise<SettlementResult> {
 To use `stripe_live` in production:
 
 1. **Fork or extend** the OSS repo
-2. **Replace** `StripeLiveSettlementProvider` implementation
+2. **Replace** `StripeSettlementProvider` implementation (or extend it)
 3. **Add** Stripe SDK integration
 4. **Implement** `prepare()`, `commit()`, `abort()`, `poll()`, `refund()`
 5. **Keep** configuration validation and secret redaction
@@ -192,13 +192,13 @@ To use `stripe_live` in production:
 **Example Integration**:
 ```typescript
 // In your service (not OSS repo)
-import { StripeLiveSettlementProvider } from "@pact/sdk";
+import { StripeSettlementProvider, StripeConfig } from "@pact/sdk";
 import Stripe from "stripe";
 
-class MyStripeLiveProvider extends StripeLiveSettlementProvider {
+class MyStripeProvider extends StripeSettlementProvider {
   private stripe: Stripe;
   
-  constructor(config: StripeLiveConfig) {
+  constructor(config: StripeConfig) {
     super(config);
     this.stripe = new Stripe(config.api_key!);
   }

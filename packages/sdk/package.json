@@ -29,6 +29,18 @@
     "tweetnacl": "^1.0.3",
     "zod": "^3.23.8"
   },
+  "peerDependencies": {
+    "stripe": "^14.0.0",
+    "snarkjs": "^0.7.0"
+  },
+  "peerDependenciesMeta": {
+    "stripe": {
+      "optional": true
+    },
+    "snarkjs": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@pact/provider-adapter": "workspace:*",
     "@types/bs58": "^5.0.0",

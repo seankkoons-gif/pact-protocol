@@ -1,15 +1,76 @@
 # PACT
 
-**PACT** is a deterministic protocol for negotiating, executing, and settling machine-to-machine transactions.
+**PACT** coordinates negotiation, KYA (Know Your Agent) verification, and settlement between autonomous agents.
 
-It is designed for environments where:
-- Both sides are software agents
-- Trust is partial or asymmetric
-- Execution must be verifiable
-- Outcomes must be auditable after the fact
+- **Negotiation**: Deterministic pricing and terms agreement between agents
+- **Identity**: KYA verification with credential validation and cryptographic proof
+- **Settlement**: Payment-rail agnostic coordination for execution boundaries (boundary, Stripe, escrow)
 
-PACT is **not a marketplace**, **not a smart contract platform**, and **not a black-box SDK**.  
-It is a protocol layer for structured, explainable exchange.
+```
+Buyer Agent → negotiate → Provider → settle → transcript
+```
+
+## Run the canonical demo
+
+```bash
+pnpm i
+pnpm demo:v3:canonical
+```
+
+**Expected output:**
+```
+═══════════════════════════════════════════════════════════
+  PACT v3 Quickstart Demo
+  One-command demo: Negotiation + Transcripts
+═══════════════════════════════════════════════════════════
+
+📋 Setup:
+   ✓ Generated keypairs (buyer & seller)
+   ✓ Registered weather data provider
+   ✓ Created receipt history (5 transactions)
+   ✓ Initialized settlement (in-memory)
+
+🔄 Negotiation Starting...
+  Intent: weather.data (NYC)
+  Max price: $0.0002
+  Strategy: banded_concession
+
+✅ Negotiation Complete!
+  Agreed Price: $0.0001
+  Transcript: .pact/transcripts/intent-...
+
+🎉 Demo Complete!
+```
+
+**Replay transcript:**
+```bash
+pnpm pact:replay .pact/transcripts/intent-*.json
+```
+
+---
+
+## Pick your path
+
+**Real-world provider examples:**
+- **[Weather Provider](./examples/providers/weather-provider/)** — Complete `weather.data` provider with deterministic pricing (`pnpm example:provider:weather`)
+- **[LLM Verifier Provider](./examples/providers/llm-verifier-provider/)** — Complete `llm.verify` provider with KYA variants (`pnpm example:provider:llm`)
+
+**Use cases:**
+- **[Negotiate only](./docs/v3/PICK_YOUR_PATH.md#1-negotiate-only-no-money)** — Deterministic negotiation without settlement. See [`examples/v3/01-basic-negotiation.ts`](./examples/v3/01-basic-negotiation.ts).
+
+- **[Negotiate + settle](./docs/v3/PICK_YOUR_PATH.md#2-negotiate--settle-stripe--escrow)** — Negotiation with real settlement backends (Stripe, escrow). See [`examples/v3/04-stripe-integration.ts`](./examples/v3/04-stripe-integration.ts) or [`docs/INTEGRATION_ESCROW.md`](./docs/INTEGRATION_ESCROW.md).
+
+- **[Multi-provider marketplace](./docs/v3/PICK_YOUR_PATH.md#3-multi-provider-marketplace)** — Negotiate with multiple providers and select the best. See [`examples/v3/06-weather-api-agent.ts`](./examples/v3/06-weather-api-agent.ts).
+
+---
+
+## How Pact differs
+
+Pact is not a payment rail: it coordinates settlement but doesn't move money. Payment execution happens through pluggable boundaries (Stripe, escrow, mock).
+
+Pact is not a marketplace: it's a deterministic negotiation protocol. No order books, no limit orders, no real-time price feeds.
+
+Pact is a protocol layer: negotiation semantics, identity verification (KYA), and settlement coordination. Execution (wallets, payments, chains) happens outside Pact through clear interfaces.
 
 ---
 
@@ -109,14 +170,66 @@ pnpm example:happy          # Basic happy path
 pnpm example:timeout        # Streaming with timeout
 pnpm example:dispute        # Dispute resolution
 pnpm example:reconcile      # Reconcile pending settlement
+
+# Run v3 quickstart demo (recommended first step)
+pnpm demo:v3:quickstart     # One-command demo: negotiation + transcripts
+
+# Run v3 examples
+pnpm example:v3:01          # Basic negotiation (no wallets/escrow)
+pnpm example:v3:02          # Wallet + escrow boundary demonstration
+pnpm example:v3:03          # ML-assisted negotiation
+pnpm example:v3:04          # Stripe integration (requires stripe package)
+pnpm example:v3:05          # ZK-KYA verification (requires snarkjs package)
+pnpm example:v3:06          # Weather API agent (multi-provider negotiation)
 ```
+
+### Optional Dependencies
+
+PACT supports optional built-in implementations for real-world integrations:
+
+- **Stripe Integration**: Install `stripe` to enable real Stripe payments
+  ```bash
+  npm install @pact/sdk stripe
+  ```
+  Works out of the box with `StripeSettlementProvider` when `stripe` is installed.
+
+- **ZK-KYA Verification**: Install `snarkjs` to enable real Groth16 proof verification
+  ```bash
+  npm install @pact/sdk snarkjs
+  ```
+  Works out of the box with `DefaultZkKyaVerifier` when `snarkjs` is installed.
+
+Without these packages, PACT uses boundary mode (clear errors, no external calls). The core protocol works regardless.
 
 ### Documentation
 
+**Getting Started:**
 - **[QUICKSTART.md](./docs/QUICKSTART.md)** — Get started in <10 minutes
+- **[v3/GETTING_STARTED.md](./docs/v3/GETTING_STARTED.md)** — v3 Getting Started Guide
+- **[v3/RELEASE_NOTES.md](./docs/v3/RELEASE_NOTES.md)** — v3 Release Notes (what's new, optional, experimental)
+- **[WHY_PACT.md](./docs/WHY_PACT.md)** — Why PACT exists and what problems it solves
+
+**Integration Guides:**
+- **[INTEGRATION_ESCROW.md](./docs/INTEGRATION_ESCROW.md)** — EVM escrow contract integration
+- **[WALLET_VERIFICATION.md](./docs/WALLET_VERIFICATION.md)** — Wallet signature verification
+- **[INTEGRATION_STRIPE_LIVE.md](./docs/INTEGRATION_STRIPE_LIVE.md)** — Stripe integration
+- **[INTEGRATION_ZK_KYA.md](./docs/INTEGRATION_ZK_KYA.md)** — ZK-KYA external integration
+
+**Distribution & Publishing:**
 - **[DISTRIBUTION.md](./docs/DISTRIBUTION.md)** — How to share, install, and distribute PACT
+- **[NPM_PUBLISHING.md](./docs/NPM_PUBLISHING.md)** — npm publishing guide
+
+**Architecture & Security:**
+- **[EXECUTION_BOUNDARY.md](./docs/EXECUTION_BOUNDARY.md)** — Execution boundary architecture
+- **[SECURITY_MODEL.md](./docs/SECURITY_MODEL.md)** — Security model and practices
+- **[ERROR_HANDLING.md](./docs/ERROR_HANDLING.md)** — Error handling patterns and edge cases
+- **[PERFORMANCE.md](./docs/PERFORMANCE.md)** — Performance considerations and optimization
+
+**Reference:**
+- **[DOCUMENTATION_INDEX.md](./docs/DOCUMENTATION_INDEX.md)** — Complete documentation index
 - **[V1_CONTRACT.md](./V1_CONTRACT.md)** — API stability guarantees and contract
 - **[PROTOCOL.md](./PROTOCOL.md)** — Protocol semantics and behavior
+- **[v2/V2_FOUNDATION.md](./docs/v2/V2_FOUNDATION.md)** — v2 features foundation and roadmap
 - **[examples/](./examples/)** — Working code examples
 
 ### Stable Entrypoints
