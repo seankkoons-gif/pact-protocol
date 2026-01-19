@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Pact Transcript View v1",
+  "description": "Redacted transcript view for cross-trust-boundary sharing",
+  "type": "object",
+  "required": ["kind", "source_transcript_hash", "view"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "view",
+      "description": "Identifies this as a transcript view (not a PoN transcript)"
+    },
+    "source_transcript_hash": {
+      "type": "string",
+      "pattern": "^transcript-[a-f0-9]{64}$",
+      "description": "Hash of the original unredacted PoN transcript (transcript_id)"
+    },
+    "view": {
+      "type": "string",
+      "enum": ["INTERNAL", "PARTNER", "AUDITOR"],
+      "description": "View type applied to this transcript"
+    },
+    "transcript": {
+      "description": "Redacted transcript object with fields replaced by {redacted: true, hash: ...} where applicable"
+    }
+  }
+}

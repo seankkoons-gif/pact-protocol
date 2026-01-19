@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pact-redacted-field/4.0/schema.json",
+  "title": "Pact Redacted Field Schema v4",
+  "description": "Schema for redacted fields in Pact v4 transcripts",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["redacted", "hash", "view"],
+  "properties": {
+    "redacted": {
+      "type": "boolean",
+      "const": true
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hash of original content (hex, lowercase)"
+    },
+    "view": {
+      "type": "string",
+      "enum": ["INTERNAL", "PARTNER", "AUDITOR"],
+      "description": "View type that caused this redaction"
+    }
+  }
+}

@@ -10,50 +10,79 @@
 Buyer Agent → negotiate → Provider → settle → transcript
 ```
 
+## For Executives
+
+Pact is a control and audit layer for autonomous spending. It ensures that any AI agent authorized to spend money does so within a deterministic policy boundary, producing cryptographically verifiable records that explain what happened, why it happened, and who is responsible. Pact does not move money or make decisions itself; it enforces constraints, records evidence, and standardizes failure, refund, and dispute resolution across payment rails. The result is that autonomous agents become auditable, insurable, and legally defensible — enabling enterprises to deploy them at scale without losing control.
+
 ## Run the canonical demo
+
+**Pact v4** is complete and production-ready. Run the v4 demo:
 
 ```bash
 pnpm i
-pnpm demo:v3:canonical
+pnpm demo:v4:canonical
 ```
 
 **Expected output:**
 ```
 ═══════════════════════════════════════════════════════════
-  PACT v3 Quickstart Demo
-  One-command demo: Negotiation + Transcripts
+  PACT v4 Quickstart Demo
+  Institution-Grade Autonomous Commerce Infrastructure
 ═══════════════════════════════════════════════════════════
 
 📋 Setup:
-   ✓ Generated keypairs (buyer & seller)
-   ✓ Registered weather data provider
-   ✓ Created receipt history (5 transactions)
-   ✓ Initialized settlement (in-memory)
+   ✓ Created intent: weather.data (NYC)
+   ✓ Created Policy v4: max_price <= $0.05
+   ✓ Initialized Pact Boundary Runtime
 
 🔄 Negotiation Starting...
   Intent: weather.data (NYC)
-  Max price: $0.0002
-  Strategy: banded_concession
+  Max price: $0.05 (enforced by Policy v4)
+  Settlement: boundary (in-memory)
 
 ✅ Negotiation Complete!
-  Agreed Price: $0.0001
-  Transcript: .pact/transcripts/intent-...
+  Agreed Price: $0.04
+  Policy Hash: b4d401daf1ce1690...
+  Transcript ID: transcript-...
+
+🔍 Verifying Transcript...
+     ✓ Integrity: VALID
+     ✓ Signatures verified: X
+     ✓ Hash chain verified: X rounds
 
 🎉 Demo Complete!
 ```
 
 **Replay transcript:**
 ```bash
-pnpm pact:replay .pact/transcripts/intent-*.json
+pnpm replay:v4 .pact/transcripts/transcript-*.json
 ```
+
+**Generate evidence bundle:**
+```bash
+pnpm evidence:bundle .pact/transcripts/transcript-*.json --out ./evidence-bundle
+```
+
+> **Note:** v3 remains stable and maintained. See [v3/GETTING_STARTED.md](./docs/v3/GETTING_STARTED.md) for v3 documentation.
 
 ---
 
 ## Pick your path
 
+### v4 (Recommended — Complete & Production-Ready)
+
+**Core Features:**
+- **[Pact Boundary Runtime](./docs/v4/POLICY.md)** — Non-bypassable policy enforcement (`pnpm demo:v4:canonical`)
+- **[Policy-as-Code v4](./docs/v4/POLICY.md)** — Deterministic, audit-grade constraint system
+- **[Passport v1](./docs/v4/PASSPORT.md)** — Agent reputation scoring and credit eligibility
+- **[Evidence Bundles](./docs/v4/EVIDENCE_BUNDLE.md)** — Courtroom-grade audit artifacts
+- **[Transcript Redaction](./docs/v4/REDACTION.md)** — Share transcripts across trust boundaries
+
 **Real-world provider examples:**
 - **[Weather Provider](./examples/providers/weather-provider/)** — Complete `weather.data` provider with deterministic pricing (`pnpm example:provider:weather`)
 - **[LLM Verifier Provider](./examples/providers/llm-verifier-provider/)** — Complete `llm.verify` provider with KYA variants (`pnpm example:provider:llm`)
+
+### v3 (Stable & Maintained)
 
 **Use cases:**
 - **[Negotiate only](./docs/v3/PICK_YOUR_PATH.md#1-negotiate-only-no-money)** — Deterministic negotiation without settlement. See [`examples/v3/01-basic-negotiation.ts`](./examples/v3/01-basic-negotiation.ts).
@@ -92,6 +121,10 @@ If two agents both implement PACT, they can transact **without prior trust**.
 ---
 
 ## Status
+
+**v4** is **COMPLETE** ✅ — Institution-grade autonomous commerce infrastructure. See [v4/STATUS.md](./docs/v4/STATUS.md) for complete feature list.
+
+**v3** is stable and maintained — Recommended for production until v4 migration complete. See [v3/GETTING_STARTED.md](./docs/v3/GETTING_STARTED.md).
 
 **v1** is frozen at `v1.7.0-rc6` (read-only, critical fixes only). See [V1_READ_ONLY.md](./docs/V1_READ_ONLY.md) for details.
 
@@ -134,11 +167,9 @@ pnpm example:reconcile
 
 ### Verify Transcripts
 
-```bash
-# Default mode: warnings for pending settlements
-pnpm replay:verify -- .pact/transcripts
+Strict mode skips pending transcripts and treats expired credentials as warnings (expected for historical transcripts):
 
-# Strict mode: verify only terminal transcripts (skip pending)
+```bash
 pnpm replay:verify --strict --terminal-only -- .pact/transcripts
 ```
 
@@ -205,9 +236,19 @@ Without these packages, PACT uses boundary mode (clear errors, no external calls
 
 **Getting Started:**
 - **[QUICKSTART.md](./docs/QUICKSTART.md)** — Get started in <10 minutes
+- **[v4/STATUS.md](./docs/v4/STATUS.md)** — v4 Status (COMPLETE ✅ — Institution-grade infrastructure)
 - **[v3/GETTING_STARTED.md](./docs/v3/GETTING_STARTED.md)** — v3 Getting Started Guide
 - **[v3/RELEASE_NOTES.md](./docs/v3/RELEASE_NOTES.md)** — v3 Release Notes (what's new, optional, experimental)
 - **[WHY_PACT.md](./docs/WHY_PACT.md)** — Why PACT exists and what problems it solves
+
+**v4 Features:**
+- **[v4/POLICY.md](./docs/v4/POLICY.md)** — Policy-as-Code v4 (deterministic constraint system)
+- **[v4/PASSPORT.md](./docs/v4/PASSPORT.md)** — Passport v1 (agent reputation scoring)
+- **[v4/CREDIT.md](./docs/v4/CREDIT.md)** — Credit v1 (undercollateralized commitments)
+- **[v4/ARBITRATION.md](./docs/v4/ARBITRATION.md)** — Arbitration (transcript-constrained dispute resolution)
+- **[v4/EVIDENCE_BUNDLE.md](./docs/v4/EVIDENCE_BUNDLE.md)** — Evidence Bundles (courtroom-grade audit artifacts)
+- **[v4/REDACTION.md](./docs/v4/REDACTION.md)** — Transcript Redaction (cross-trust-boundary sharing)
+- **[v4/FAILURE_TAXONOMY.md](./docs/v4/FAILURE_TAXONOMY.md)** — Failure Taxonomy (canonical error classification)
 
 **Integration Guides:**
 - **[INTEGRATION_ESCROW.md](./docs/INTEGRATION_ESCROW.md)** — EVM escrow contract integration

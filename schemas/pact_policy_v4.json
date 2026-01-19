@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pact-policy/4.0/schema.json",
+  "title": "Pact Policy Schema v4",
+  "description": "Deterministic, audit-grade constraint system for Pact v4 negotiations",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "policy_version",
+    "policy_id",
+    "rules"
+  ],
+  "properties": {
+    "policy_version": {
+      "const": "pact-policy/4.0"
+    },
+    "policy_id": {
+      "type": "string",
+      "minLength": 8,
+      "pattern": "^policy-[a-f0-9]+$"
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "condition"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "condition": {
+            "$ref": "#/$defs/condition"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "condition": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/comparison"
+        },
+        {
+          "$ref": "#/$defs/logical"
+        }
+      ]
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["field", "operator", "value"],
+      "properties": {
+        "field": {
+          "type": "string",
+          "enum": [
+            "offer_price",
+            "bid_price",
+            "counterparty_passport_score",
+            "counterparty_passport_confidence",
+            "counterparty_recent_failures",
+            "settlement_mode",
+            "intent_type",
+            "negotiation_round",
+            "transcript_created_at_ms"
+          ]
+        },
+        "operator": {
+          "type": "string",
+          "enum": ["==", "!=", "<", "<=", ">", ">=", "IN", "NOT IN"]
+        },
+        "value": {
+          "oneOf": [
+            { "type": "number" },
+            { "type": "string" },
+            { "type": "boolean" },
+            { "type": "array" }
+          ]
+        }
+      }
+    },
+    "logical": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["AND", "OR", "NOT"],
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "AND": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/condition"
+          }
+        },
+        "OR": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/condition"
+          }
+        },
+        "NOT": {
+          "$ref": "#/$defs/condition"
+        }
+      }
+    }
+  }
+}

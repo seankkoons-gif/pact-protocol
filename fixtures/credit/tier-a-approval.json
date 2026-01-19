@@ -1,0 +1,32 @@
+{
+  "name": "Tier A Credit Approval (20% Collateral)",
+  "description": "Agent with Passport score 90 and confidence 0.85 receives Tier A credit terms (20% collateral)",
+  "scenario": {
+    "agent_id": "agent-tier-a-001",
+    "passport_score": 90,
+    "passport_confidence": 0.85,
+    "commitment_amount_usd": 1000,
+    "expected_tier": "A",
+    "expected_collateral_ratio": 0.2,
+    "expected_required_collateral_usd": 200,
+    "expected_credit_exposure_usd": 800,
+    "expected_allowed": true
+  },
+  "credit_terms": {
+    "tier": "A",
+    "max_outstanding_exposure_usd": 5000,
+    "max_per_intent_usd": 2000,
+    "max_per_counterparty_usd": 1000,
+    "collateral_ratio": 0.2,
+    "required_escrow": false
+  },
+  "evidence_refs": [
+    "credit_tier:agent-tier-a-001:A",
+    "credit_decision:agent-tier-a-001:ALLOWED",
+    "credit_required_collateral:200",
+    "credit_exposure:800",
+    "credit_max_outstanding:5000",
+    "credit_max_per_intent:2000",
+    "credit_max_per_counterparty:1000"
+  ]
+}

@@ -154,13 +154,13 @@ pnpm add @pact/sdk @pact/provider-adapter
 
 ## Verifying Transcripts
 
-**Default mode (warnings for pending settlements):**
+**Default mode (warnings for pending settlements, expired credentials, and wallet verification failures):**
 
 ```bash
 pnpm replay:verify -- .pact/transcripts
 ```
 
-**Strict mode (errors for pending settlements):**
+**Strict mode (errors for pending settlements; expired credentials and wallet failures still warnings):**
 
 ```bash
 pnpm replay:verify --strict -- .pact/transcripts
@@ -171,6 +171,8 @@ pnpm replay:verify --strict -- .pact/transcripts
 ```bash
 pnpm replay:verify --strict --terminal-only -- .pact/transcripts
 ```
+
+**Note**: `CREDENTIAL_EXPIRED` and `WALLET_VERIFY_FAILED` are always treated as warnings (expected for historical transcripts), even in strict mode.
 
 This mode is used in the release gate to verify only completed transcripts.
 

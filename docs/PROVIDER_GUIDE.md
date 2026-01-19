@@ -22,7 +22,9 @@ pnpm provider:serve
 PACT_DEV_IDENTITY_SEED=pact-provider-default-seed-v1 pnpm provider:serve
 ```
 
-The server will start on `http://127.0.0.1:7777` by default (or a random port if 7777 is taken).
+The server will start on a random available port by default (`port: 0`). The server will output the actual port after binding. You can also specify a port explicitly (e.g., `--port 7777`) if you need a fixed port for registry entries.
+
+**Note**: When using a random port, check the server output for the actual URL and use that when registering the provider.
 
 ## Provider Identity Modes
 
@@ -114,10 +116,11 @@ Response:
 After starting the provider server, register it in the provider registry:
 
 ```bash
+# Use the actual port from server output (or specify a fixed port with --port)
 pnpm provider:register -- \
   --intent weather.data \
   --pubkey 8MAHFtsAtkENKMukXZoRUhNXCtJExDHEsUPSR19rjBDp \
-  --endpoint http://127.0.0.1:7777 \
+  --endpoint http://127.0.0.1:<actual-port> \
   --credentials sla_verified \
   --region us-east \
   --baselineLatencyMs 50

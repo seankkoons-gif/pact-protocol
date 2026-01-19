@@ -265,15 +265,17 @@ The transcript path is returned in `result.transcriptPath`.
 Verify a transcript:
 
 ```bash
-# Default mode: warnings for pending settlements
+# Default mode: warnings for pending settlements, expired credentials, and wallet verification failures
 pnpm replay:verify -- .pact/transcripts/intent-123.json
 
-# Strict mode: errors for pending settlements
+# Strict mode: errors for pending settlements (expired credentials and wallet failures still warnings)
 pnpm replay:verify --strict -- .pact/transcripts/intent-123.json
 
 # Strict + terminal-only: skip pending, verify only terminal
 pnpm replay:verify --strict --terminal-only -- .pact/transcripts
 ```
+
+**Note**: `CREDENTIAL_EXPIRED` and `WALLET_VERIFY_FAILED` are always treated as warnings (expected for historical transcripts), even in strict mode.
 
 ### Replaying Transcripts
 
@@ -324,7 +326,7 @@ The reconcile function:
 - `NO_ELIGIBLE_PROVIDERS`: No providers found or none met requirements
 - `PROVIDER_TRUST_TIER_TOO_LOW`: Provider trust tier too low
 - `CREDENTIAL_MISSING`: Required credential not present
-- `CREDENTIAL_EXPIRED`: Credential has expired
+- `CREDENTIAL_EXPIRED`: Credential has expired (treated as warning in replay verification)
 
 ### Settlement
 - `SETTLEMENT_FAILED`: Settlement execution failed

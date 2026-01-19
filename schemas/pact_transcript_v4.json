@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pact-transcript/4.0/schema.json",
+  "title": "Pact Transcript Schema v4",
+  "description": "Append-only, hash-linked transcript schema for Pact protocol v4. Designed for legal admissibility and deterministic verification.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "transcript_version",
+    "transcript_id",
+    "intent_id",
+    "intent_type",
+    "created_at_ms",
+    "policy_hash",
+    "strategy_hash",
+    "identity_snapshot_hash",
+    "rounds"
+  ],
+  "properties": {
+    "transcript_version": {
+      "const": "pact-transcript/4.0",
+      "description": "Protocol version identifier. MUST be 'pact-transcript/4.0' for v4 transcripts."
+    },
+    "transcript_id": {
+      "type": "string",
+      "pattern": "^transcript-[a-f0-9]{64}$",
+      "description": "Unique transcript identifier. Format: 'transcript-' prefix followed by SHA-256 hash (hex). MUST be deterministic from intent_id + created_at_ms."
+    },
+    "intent_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Pact Intent identifier from protocol negotiation. MUST match intent_id from all protocol messages."
+    },
+    "intent_type": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Intent type identifier (e.g., 'weather.data', 'llm.verify'). MUST match intent type from INTENT message."
+    },
+    "created_at_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix timestamp (milliseconds) when transcript was created. MUST match timestamp from first INTENT message."
+    },
+    "policy_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hash (hex) of canonical JSON serialization of buyer policy at negotiation start. Policy MUST be serialized deterministically (sorted keys, no whitespace)."
+    },
+    "strategy_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hash (hex) of canonical JSON serialization of negotiation strategy configuration at negotiation start. Strategy config MUST include all parameters affecting negotiation behavior."
+    },
+    "identity_snapshot_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hash (hex) of canonical JSON serialization of identity snapshot at negotiation start. Identity snapshot MUST include all identity attributes relevant to policy evaluation (credentials, trust scores, etc.)."
+    },
+    "rounds": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Append-only array of negotiation rounds. Each round MUST be signed. Rounds MUST be appended in order (no insertion, no modification).",
+      "items": {
+        "$ref": "#/$defs/TranscriptRound"
+      }
+    },
+    "failure_event": {
+      "$ref": "#/$defs/FailureEvent",
+      "description": "Optional failure event. If present, transcript is terminal and no further rounds may be appended. MUST be the final element appended to transcript before termination."
+    },
+    "final_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 hash (hex) of canonical JSON serialization of entire transcript (excluding final_hash field itself). Computed deterministically after transcript termination. MUST be present for terminal transcripts (when failure_event exists or negotiation completed successfully)."
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Optional metadata for transcript. MUST NOT affect deterministic serialization or hash computation."
+    }
+  },
+  "$defs": {
+    "TranscriptRound": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "round_number",
+        "round_type",
+        "message_hash",
+        "envelope_hash",
+        "signature",
+        "timestamp_ms",
+        "previous_round_hash"
+      ],
+      "properties": {
+        "round_number": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zero-indexed round number. First round (INTENT) is round 0. MUST be sequential with no gaps."
+        },
+        "round_type": {
+          "type": "string",
+          "enum": ["INTENT", "ASK", "BID", "COUNTER", "ACCEPT", "REJECT", "ABORT"],
+          "description": "Type of negotiation round. MUST match protocol message type."
+        },
+        "message_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hash (hex) of canonical JSON serialization of protocol message content (excluding envelope wrapper). Message MUST be serialized deterministically."
+        },
+        "envelope_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hash (hex) of complete signed envelope (including signature). Enables signature verification."
+        },
+        "signature": {
+          "$ref": "#/$defs/Signature",
+          "description": "Cryptographic signature of round. MUST verify against envelope_hash."
+        },
+        "timestamp_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Unix timestamp (milliseconds) when round was created. MUST be non-decreasing (timestamp_ms[i] >= timestamp_ms[i-1])."
+        },
+        "previous_round_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hash (hex) of canonical JSON serialization of previous round. First round (round 0) MUST use intent_id as previous_round_hash. Enables append-only hash chain verification."
+        },
+        "round_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hash (hex) of canonical JSON serialization of this round (excluding round_hash field itself). Computed deterministically. Enables hash chain verification."
+        },
+        "agent_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Agent identifier who created this round. MUST match signer_public_key or agent_id from protocol message."
+        },
+        "public_key_b58": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Base58-encoded Ed25519 public key of signing agent. MUST match public key used to verify signature."
+        },
+        "content_summary": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Summary of round content for human readability. MUST NOT affect deterministic serialization or hash computation."
+        }
+      }
+    },
+    "Signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "signer_public_key_b58",
+        "signature_b58",
+        "signed_at_ms"
+      ],
+      "properties": {
+        "signer_public_key_b58": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Base58-encoded Ed25519 public key of signing agent."
+        },
+        "signature_b58": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Base58-encoded Ed25519 signature over envelope_hash."
+        },
+        "signed_at_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Unix timestamp (milliseconds) when signature was created."
+        },
+        "scheme": {
+          "type": "string",
+          "enum": ["ed25519"],
+          "default": "ed25519",
+          "description": "Cryptographic signature scheme. v4 supports Ed25519 only."
+        }
+      }
+    },
+    "FailureEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "stage",
+        "fault_domain",
+        "terminality",
+        "evidence_refs",
+        "timestamp",
+        "transcript_hash"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^PACT-[1-5][0-9]{2}$",
+          "description": "Canonical error code in format PACT-XXX. MUST be drawn from Pact v4 Failure Taxonomy (FAILURE_TAXONOMY.md)."
+        },
+        "stage": {
+          "type": "string",
+          "enum": [
+            "admission",
+            "discovery",
+            "negotiation",
+            "commitment",
+            "reveal",
+            "settlement",
+            "fulfillment",
+            "verification"
+          ],
+          "description": "Protocol stage at which failure was detected. MUST match Stage enumeration from FAILURE_TAXONOMY.md."
+        },
+        "fault_domain": {
+          "type": "string",
+          "enum": [
+            "policy",
+            "identity",
+            "negotiation",
+            "settlement",
+            "recursive"
+          ],
+          "description": "Responsible subsystem for failure. MUST match FaultDomain enumeration from FAILURE_TAXONOMY.md."
+        },
+        "terminality": {
+          "type": "string",
+          "enum": ["terminal", "non_terminal"],
+          "description": "Whether failure is terminal (Intent cannot proceed) or non-terminal (retry possible). MUST match Terminality enumeration from FAILURE_TAXONOMY.md."
+        },
+        "evidence_refs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Array of references to evidence artifacts (transcript IDs, envelope hashes, etc.). MUST include at least one verifiable artifact reference."
+        },
+        "timestamp": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Unix timestamp (milliseconds) when failure was detected."
+        },
+        "transcript_hash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "SHA-256 hash (hex) of canonical JSON serialization of transcript up to and including failure point. MUST include all rounds and state transitions leading to failure."
+        }
+      }
+    }
+  }
+}

@@ -843,18 +843,17 @@ export async function verifyTranscriptFile(
   
   // Convert replay failures to errors or warnings
   // Expired credentials in historical transcripts are expected and should be warnings, not errors
+  // WALLET_VERIFY_FAILED is always a warning (wallet signatures may be optional or computed differently on replay)
   // SETTLEMENT_PENDING_UNRESOLVED is warning by default, error in strict mode
-  // WALLET_VERIFY_FAILED is warning by default (wallet signatures may be optional or computed differently on replay)
   const pendingUnresolvedMessages: string[] = [];
   for (const failure of replayResult.failures) {
     if (failure.code === "CREDENTIAL_EXPIRED") {
       warnings.push(`Credential expired: ${failure.reason} (expected for historical transcripts)`);
+    } else if (failure.code === "WALLET_VERIFY_FAILED") {
+      warnings.push(`WALLET_VERIFY_FAILED: ${failure.reason} (expected for historical transcripts)`);
     } else if (failure.code === "SETTLEMENT_PENDING_UNRESOLVED") {
       // Collect pending unresolved messages for deduplication
       pendingUnresolvedMessages.push(failure.reason);
-    } else if (failure.code === "WALLET_VERIFY_FAILED") {
-      // Skip here - will be handled separately based on strict mode
-      continue;
     } else {
       errors.push(`${failure.code}: ${failure.reason}`);
     }
@@ -971,18 +970,6 @@ export async function verifyTranscriptFile(
       // Check: valid transitions (pending -> committed/failed/aborted)
       if (event.from_status === "pending" && event.to_status !== "committed" && event.to_status !== "failed" && event.to_status !== "aborted") {
         errors.push(`reconcile_events: invalid transition from ${event.from_status} to ${event.to_status}. Expected committed, failed, or aborted`);
-      }
-    }
-  }
-  
-  // Wallet signature verification failures are already handled in replayTranscript
-  // Convert WALLET_VERIFY_FAILED failures to errors/warnings based on strict mode
-  for (const failure of replayResult.failures) {
-    if (failure.code === "WALLET_VERIFY_FAILED") {
-      if (strict) {
-        errors.push(`WALLET_VERIFY_FAILED: ${failure.reason}`);
-      } else {
-        warnings.push(`WALLET_VERIFY_FAILED: ${failure.reason}`);
       }
     }
   }

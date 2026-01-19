@@ -80,3 +80,9 @@ export * from "./security/index";
 // ZK-KYA (v2 Phase 5)
 export * from "./kya/zk/index";
 export type { ZkKyaVerifier } from "./kya/zk/verifier";
+
+// Pact v4 (Complete)
+export * from "./boundary/index";
+export * from "./policy/v4";
+export * from "./transcript/v4";
+export * from "./disputes/v4";

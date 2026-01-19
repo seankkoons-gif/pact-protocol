@@ -1,0 +1,49 @@
+{
+  "name": "Credit Denial Due to Exposure Cap Exceeded",
+  "description": "Tier A agent with existing exposure hits outstanding exposure limit",
+  "scenario": {
+    "agent_id": "agent-exposure-cap-001",
+    "passport_score": 90,
+    "passport_confidence": 0.85,
+    "existing_outstanding_exposure_usd": 4500,
+    "commitment_amount_usd": 1000,
+    "expected_tier": "A",
+    "expected_allowed": false,
+    "expected_reason_codes": ["OUTSTANDING_EXPOSURE_EXCEEDED"],
+    "expected_required_collateral_usd": 1000
+  },
+  "credit_terms": {
+    "tier": "A",
+    "max_outstanding_exposure_usd": 5000,
+    "max_per_intent_usd": 2000,
+    "max_per_counterparty_usd": 1000,
+    "collateral_ratio": 0.2,
+    "required_escrow": false
+  },
+  "calculation": {
+    "required_collateral_usd": 200,
+    "credit_exposure_usd": 800,
+    "new_outstanding_usd": 5300,
+    "max_allowed": 5000,
+    "exceeds_by": 300
+  },
+  "evidence_refs": [
+    "credit_tier:agent-exposure-cap-001:A",
+    "credit_decision:agent-exposure-cap-001:DENIED",
+    "credit_denial_reason:OUTSTANDING_EXPOSURE_EXCEEDED",
+    "credit_required_collateral:1000",
+    "credit_exposure:800",
+    "credit_outstanding_after:5300",
+    "credit_max_outstanding:5000"
+  ],
+  "failure_event": {
+    "code": "PACT-101",
+    "stage": "commitment",
+    "fault_domain": "policy",
+    "terminality": "terminal",
+    "evidence_refs": [
+      "credit_decision:agent-exposure-cap-001:transcript-hash",
+      "credit_denial:OUTSTANDING_EXPOSURE_EXCEEDED"
+    ]
+  }
+}

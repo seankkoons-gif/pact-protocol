@@ -1,0 +1,47 @@
+{
+  "transcript_version": "pact-transcript/4.0",
+  "transcript_id": "transcript-a9a6749d689cee03ec7ed8bafd10cfbedef6631c046ec89db3fc1d69706615a6",
+  "intent_id": "intent-pact505-test",
+  "intent_type": "weather.data",
+  "created_at_ms": 1000000000000,
+  "policy_hash": "aaa049f74895f24ca7f38f3db5e11b2d702452c0207c4459d179b8dc8833628d",
+  "strategy_hash": "bfdff987de461bf22ae33537307038b70af9440a9e5f3c7f6e7607239f58224c",
+  "identity_snapshot_hash": "f4edf4b37099e97dd380c24c37496de32c341406c2901bd830d2e35386ca1c37",
+  "rounds": [
+    {
+      "round_number": 0,
+      "round_type": "INTENT",
+      "message_hash": "cdac4ba5b9718480552bea09c7d90cdc8c002c89da3a68dde379c6285b69ea20",
+      "envelope_hash": "cdac4ba5b9718480552bea09c7d90cdc8c002c89da3a68dde379c6285b69ea20",
+      "signature": {
+        "signer_public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+        "signature_b58": "4aBmpkHAno8w5w9uNw6htFWCYjgDuF28SSemGuAUKSH7UefyBECmRymtt4gRk6kmn9Qsp8rYPyCQNDe1WDDkzjxC",
+        "signed_at_ms": 1000000000000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1000000000000,
+      "previous_round_hash": "99397eb8c4a2d6076bb120d7096689eee133480d4fc5e87461006944f5f7e0d3",
+      "agent_id": "buyer",
+      "public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+      "content_summary": {
+        "intent_type": "weather.data"
+      },
+      "round_hash": "b0dad4440d5c0b77eeac6466da1472055bf479e8d465e94d165f13238dac8261"
+    }
+  ],
+  "failure_event": {
+    "code": "PACT-505",
+    "stage": "discovery",
+    "fault_domain": "recursive",
+    "terminality": "terminal",
+    "evidence_refs": [
+      "transcript-a9a6749d689cee03ec7ed8bafd10cfbedef6631c046ec89db3fc1d69706615a6",
+      "b0dad4440d5c0b77eeac6466da1472055bf479e8d465e94d165f13238dac8261",
+      "sub-agent-failure-log-def456",
+      "dependency-error-stack-trace-ghi789"
+    ],
+    "timestamp": 1000000002000,
+    "transcript_hash": "transcript-a9a6749d689cee03ec7ed8bafd10cfbedef6631c046ec89db3fc1d69706615a6"
+  },
+  "final_hash": "e32f9b904118093fb58a0bbd30e13731d37c63bfb8361c9fe15f602a75092fcd"
+}

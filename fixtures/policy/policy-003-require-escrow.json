@@ -1,0 +1,14 @@
+{
+  "policy_version": "pact-policy/4.0",
+  "policy_id": "policy-003-require-escrow",
+  "rules": [
+    {
+      "name": "require_escrow",
+      "condition": {
+        "field": "settlement_mode",
+        "operator": "==",
+        "value": "escrow"
+      }
+    }
+  ]
+}

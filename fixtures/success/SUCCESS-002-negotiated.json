@@ -1,0 +1,113 @@
+{
+  "transcript_version": "pact-transcript/4.0",
+  "transcript_id": "transcript-14a59096824efff43db2fb1bc35026cbe2bd92e2e8f9a4138051d292664203b8",
+  "intent_id": "intent-success2-test",
+  "intent_type": "weather.data",
+  "created_at_ms": 1000001000000,
+  "policy_hash": "aaa049f74895f24ca7f38f3db5e11b2d702452c0207c4459d179b8dc8833628d",
+  "strategy_hash": "bfdff987de461bf22ae33537307038b70af9440a9e5f3c7f6e7607239f58224c",
+  "identity_snapshot_hash": "f4edf4b37099e97dd380c24c37496de32c341406c2901bd830d2e35386ca1c37",
+  "rounds": [
+    {
+      "round_number": 0,
+      "round_type": "INTENT",
+      "message_hash": "64bf3622557e852cbc8bc7d5dff15691cf15b7ce6e043a07345f05004038a0d3",
+      "envelope_hash": "64bf3622557e852cbc8bc7d5dff15691cf15b7ce6e043a07345f05004038a0d3",
+      "signature": {
+        "signer_public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+        "signature_b58": "5g84mGZjAm8XmL623MR5pkc8Z8b5bvaHsLzmoNMfT9AA4vmrnJG3w8EBWQgNufEP2ig28jJMwqZpGDK7DvrEzDpU",
+        "signed_at_ms": 1000001000000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1000001000000,
+      "previous_round_hash": "d1a7de6d4e654289442692550dcb17f723a40bb881c327efd74c98d002e46b3b",
+      "agent_id": "buyer",
+      "public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+      "content_summary": {
+        "intent_type": "weather.data"
+      },
+      "round_hash": "7a1bfd8669ccb5385366d7e00ee13387a8c310ce506d32c6327b55d2ad42048a"
+    },
+    {
+      "round_number": 1,
+      "round_type": "ASK",
+      "message_hash": "1513990edd6b46c5ce8a6fb797f83b0299df3f35971dc47a9e57b833918609ac",
+      "envelope_hash": "1513990edd6b46c5ce8a6fb797f83b0299df3f35971dc47a9e57b833918609ac",
+      "signature": {
+        "signer_public_key_b58": "HBUkwmmQVFX3mGF6ris1mWDATY27nAupX6wQNXgJD9j9",
+        "signature_b58": "4iobihjM2LmynMi6gCJQ31suPMDneFDANerWQhBvxGZLJCi4crS7B7vhQBMuHrhRR7qvbFiwVnoHKhPDSCK4jYii",
+        "signed_at_ms": 1000001001000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1000001001000,
+      "previous_round_hash": "7a1bfd8669ccb5385366d7e00ee13387a8c310ce506d32c6327b55d2ad42048a",
+      "agent_id": "seller",
+      "public_key_b58": "HBUkwmmQVFX3mGF6ris1mWDATY27nAupX6wQNXgJD9j9",
+      "content_summary": {
+        "price": 0.0001
+      },
+      "round_hash": "e25f9155a2b21e5483f3fb8ef91a4a45db273c9475469979aa0b22361a1f7734"
+    },
+    {
+      "round_number": 2,
+      "round_type": "BID",
+      "message_hash": "1338827967d0c2f9290d7bdf6329fc97d08eb82ccd97deb2d7669caa22fb549c",
+      "envelope_hash": "1338827967d0c2f9290d7bdf6329fc97d08eb82ccd97deb2d7669caa22fb549c",
+      "signature": {
+        "signer_public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+        "signature_b58": "4LCjtU7SV7RXvCH8WfT2GPa99N3tyeCY7SvpQvYMcBrJS3XHjQwbHaPfArMYQSsDBrrV6hUQPqxPa56G88BvkoEK",
+        "signed_at_ms": 1000001002000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1000001002000,
+      "previous_round_hash": "e25f9155a2b21e5483f3fb8ef91a4a45db273c9475469979aa0b22361a1f7734",
+      "agent_id": "buyer",
+      "public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+      "content_summary": {
+        "price": 0.00008
+      },
+      "round_hash": "5d89ff2afd7ed14ad176bd106bfbf4f5cdc3902950d88ddeea3b6c5aeb5883f2"
+    },
+    {
+      "round_number": 3,
+      "round_type": "COUNTER",
+      "message_hash": "aa8bd6071f3a3b2697b0aac28172825eb9238c8fbfc21f86fef247852147c553",
+      "envelope_hash": "aa8bd6071f3a3b2697b0aac28172825eb9238c8fbfc21f86fef247852147c553",
+      "signature": {
+        "signer_public_key_b58": "HBUkwmmQVFX3mGF6ris1mWDATY27nAupX6wQNXgJD9j9",
+        "signature_b58": "i8qisTvWyYEHVF7cE7oHjmwqG5Y7sLmNckkAtLaKP7VZYaP6kjxFsL6o3xKC6NgRpFco1i2Xm8tNgtYZizpW5YL",
+        "signed_at_ms": 1000001003000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1000001003000,
+      "previous_round_hash": "5d89ff2afd7ed14ad176bd106bfbf4f5cdc3902950d88ddeea3b6c5aeb5883f2",
+      "agent_id": "seller",
+      "public_key_b58": "HBUkwmmQVFX3mGF6ris1mWDATY27nAupX6wQNXgJD9j9",
+      "content_summary": {
+        "price": 0.00009
+      },
+      "round_hash": "18aa597ee8d1ed97c7c1ae5557c74229b31aa7f575ee001d2af87e8e3b66d464"
+    },
+    {
+      "round_number": 4,
+      "round_type": "ACCEPT",
+      "message_hash": "e85d02097350c3e75813244a487dec7d4c7d37926de5bcd5463b8a1dec507df4",
+      "envelope_hash": "e85d02097350c3e75813244a487dec7d4c7d37926de5bcd5463b8a1dec507df4",
+      "signature": {
+        "signer_public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+        "signature_b58": "5iGmxQrT5ELCoXTWvVMpRnjNztvCcXXPEfnVTf3Vhf3CREcE2CJGp9o84hi4HLxCot5xQhr6bFhWPYPHCNKL3eiD",
+        "signed_at_ms": 1000001004000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1000001004000,
+      "previous_round_hash": "18aa597ee8d1ed97c7c1ae5557c74229b31aa7f575ee001d2af87e8e3b66d464",
+      "agent_id": "buyer",
+      "public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+      "content_summary": {
+        "price": 0.00009
+      },
+      "round_hash": "eee90fe34eba7c5333fb2802f9ad1c625acc1695b02f50f3d1a380b790777d59"
+    }
+  ],
+  "final_hash": "997dd33337d846ffcfd90b56acae5c66daccf1f148d20c4681b54a71b5e2531f"
+}

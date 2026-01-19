@@ -55,7 +55,7 @@ The default seed `"pact-provider-default-seed-v1"` produces a stable `sellerId` 
 pnpm provider-adapter registry:register -- \
   --intent weather.data \
   --pubkey <pubkey_b58> \
-  --endpoint http://127.0.0.1:7777
+  --endpoint http://127.0.0.1:7777  # Replace with actual port if using random port (0)
 
 # List providers
 pnpm provider-adapter registry:list -- \

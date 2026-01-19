@@ -258,10 +258,28 @@ Potential improvements:
 4. **Custom Error Types**: Use typed errors for better error handling
 5. **Monitoring Integration**: Send verification failures to monitoring service
 
+## Replay Verification
+
+When replaying historical transcripts, wallet signature verification failures (`WALLET_VERIFY_FAILED`) are treated as **warnings**, not errors. This is because:
+
+1. **Historical Transcript Formats**: Older transcripts may have been created before wallet signature verification was fully implemented
+2. **Payload Hash Calculation**: The payload hash calculation may have changed over time
+3. **Replay Context**: Wallet signatures are validated during live negotiation, but replay focuses on transcript integrity
+
+Both `CREDENTIAL_EXPIRED` and `WALLET_VERIFY_FAILED` are always warnings in replay verification, even in strict mode:
+
+```bash
+# Warnings for wallet verification failures are expected
+pnpm replay:verify -- .pact/transcripts
+
+# Even in strict mode, wallet failures remain warnings
+pnpm replay:verify --strict -- .pact/transcripts
+```
+
 ## License
 
 [To be determined]
 
 ---
 
-**Note**: Always verify signatures before trusting wallet actions in production.
+**Note**: Always verify signatures before trusting wallet actions in production. In replay verification, wallet signature failures are treated as warnings for historical transcripts.

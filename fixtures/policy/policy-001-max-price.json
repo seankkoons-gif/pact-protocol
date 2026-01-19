@@ -1,0 +1,14 @@
+{
+  "policy_version": "pact-policy/4.0",
+  "policy_id": "policy-001-max-price",
+  "rules": [
+    {
+      "name": "max_price",
+      "condition": {
+        "field": "offer_price",
+        "operator": "<=",
+        "value": 0.05
+      }
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "name": "Credit Denial Due to Low Confidence",
+  "description": "Agent with score 75 but confidence 0.5 falls below Tier B threshold, assigned Tier C (no credit)",
+  "scenario": {
+    "agent_id": "agent-low-confidence-001",
+    "passport_score": 75,
+    "passport_confidence": 0.5,
+    "commitment_amount_usd": 100,
+    "expected_tier": "C",
+    "expected_allowed": false,
+    "expected_reason_codes": ["TIER_TOO_LOW"]
+  },
+  "credit_terms": {
+    "tier": "C",
+    "max_outstanding_exposure_usd": 0,
+    "max_per_intent_usd": 0,
+    "max_per_counterparty_usd": 0,
+    "collateral_ratio": 1.0,
+    "required_escrow": true
+  },
+  "evidence_refs": [
+    "credit_tier:agent-low-confidence-001:C",
+    "credit_decision:agent-low-confidence-001:DENIED",
+    "credit_denial_reason:TIER_TOO_LOW",
+    "credit_required_collateral:100"
+  ],
+  "failure_event": {
+    "code": "PACT-101",
+    "stage": "commitment",
+    "fault_domain": "policy",
+    "terminality": "terminal",
+    "evidence_refs": [
+      "credit_decision:agent-low-confidence-001:transcript-hash",
+      "credit_denial:TIER_TOO_LOW"
+    ]
+  }
+}

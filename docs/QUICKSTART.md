@@ -1,6 +1,8 @@
-# PACT v3 Quickstart
+# PACT Quickstart
 
 Get PACT running from zero to demo in under 5 minutes.
+
+> **v4 is complete and production-ready!** For the latest features (Policy-as-Code, Passport, Evidence Bundles), see [v4/STATUS.md](./v4/STATUS.md) and run `pnpm demo:v4:canonical`. This guide covers v3 (stable and maintained).
 
 ## Clone and install
 
@@ -8,6 +10,9 @@ Get PACT running from zero to demo in under 5 minutes.
 git clone https://github.com/seankkoons-gif/pact_.git
 cd pact
 pnpm install
+
+# Remove any previous transcripts for a clean demo
+rm -rf .pact
 ```
 
 ## Run the canonical demo
@@ -101,15 +106,19 @@ See [`docs/INTEGRATION_ESCROW.md`](./INTEGRATION_ESCROW.md) and [`pact-escrow-ev
 
 ## Replay transcripts
 
-Verify and replay any transcript:
+Replay the most recent transcript:
 
 ```bash
-# Verify transcript integrity
-pnpm replay:verify -- .pact/transcripts/intent-*.json
-
-# Replay transcript (reconstructs negotiation state)
-pnpm pact:replay .pact/transcripts/intent-*.json
+pnpm replay:last
 ```
+
+Verify transcript integrity (strict mode skips pending and treats expired credentials as warnings):
+
+```bash
+pnpm replay:verify --strict --terminal-only -- .pact/transcripts
+```
+
+**Note**: Expired credentials and wallet verification failures are treated as warnings (expected for historical transcripts), not errors.
 
 Transcripts are deterministic: same inputs → same transcript. Use them for debugging, auditing, and training ML models.
 

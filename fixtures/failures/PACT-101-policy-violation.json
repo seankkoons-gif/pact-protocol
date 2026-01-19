@@ -1,0 +1,64 @@
+{
+  "transcript_version": "pact-transcript/4.0",
+  "transcript_id": "transcript-49de44a83bef88f07540e8549f337defd7cd0152c0f462546f30124ae79ef07e",
+  "intent_id": "intent-pact101-test",
+  "intent_type": "weather.data",
+  "created_at_ms": 1000000000000,
+  "policy_hash": "aaa049f74895f24ca7f38f3db5e11b2d702452c0207c4459d179b8dc8833628d",
+  "strategy_hash": "bfdff987de461bf22ae33537307038b70af9440a9e5f3c7f6e7607239f58224c",
+  "identity_snapshot_hash": "f4edf4b37099e97dd380c24c37496de32c341406c2901bd830d2e35386ca1c37",
+  "rounds": [
+    {
+      "round_number": 0,
+      "round_type": "INTENT",
+      "message_hash": "ebfed91c1848f2694d64a7ee93ce8a03aa957ddd1bc670e84d91b64ff13f5a3c",
+      "envelope_hash": "ebfed91c1848f2694d64a7ee93ce8a03aa957ddd1bc670e84d91b64ff13f5a3c",
+      "signature": {
+        "signer_public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+        "signature_b58": "1hQsRfwweTArnnxFGaR3VdYppmpPrZNHwEmwAW7scbpUVHczp5sYi37ubzMG1zsGDDVN9CqG5RysGLftoyw8x91",
+        "signed_at_ms": 1000000000000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1000000000000,
+      "previous_round_hash": "091da9ab0f487dc8b6cb163a50a8d15c524202b85fac98c3af4e4d39a0dd2ccc",
+      "agent_id": "buyer",
+      "public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+      "content_summary": {
+        "intent_type": "weather.data"
+      },
+      "round_hash": "ea3f665200b46a987edc25dc1ae54a842307949b8f15dc2e741d563cd973ef86"
+    },
+    {
+      "round_number": 1,
+      "round_type": "ASK",
+      "message_hash": "b9857bbf689d98c68b58a5e33a8436bd8a2c25d63149c07b7fb77b45490edd14",
+      "envelope_hash": "b9857bbf689d98c68b58a5e33a8436bd8a2c25d63149c07b7fb77b45490edd14",
+      "signature": {
+        "signer_public_key_b58": "HBUkwmmQVFX3mGF6ris1mWDATY27nAupX6wQNXgJD9j9",
+        "signature_b58": "hRziQJSVC5Xs6jq2ncg1bgxViR57BUqSVumXGTUZ6bYKxvNvq3VtWf7KaQPnEdyM7xnTF491ryzRpuvFGujSSyE",
+        "signed_at_ms": 1000000001000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1000000001000,
+      "previous_round_hash": "ea3f665200b46a987edc25dc1ae54a842307949b8f15dc2e741d563cd973ef86",
+      "agent_id": "seller",
+      "public_key_b58": "HBUkwmmQVFX3mGF6ris1mWDATY27nAupX6wQNXgJD9j9",
+      "content_summary": {},
+      "round_hash": "3535bd51fe6657e48c50f95069a3397d288f4029090a496fec0358da72327870"
+    }
+  ],
+  "failure_event": {
+    "code": "PACT-101",
+    "stage": "negotiation",
+    "fault_domain": "policy",
+    "terminality": "terminal",
+    "evidence_refs": [
+      "transcript-49de44a83bef88f07540e8549f337defd7cd0152c0f462546f30124ae79ef07e",
+      "b9857bbf689d98c68b58a5e33a8436bd8a2c25d63149c07b7fb77b45490edd14",
+      "3535bd51fe6657e48c50f95069a3397d288f4029090a496fec0358da72327870"
+    ],
+    "timestamp": 1000000002000,
+    "transcript_hash": "transcript-49de44a83bef88f07540e8549f337defd7cd0152c0f462546f30124ae79ef07e"
+  },
+  "final_hash": "fbd6063237960701e2fcee4fbcb07d8edaa541c3deedc72b90f9eeb8bb05da87"
+}

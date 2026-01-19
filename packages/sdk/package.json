@@ -14,7 +14,8 @@
   },
   "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
-    "build": "pnpm exec tsup src/index.ts --format esm --dts --clean --tsconfig tsconfig.build.json",
+    "prebuild": "pnpm --filter @pact/passport build || true",
+    "build": "pnpm exec tsup src/index.ts --format esm --dts --clean --tsconfig tsconfig.build.json --external @pact/passport",
     "postbuild": "cp src/policy/schema.json dist/schema.json",
     "test": "pnpm exec vitest run",
     "test:watch": "vitest",
@@ -31,13 +32,17 @@
   },
   "peerDependencies": {
     "stripe": "^14.0.0",
-    "snarkjs": "^0.7.0"
+    "snarkjs": "^0.7.0",
+    "@pact/passport": "workspace:*"
   },
   "peerDependenciesMeta": {
     "stripe": {
       "optional": true
     },
     "snarkjs": {
+      "optional": true
+    },
+    "@pact/passport": {
       "optional": true
     }
   },

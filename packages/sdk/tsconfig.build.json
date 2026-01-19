@@ -1,11 +1,12 @@
 {
     "extends": "./tsconfig.json",
     "compilerOptions": {
-      "composite": false,
-      "incremental": false,
-      "tsBuildInfoFile": null,
-      "declaration": true,
-      "declarationMap": false
+        "composite": false,
+        "incremental": false,
+        "tsBuildInfoFile": null,
+        "declaration": true,
+        "declarationMap": false,
+        "skipLibCheck": true
     },
     "files": [],
     "include": ["src/**/*.ts"],

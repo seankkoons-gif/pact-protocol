@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pact-arbiter-decision/4.0/schema.json",
+  "title": "Pact Arbiter Decision Schema v4",
+  "description": "Deterministic, signed decision artifact for Pact v4 arbitration. Designed for legal admissibility and transcript-constrained dispute resolution.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "decision_id",
+    "transcript_hash",
+    "decision",
+    "reason_codes",
+    "evidence_refs",
+    "arbiter_id",
+    "arbiter_pubkey",
+    "issued_at",
+    "signature",
+    "schema_version"
+  ],
+  "properties": {
+    "decision_id": {
+      "type": "string",
+      "pattern": "^decision-[a-f0-9]{64}$",
+      "description": "Unique decision identifier. Format: 'decision-' prefix followed by SHA-256 hash (hex). MUST be deterministic from transcript_hash + arbiter_id + issued_at."
+    },
+    "transcript_hash": {
+      "type": "string",
+      "pattern": "^transcript-[a-f0-9]{64}$",
+      "description": "Exact transcript_id from Pact v4 transcript. MUST match transcript.transcript_id exactly. Used for hash linkage validation."
+    },
+    "decision": {
+      "enum": ["RELEASE", "REFUND", "SPLIT", "REJECT_ARBITRATION"],
+      "description": "Arbiter decision outcome. RELEASE: escrow funds released to provider. REFUND: escrow funds refunded to buyer. SPLIT: escrow funds split between parties (requires amounts field). REJECT_ARBITRATION: arbitration request rejected (insufficient evidence or invalid transcript)."
+    },
+    "amounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Required if decision is 'SPLIT'. Specifies exact amounts per party in escrow currency units.",
+      "required": ["buyer_amount", "provider_amount"],
+      "properties": {
+        "buyer_amount": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Amount refunded to buyer (in escrow currency units)."
+        },
+        "provider_amount": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Amount released to provider (in escrow currency units)."
+        },
+        "currency": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Currency identifier (e.g., 'USD', 'ETH'). MUST match escrow currency."
+        }
+      }
+    },
+    "reason_codes": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Array of canonical reason codes. MUST use enum values from ArbiterReasonCode (NOT free text). Free text may exist only in optional notes field.",
+      "items": {
+        "enum": [
+          "QUALITY_MISMATCH",
+          "SLA_VIOLATION",
+          "POLICY_VIOLATION_CONFIRMED",
+          "PROVIDER_NON_DELIVERY",
+          "BUYER_NON_PAYMENT",
+          "RAIL_TIMEOUT_CONFIRMED",
+          "INSUFFICIENT_EVIDENCE",
+          "IDENTITY_SNAPSHOT_INVALID",
+          "DEADLOCK_CONFIRMED",
+          "RECURSIVE_DEPENDENCY_FAILURE"
+        ],
+        "description": "Canonical reason code enum. Maps deterministically to Pact Failure Taxonomy codes (PACT-xxx)."
+      }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "description": "Array of evidence references pointing to specific transcript sections, receipts, or evidence bundle entries.",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "ref"],
+            "properties": {
+              "type": {
+                "const": "round_hash",
+                "description": "Reference to a specific negotiation round in transcript."
+              },
+              "ref": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "description": "Round hash from transcript (round.round_hash)."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "ref"],
+            "properties": {
+              "type": {
+                "const": "receipt_hash",
+                "description": "Reference to settlement receipt or delivery confirmation."
+              },
+              "ref": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Receipt identifier or hash."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "ref", "section"],
+            "properties": {
+              "type": {
+                "const": "policy_section",
+                "description": "Reference to specific policy section."
+              },
+              "ref": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$",
+                "description": "Policy hash from transcript (policy_hash)."
+              },
+              "section": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Policy section identifier (e.g., 'max_price', 'sla')."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "bundle_id"],
+            "properties": {
+              "type": {
+                "const": "evidence_bundle",
+                "description": "Reference to evidence bundle."
+              },
+              "bundle_id": {
+                "type": "string",
+                "pattern": "^bundle-[a-f0-9]{64}$",
+                "description": "Evidence bundle identifier (bundle_id from bundle manifest)."
+              },
+              "entry_refs": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "description": "Optional array of entry indices from bundle. If omitted, all entries are referenced."
+              }
+            }
+          }
+        ]
+      }
+    },
+    "arbiter_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Arbiter identifier (e.g., 'arbiter-001'). MUST be stable across decisions from same arbiter."
+    },
+    "arbiter_pubkey": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Arbiter's public key for signature verification. Format: base58-encoded Ed25519 public key (or hex if specified)."
+    },
+    "issued_at": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix timestamp (milliseconds) when decision was issued. MUST be after transcript.created_at_ms."
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["signer_public_key_b58", "signature_b58", "signed_at_ms", "scheme"],
+      "description": "Cryptographic signature over canonical serialization of decision (excluding signature field).",
+      "properties": {
+        "signer_public_key_b58": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Public key of signer (base58-encoded Ed25519 public key). MUST match arbiter_pubkey."
+        },
+        "signature_b58": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Cryptographic signature (base58-encoded Ed25519 signature). Computed over canonical JSON serialization of decision (sorted keys, no whitespace, UTF-8 encoded)."
+        },
+        "signed_at_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Unix timestamp (milliseconds) when signature was generated. MUST equal issued_at."
+        },
+        "scheme": {
+          "const": "ed25519",
+          "description": "Signature scheme identifier. Currently only 'ed25519' is supported."
+        }
+      }
+    },
+    "schema_version": {
+      "const": "pact-arbiter-decision/4.0",
+      "description": "Schema version identifier. MUST be 'pact-arbiter-decision/4.0' for v4 decision artifacts."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional free-text notes from arbiter. MUST NOT affect decision validity or deterministic validation. Included for human readability only."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "const": "SPLIT"
+          }
+        }
+      },
+      "then": {
+        "required": ["amounts"]
+      }
+    }
+  ]
+}

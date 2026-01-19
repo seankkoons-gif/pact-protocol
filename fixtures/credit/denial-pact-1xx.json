@@ -1,0 +1,48 @@
+{
+  "name": "Credit Denial Due to Recent PACT-1xx Policy Violation",
+  "description": "Agent with recent PACT-101 violation triggers kill switch, credit denied",
+  "scenario": {
+    "agent_id": "agent-kill-switch-001",
+    "passport_score": 90,
+    "passport_confidence": 0.85,
+    "commitment_amount_usd": 100,
+    "recent_failure": {
+      "code": "PACT-101",
+      "stage": "admission",
+      "fault_domain": "policy",
+      "terminality": "terminal",
+      "ts": "5_days_ago"
+    },
+    "expected_tier": "C",
+    "expected_allowed": false,
+    "expected_reason_codes": ["PACT-1xx_VIOLATION"]
+  },
+  "credit_terms": {
+    "tier": "C",
+    "max_outstanding_exposure_usd": 0,
+    "max_per_intent_usd": 0,
+    "max_per_counterparty_usd": 0,
+    "collateral_ratio": 1.0,
+    "required_escrow": true,
+    "disabled_until": "30_days_from_now",
+    "reason": "PACT-1xx_VIOLATION"
+  },
+  "evidence_refs": [
+    "credit_tier:agent-kill-switch-001:C",
+    "credit_decision:agent-kill-switch-001:DENIED",
+    "credit_denial_reason:PACT-1xx_VIOLATION",
+    "credit_disabled_until:30_days_from_now",
+    "credit_disable_reason:PACT-1xx_VIOLATION",
+    "credit_required_collateral:100"
+  ],
+  "failure_event": {
+    "code": "PACT-101",
+    "stage": "admission",
+    "fault_domain": "policy",
+    "terminality": "terminal",
+    "evidence_refs": [
+      "credit_decision:agent-kill-switch-001:transcript-hash",
+      "credit_denial:PACT-1xx_VIOLATION"
+    ]
+  }
+}

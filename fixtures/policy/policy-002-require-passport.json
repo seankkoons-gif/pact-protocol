@@ -1,0 +1,23 @@
+{
+  "policy_version": "pact-policy/4.0",
+  "policy_id": "policy-002-require-passport",
+  "rules": [
+    {
+      "name": "require_passport",
+      "condition": {
+        "AND": [
+          {
+            "field": "counterparty_passport_score",
+            "operator": ">=",
+            "value": 80
+          },
+          {
+            "field": "counterparty_passport_confidence",
+            "operator": ">=",
+            "value": 0.7
+          }
+        ]
+      }
+    }
+  ]
+}
