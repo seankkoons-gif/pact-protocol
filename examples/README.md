@@ -145,7 +145,7 @@ pnpm replay:verify --strict --terminal-only -- .pact/transcripts
 
 ## Next Steps
 
-- Read [QUICKSTART.md](../docs/QUICKSTART.md) for detailed setup
-- See [BUYER_GUIDE.md](../docs/BUYER_GUIDE.md) for buyer usage
-- See [PROVIDER_GUIDE.md](../docs/PROVIDER_GUIDE.md) for provider setup
+- Read [getting-started/QUICKSTART.md](../docs/getting-started/QUICKSTART.md) for detailed setup
+- See [guides/BUYER_GUIDE.md](../docs/guides/BUYER_GUIDE.md) for buyer usage
+- See [guides/PROVIDER_GUIDE.md](../docs/guides/PROVIDER_GUIDE.md) for provider setup
 

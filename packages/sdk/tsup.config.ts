@@ -6,6 +6,12 @@ export default defineConfig({
   dts: true,
   clean: true,
   tsconfig: "tsconfig.build.json",
+  // Bundle zod and other dependencies (except peer deps)
+  // This ensures the SDK works without requiring dependencies to be installed in consuming projects
+  noExternal: ["zod", "bs58", "ajv", "ajv-formats", "minimist"],
+  // Externalize peer dependencies (they should be provided by the consumer)
+  // Externalize tweetnacl - let Node resolve it at runtime to avoid ESM bundling issues
+  external: ["@pact/passport", "tweetnacl"],
   // Ensure JSON imports are handled
   loader: {
     ".json": "json",

@@ -76,7 +76,7 @@ pnpm replay:v4 .pact/transcripts/transcript-*.json
 pnpm evidence:bundle .pact/transcripts/transcript-*.json --out ./evidence-bundle
 ```
 
-> **Note:** v3 remains stable and maintained. See [v3/GETTING_STARTED.md](./docs/v3/GETTING_STARTED.md) for v3 documentation.
+> **Note:** v3 remains stable and maintained. See [versions/v3/GETTING_STARTED.md](./docs/versions/v3/GETTING_STARTED.md) for v3 documentation.
 
 ---
 
@@ -85,11 +85,11 @@ pnpm evidence:bundle .pact/transcripts/transcript-*.json --out ./evidence-bundle
 ### v4 (Recommended — Complete & Production-Ready)
 
 **Core Features:**
-- **[Pact Boundary Runtime](./docs/v4/POLICY.md)** — Non-bypassable policy enforcement (`pnpm demo:v4:canonical`)
-- **[Policy-as-Code v4](./docs/v4/POLICY.md)** — Deterministic, audit-grade constraint system
-- **[Passport v1](./docs/v4/PASSPORT.md)** — Agent reputation scoring and credit eligibility
-- **[Evidence Bundles](./docs/v4/EVIDENCE_BUNDLE.md)** — Courtroom-grade audit artifacts
-- **[Transcript Redaction](./docs/v4/REDACTION.md)** — Share transcripts across trust boundaries
+- **[Pact Boundary Runtime](./docs/versions/v4/POLICY.md)** — Non-bypassable policy enforcement (`pnpm demo:v4:canonical`)
+- **[Policy-as-Code v4](./docs/versions/v4/POLICY.md)** — Deterministic, audit-grade constraint system
+- **[Passport v1](./docs/versions/v4/PASSPORT.md)** — Agent reputation scoring and credit eligibility
+- **[Evidence Bundles](./docs/versions/v4/EVIDENCE_BUNDLE.md)** — Courtroom-grade audit artifacts
+- **[Transcript Redaction](./docs/versions/v4/REDACTION.md)** — Share transcripts across trust boundaries
 
 **Real-world provider examples:**
 - **[Weather Provider](./examples/providers/weather-provider/)** — Complete `weather.data` provider with deterministic pricing (`pnpm example:provider:weather`)
@@ -98,11 +98,11 @@ pnpm evidence:bundle .pact/transcripts/transcript-*.json --out ./evidence-bundle
 ### v3 (Stable & Maintained)
 
 **Use cases:**
-- **[Negotiate only](./docs/v3/PICK_YOUR_PATH.md#1-negotiate-only-no-money)** — Deterministic negotiation without settlement. See [`examples/v3/01-basic-negotiation.ts`](./examples/v3/01-basic-negotiation.ts).
+- **[Negotiate only](./docs/versions/v3/PICK_YOUR_PATH.md#1-negotiate-only-no-money)** — Deterministic negotiation without settlement. See [`examples/v3/01-basic-negotiation.ts`](./examples/v3/01-basic-negotiation.ts).
 
-- **[Negotiate + settle](./docs/v3/PICK_YOUR_PATH.md#2-negotiate--settle-stripe--escrow)** — Negotiation with real settlement backends (Stripe, escrow). See [`examples/v3/04-stripe-integration.ts`](./examples/v3/04-stripe-integration.ts) or [`docs/INTEGRATION_ESCROW.md`](./docs/INTEGRATION_ESCROW.md).
+- **[Negotiate + settle](./docs/versions/v3/PICK_YOUR_PATH.md#2-negotiate--settle-stripe--escrow)** — Negotiation with real settlement backends (Stripe, escrow). See [`examples/v3/04-stripe-integration.ts`](./examples/v3/04-stripe-integration.ts) or [`docs/integrations/INTEGRATION_ESCROW.md`](./docs/integrations/INTEGRATION_ESCROW.md).
 
-- **[Multi-provider marketplace](./docs/v3/PICK_YOUR_PATH.md#3-multi-provider-marketplace)** — Negotiate with multiple providers and select the best. See [`examples/v3/06-weather-api-agent.ts`](./examples/v3/06-weather-api-agent.ts).
+- **[Multi-provider marketplace](./docs/versions/v3/PICK_YOUR_PATH.md#3-multi-provider-marketplace)** — Negotiate with multiple providers and select the best. See [`examples/v3/06-weather-api-agent.ts`](./examples/v3/06-weather-api-agent.ts).
 
 ---
 
@@ -168,13 +168,13 @@ Pact v4 is the first moment where Pact can truthfully be described as **institut
 - ✅ **Evidence Bundles** — Courtroom-grade audit artifacts
 - ✅ **Transcript Redaction** — Cross-trust-boundary sharing
 
-See [v4/STATUS.md](./docs/v4/STATUS.md) for complete feature list.
+See [versions/v4/STATUS.md](./docs/versions/v4/STATUS.md) for complete feature list.
 
-**v3** is stable and maintained — Recommended for production until v4 migration complete. See [v3/GETTING_STARTED.md](./docs/v3/GETTING_STARTED.md).
+**v3** is stable and maintained — Recommended for production until v4 migration complete. See [versions/v3/GETTING_STARTED.md](./docs/versions/v3/GETTING_STARTED.md).
 
-**v1** is frozen at `v1.7.0-rc6` (read-only, critical fixes only). See [V1_READ_ONLY.md](./docs/V1_READ_ONLY.md) for details.
+**v1** is frozen at `v1.7.0-rc6` (read-only, critical fixes only). See [versions/v1/V1_READ_ONLY.md](./docs/versions/v1/V1_READ_ONLY.md) for details.
 
-**v2** is active development on branch `v2` (architectural reset, breaking changes). See [v2 Architecture](./docs/v2/ARCHITECTURE.md) for design.
+**v2** is active development on branch `v2` (architectural reset, breaking changes). See [versions/v2/ARCHITECTURE.md](./docs/versions/v2/ARCHITECTURE.md) for design.
 
 ---
 
@@ -198,7 +198,7 @@ pnpm replay:v4 .pact/transcripts/transcript-*.json
 pnpm evidence:bundle .pact/transcripts/transcript-*.json --out ./evidence-bundle --view auditor
 ```
 
-See [QUICKSTART.md](./docs/QUICKSTART.md) for a complete walkthrough.
+See [getting-started/QUICKSTART.md](./docs/getting-started/QUICKSTART.md) for a complete walkthrough.
 
 ### Verify Transcripts
 
@@ -222,7 +222,7 @@ pnpm replay:verify --no-historical --historical-days 7 -- .pact/transcripts
 
 ## Public API
 
-PACT v4 provides a **complete, production-ready API** for institution-grade autonomous commerce. See [v4/STATUS.md](./docs/v4/STATUS.md) for complete feature list.
+PACT v4 provides a **complete, production-ready API** for institution-grade autonomous commerce. See [versions/v4/STATUS.md](./docs/versions/v4/STATUS.md) for complete feature list.
 
 **v4 API (Recommended):**
 - `runInPactBoundary()` — Non-bypassable policy enforcement
@@ -236,7 +236,7 @@ PACT v4 provides a **complete, production-ready API** for institution-grade auto
 - `SettlementProvider` — Interface for settlement execution
 - `replayTranscript()` / `verifyTranscriptFile()` — Transcript validation
 
-See [V1_CONTRACT.md](./V1_CONTRACT.md) for v1 API stability guarantees.
+See [V1_CONTRACT.md](./docs/versions/v1/V1_CONTRACT.md) for v1 API stability guarantees.
 
 ### Optional Dependencies
 
@@ -259,44 +259,44 @@ Without these packages, PACT uses boundary mode (clear errors, no external calls
 ### Documentation
 
 **Getting Started:**
-- **[QUICKSTART.md](./docs/QUICKSTART.md)** — Get started in <10 minutes
-- **[v4/STATUS.md](./docs/v4/STATUS.md)** — v4 Status (COMPLETE ✅ — Institution-grade infrastructure)
-- **[v3/GETTING_STARTED.md](./docs/v3/GETTING_STARTED.md)** — v3 Getting Started Guide
-- **[v3/RELEASE_NOTES.md](./docs/v3/RELEASE_NOTES.md)** — v3 Release Notes (what's new, optional, experimental)
-- **[WHY_PACT.md](./docs/WHY_PACT.md)** — Why PACT exists and what problems it solves
+- **[getting-started/QUICKSTART.md](./docs/getting-started/QUICKSTART.md)** — Get started in <10 minutes
+- **[versions/v4/STATUS.md](./docs/versions/v4/STATUS.md)** — v4 Status (COMPLETE ✅ — Institution-grade infrastructure)
+- **[versions/v3/GETTING_STARTED.md](./docs/versions/v3/GETTING_STARTED.md)** — v3 Getting Started Guide
+- **[versions/v3/RELEASE_NOTES.md](./docs/versions/v3/RELEASE_NOTES.md)** — v3 Release Notes (what's new, optional, experimental)
+- **[reference/WHY_PACT.md](./docs/reference/WHY_PACT.md)** — Why PACT exists and what problems it solves
 
 **v4 Features:**
-- **[v4/STATUS.md](./docs/v4/STATUS.md)** — v4 Status (COMPLETE ✅ — Institution-grade infrastructure)
-- **[v4/USE_CASES.md](./docs/v4/USE_CASES.md)** — Use cases enabled by Pact v4
-- **[v4/POLICY.md](./docs/v4/POLICY.md)** — Policy-as-Code v4 (deterministic constraint system)
-- **[v4/PASSPORT.md](./docs/v4/PASSPORT.md)** — Passport v1 (agent reputation scoring)
-- **[v4/CREDIT.md](./docs/v4/CREDIT.md)** — Credit v1 (undercollateralized commitments)
-- **[v4/ARBITRATION.md](./docs/v4/ARBITRATION.md)** — Arbitration (transcript-constrained dispute resolution)
-- **[v4/EVIDENCE_BUNDLE.md](./docs/v4/EVIDENCE_BUNDLE.md)** — Evidence Bundles (courtroom-grade audit artifacts)
-- **[v4/REDACTION.md](./docs/v4/REDACTION.md)** — Transcript Redaction (cross-trust-boundary sharing)
-- **[v4/FAILURE_TAXONOMY.md](./docs/v4/FAILURE_TAXONOMY.md)** — Failure Taxonomy (canonical error classification)
+- **[versions/v4/STATUS.md](./docs/versions/v4/STATUS.md)** — v4 Status (COMPLETE ✅ — Institution-grade infrastructure)
+- **[versions/v4/USE_CASES.md](./docs/versions/v4/USE_CASES.md)** — Use cases enabled by Pact v4
+- **[versions/v4/POLICY.md](./docs/versions/v4/POLICY.md)** — Policy-as-Code v4 (deterministic constraint system)
+- **[versions/v4/PASSPORT.md](./docs/versions/v4/PASSPORT.md)** — Passport v1 (agent reputation scoring)
+- **[versions/v4/CREDIT.md](./docs/versions/v4/CREDIT.md)** — Credit v1 (undercollateralized commitments)
+- **[versions/v4/ARBITRATION.md](./docs/versions/v4/ARBITRATION.md)** — Arbitration (transcript-constrained dispute resolution)
+- **[versions/v4/EVIDENCE_BUNDLE.md](./docs/versions/v4/EVIDENCE_BUNDLE.md)** — Evidence Bundles (courtroom-grade audit artifacts)
+- **[versions/v4/REDACTION.md](./docs/versions/v4/REDACTION.md)** — Transcript Redaction (cross-trust-boundary sharing)
+- **[versions/v4/FAILURE_TAXONOMY.md](./docs/versions/v4/FAILURE_TAXONOMY.md)** — Failure Taxonomy (canonical error classification)
 
 **Integration Guides:**
-- **[INTEGRATION_ESCROW.md](./docs/INTEGRATION_ESCROW.md)** — EVM escrow contract integration
-- **[WALLET_VERIFICATION.md](./docs/WALLET_VERIFICATION.md)** — Wallet signature verification
-- **[INTEGRATION_STRIPE_LIVE.md](./docs/INTEGRATION_STRIPE_LIVE.md)** — Stripe integration
-- **[INTEGRATION_ZK_KYA.md](./docs/INTEGRATION_ZK_KYA.md)** — ZK-KYA external integration
+- **[integrations/INTEGRATION_ESCROW.md](./docs/integrations/INTEGRATION_ESCROW.md)** — EVM escrow contract integration
+- **[integrations/WALLET_VERIFICATION.md](./docs/integrations/WALLET_VERIFICATION.md)** — Wallet signature verification
+- **[integrations/INTEGRATION_STRIPE_LIVE.md](./docs/integrations/INTEGRATION_STRIPE_LIVE.md)** — Stripe integration
+- **[integrations/INTEGRATION_ZK_KYA.md](./docs/integrations/INTEGRATION_ZK_KYA.md)** — ZK-KYA external integration
 
 **Distribution & Publishing:**
-- **[DISTRIBUTION.md](./docs/DISTRIBUTION.md)** — How to share, install, and distribute PACT
-- **[NPM_PUBLISHING.md](./docs/NPM_PUBLISHING.md)** — npm publishing guide
+- **[distribution/DISTRIBUTION.md](./docs/distribution/DISTRIBUTION.md)** — How to share, install, and distribute PACT
+- **[distribution/NPM_PUBLISHING.md](./docs/distribution/NPM_PUBLISHING.md)** — npm publishing guide
 
 **Architecture & Security:**
-- **[EXECUTION_BOUNDARY.md](./docs/EXECUTION_BOUNDARY.md)** — Execution boundary architecture
-- **[SECURITY_MODEL.md](./docs/SECURITY_MODEL.md)** — Security model and practices
-- **[ERROR_HANDLING.md](./docs/ERROR_HANDLING.md)** — Error handling patterns and edge cases
-- **[PERFORMANCE.md](./docs/PERFORMANCE.md)** — Performance considerations and optimization
+- **[integrations/EXECUTION_BOUNDARY.md](./docs/integrations/EXECUTION_BOUNDARY.md)** — Execution boundary architecture
+- **[security/SECURITY_MODEL.md](./docs/security/SECURITY_MODEL.md)** — Security model and practices
+- **[architecture/ERROR_HANDLING.md](./docs/architecture/ERROR_HANDLING.md)** — Error handling patterns and edge cases
+- **[architecture/PERFORMANCE.md](./docs/architecture/PERFORMANCE.md)** — Performance considerations and optimization
 
 **Reference:**
 - **[DOCUMENTATION_INDEX.md](./docs/DOCUMENTATION_INDEX.md)** — Complete documentation index
-- **[V1_CONTRACT.md](./V1_CONTRACT.md)** — API stability guarantees and contract
-- **[PROTOCOL.md](./PROTOCOL.md)** — Protocol semantics and behavior
-- **[v2/V2_FOUNDATION.md](./docs/v2/V2_FOUNDATION.md)** — v2 features foundation and roadmap
+- **[V1_CONTRACT.md](./docs/versions/v1/V1_CONTRACT.md)** — API stability guarantees and contract
+- **[PROTOCOL.md](./docs/reference/PROTOCOL.md)** — Protocol semantics and behavior
+- **[versions/v2/V2_FOUNDATION.md](./docs/versions/v2/V2_FOUNDATION.md)** — v2 features foundation and roadmap
 - **[examples/](./examples/)** — Working code examples
 
 ### Stable Entrypoints
@@ -357,7 +357,7 @@ Evidence bundles enable sharing transcripts across trust boundaries while preser
 
 ## Settlement
 
-PACT is **payment-rail agnostic**. The settlement interface can be implemented by custodial wallets, on-chain smart contracts, payment processors, or mock providers (default). See [V1_5.md](./V1_5.md#settlement-seams-v155) for details.
+PACT is **payment-rail agnostic**. The settlement interface can be implemented by custodial wallets, on-chain smart contracts, payment processors, or mock providers (default). See [V1_5.md](./docs/versions/v1/V1_5.md#settlement-seams-v155) for details.
 
 ## Settlement Modes
 

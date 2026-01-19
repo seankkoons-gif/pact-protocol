@@ -2,7 +2,7 @@
 
 This guide explains how to run and configure PACT providers using the `@pact/provider-adapter` package.
 
-> **v4 is complete and production-ready!** For v4 features (Policy-as-Code, Boundary Runtime, Evidence Bundles), see [v4/STATUS.md](./v4/STATUS.md). This guide covers v3 (stable and maintained).
+> **v4 is complete and production-ready!** For v4 features (Policy-as-Code, Boundary Runtime, Evidence Bundles), see [versions/v4/STATUS.md](../versions/v4/STATUS.md). This guide covers v3 (stable and maintained).
 
 ## What is provider-adapter?
 
@@ -216,7 +216,7 @@ If a buyer's ZK-KYA proof fails validation, `acquire()` returns:
 - `ZK_KYA_TIER_TOO_LOW`: Trust tier below required minimum
 - `ZK_KYA_ISSUER_NOT_ALLOWED`: Issuer not in allowed list
 
-See [ZK-KYA Documentation](./ZK_KYA.md) for detailed information about proof structure, hashing rules, and security considerations.
+See [ZK-KYA Documentation](../security/ZK_KYA.md) for detailed information about proof structure, hashing rules, and security considerations.
 
 ## Troubleshooting
 
@@ -263,9 +263,9 @@ See [ZK-KYA Documentation](./ZK_KYA.md) for detailed information about proof str
 
 ## Next Steps
 
-- See [QUICKSTART.md](./QUICKSTART.md) for end-to-end examples
+- See [getting-started/QUICKSTART.md](../getting-started/QUICKSTART.md) for end-to-end examples
 - See [BUYER_GUIDE.md](./BUYER_GUIDE.md) for buyer-side usage
-- Check [PROTOCOL.md](../PROTOCOL.md) for protocol details
+- Check [PROTOCOL.md](../reference/PROTOCOL.md) for protocol details
 
 
 

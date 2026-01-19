@@ -71,7 +71,7 @@ These guarantees exist so that:
 > Responsibility is computable, not inferred.
 
 **Evidence:**
-- Failure taxonomy (`docs/v4/FAILURE_TAXONOMY.md`) defines canonical codes
+- Failure taxonomy (`docs/versions/v4/FAILURE_TAXONOMY.md`) defines canonical codes
 - Each failure code maps to unambiguous fault domain and stage
 - Evidence references enable independent verification
 - Failure events are embedded in transcripts (immutable)

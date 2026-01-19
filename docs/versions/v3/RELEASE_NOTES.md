@@ -24,8 +24,8 @@
 - SDK provides negotiation; integrators choose execution backend (on-chain escrow, payment processors, or custom)
 
 **Production Documentation:**
-- `docs/ERROR_HANDLING.md` - Error handling patterns and edge cases
-- `docs/PERFORMANCE.md` - Performance considerations and optimization strategies
+- `docs/architecture/ERROR_HANDLING.md` - Error handling patterns and edge cases
+- `docs/architecture/PERFORMANCE.md` - Performance considerations and optimization strategies
 
 **CI/CD Integration:**
 - Automated testing with/without optional dependencies
@@ -141,11 +141,11 @@ pnpm example:v3:06
 
 ## Documentation
 
-- **[v3/GETTING_STARTED.md](./v3/GETTING_STARTED.md)** - Getting started guide
-- **[INTEGRATION_STRIPE_LIVE.md](../INTEGRATION_STRIPE_LIVE.md)** - Stripe integration guide
-- **[INTEGRATION_ZK_KYA.md](../INTEGRATION_ZK_KYA.md)** - ZK-KYA integration guide
-- **[ERROR_HANDLING.md](../ERROR_HANDLING.md)** - Error handling patterns
-- **[PERFORMANCE.md](../PERFORMANCE.md)** - Performance optimization
+- **[versions/v3/GETTING_STARTED.md](./GETTING_STARTED.md)** - Getting started guide
+- **[integrations/INTEGRATION_STRIPE_LIVE.md](../integrations/INTEGRATION_STRIPE_LIVE.md)** - Stripe integration guide
+- **[integrations/INTEGRATION_ZK_KYA.md](../integrations/INTEGRATION_ZK_KYA.md)** - ZK-KYA integration guide
+- **[architecture/ERROR_HANDLING.md](../architecture/ERROR_HANDLING.md)** - Error handling patterns
+- **[architecture/PERFORMANCE.md](../architecture/PERFORMANCE.md)** - Performance optimization
 
 ---
 

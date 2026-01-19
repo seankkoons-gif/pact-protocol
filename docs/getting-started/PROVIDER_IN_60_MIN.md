@@ -2,7 +2,7 @@
 
 Build a PACT provider from scratch. No databases, minimal dependencies.
 
-> **v4 is complete and production-ready!** This guide covers v4 (recommended). For v3 (stable and maintained), see [v3/GETTING_STARTED.md](./v3/GETTING_STARTED.md).
+> **v4 is complete and production-ready!** This guide covers v4 (recommended). For v3 (stable and maintained), see [versions/v3/GETTING_STARTED.md](../versions/v3/GETTING_STARTED.md).
 
 ## Start a provider server
 

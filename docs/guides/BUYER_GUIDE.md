@@ -2,7 +2,7 @@
 
 This guide explains how to use PACT as a buyer to acquire services from providers.
 
-> **v4 is complete and production-ready!** For v4 features (Policy-as-Code, Boundary Runtime, Passport, Credit), see [v4/STATUS.md](./v4/STATUS.md). This guide covers v3 (stable and maintained).
+> **v4 is complete and production-ready!** For v4 features (Policy-as-Code, Boundary Runtime, Passport, Credit), see [versions/v4/STATUS.md](../versions/v4/STATUS.md). This guide covers v3 (stable and maintained).
 
 ## Minimal acquire() Usage
 
@@ -139,7 +139,7 @@ const result = await acquire({
 - `ZK_KYA_TIER_TOO_LOW`: Trust tier below required minimum
 - `ZK_KYA_ISSUER_NOT_ALLOWED`: Issuer not in allowed list
 
-See [ZK-KYA Documentation](./ZK_KYA.md) for detailed information about proof structure, hashing rules, and security considerations.
+See [ZK-KYA Documentation](../security/ZK_KYA.md) for detailed information about proof structure, hashing rules, and security considerations.
 
 ## Settlement Providers
 
@@ -342,9 +342,9 @@ The reconcile function:
 
 ## Next Steps
 
-- See [QUICKSTART.md](./QUICKSTART.md) for end-to-end examples
+- See [getting-started/QUICKSTART.md](../getting-started/QUICKSTART.md) for end-to-end examples
 - See [PROVIDER_GUIDE.md](./PROVIDER_GUIDE.md) for provider setup
-- Check [PROTOCOL.md](../PROTOCOL.md) for protocol details
+- Check [PROTOCOL.md](../reference/PROTOCOL.md) for protocol details
 - Explore [examples/](../examples/) for working code
 
 

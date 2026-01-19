@@ -114,7 +114,7 @@ Pre-publication validation checklist for Pact v3. Complete each section before p
 ### Core Documentation
 
 - [ ] **Getting Started guide**
-  - `docs/v3/GETTING_STARTED.md` exists and is current
+  - `docs/versions/v3/GETTING_STARTED.md` exists and is current
   - Installation instructions verified
   - Quick start example runs successfully
 
@@ -124,29 +124,29 @@ Pre-publication validation checklist for Pact v3. Complete each section before p
   - Usage examples for key APIs (`acquire()`, `createDefaultPolicy()`, etc.)
 
 - [ ] **Release Notes**
-  - `docs/v3/RELEASE_NOTES.md` summarizes v3 features
+  - `docs/versions/v3/RELEASE_NOTES.md` summarizes v3 features
   - "What's New", "What's Optional", "What's Experimental" sections clear
   - Links to examples and detailed docs
 
 - [ ] **Pick Your Path guide**
-  - `docs/v3/PICK_YOUR_PATH.md` helps developers choose adoption path
+  - `docs/versions/v3/PICK_YOUR_PATH.md` helps developers choose adoption path
   - Code snippets are accurate and runnable
   - Links to full examples are valid
 
 ### Integration Guides
 
 - [ ] **Stripe integration**
-  - `docs/INTEGRATION_STRIPE_LIVE.md` documents Stripe settlement
+  - `docs/integrations/INTEGRATION_STRIPE_LIVE.md` documents Stripe settlement
   - Configuration examples work
   - Optional dependency installation instructions clear
 
 - [ ] **ZK-KYA integration**
-  - `docs/INTEGRATION_ZK_KYA.md` documents ZK proof verification
+  - `docs/integrations/INTEGRATION_ZK_KYA.md` documents ZK proof verification
   - External integration interface documented
   - Optional dependency handling explained
 
 - [ ] **Escrow integration**
-  - `docs/INTEGRATION_ESCROW.md` documents EVM escrow contract
+  - `docs/integrations/INTEGRATION_ESCROW.md` documents EVM escrow contract
   - Security features (ReentrancyGuard, authorization) documented
   - Separate package status clarified
 
@@ -158,12 +158,12 @@ Pre-publication validation checklist for Pact v3. Complete each section before p
   - Documentation is organized by user journey
 
 - [ ] **Error handling guide**
-  - `docs/ERROR_HANDLING.md` covers common error scenarios
+  - `docs/architecture/ERROR_HANDLING.md` covers common error scenarios
   - Retry logic and error recovery documented
   - Network failure handling explained
 
 - [ ] **Performance guide**
-  - `docs/PERFORMANCE.md` covers optimization strategies
+  - `docs/architecture/PERFORMANCE.md` covers optimization strategies
   - Memory and network considerations documented
   - Benchmarking guidelines provided
 

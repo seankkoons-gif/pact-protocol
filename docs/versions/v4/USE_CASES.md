@@ -14,6 +14,8 @@ This document describes the use cases that Pact v4 enables. Because Pact exists,
 
 **Example:** An enterprise agent that procures cloud compute resources, negotiating price and SLA terms while staying within budget and compliance policies.
 
+**Canonical Flow:** See [Autonomous API Procurement Flow](./use_cases/AUTONOMOUS_API_PROCUREMENT.md) for the complete end-to-end flow specification.
+
 ## Agent-to-Agent Marketplaces
 
 **What it is:** Marketplaces where agents negotiate directly without centralized order books.

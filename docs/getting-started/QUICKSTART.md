@@ -2,7 +2,7 @@
 
 Get PACT running from zero to demo in under 5 minutes.
 
-> **v4 is complete and production-ready!** This guide covers v4 (recommended). For v3 (stable and maintained), see [v3/GETTING_STARTED.md](./v3/GETTING_STARTED.md).
+> **v4 is complete and production-ready!** This guide covers v4 (recommended). For v3 (stable and maintained), see [versions/v3/GETTING_STARTED.md](../versions/v3/GETTING_STARTED.md).
 
 ## Clone and install
 
@@ -103,7 +103,7 @@ const fulfillmentProof = `receipt:${result.receipt.receipt_id}:fulfilled:${resul
 await escrowContract.release(intentId, fulfillmentProof);
 ```
 
-See [`docs/INTEGRATION_ESCROW.md`](./INTEGRATION_ESCROW.md) and [`pact-escrow-evm/`](../pact-escrow-evm/).
+See [`docs/integrations/INTEGRATION_ESCROW.md`](../integrations/INTEGRATION_ESCROW.md) and [`pact-escrow-evm/`](../../pact-escrow-evm/).
 
 ## Replay transcripts
 
@@ -135,8 +135,8 @@ Transcripts are deterministic: same inputs → same transcript. Use them for deb
 
 ## Next steps
 
-- **v4 features**: See [`docs/v4/STATUS.md`](./v4/STATUS.md) for complete feature list
-- **Use cases**: See [`docs/v4/USE_CASES.md`](./v4/USE_CASES.md) for what you can build
+- **v4 features**: See [`docs/versions/v4/STATUS.md`](../versions/v4/STATUS.md) for complete feature list
+- **Use cases**: See [`docs/versions/v4/USE_CASES.md`](../versions/v4/USE_CASES.md) for what you can build
 - **Provider setup**: See [`docs/PROVIDER_IN_60_MIN.md`](./PROVIDER_IN_60_MIN.md)
 - **v3 examples**: Run `pnpm example:v3:01` through `pnpm example:v3:06` (v3 stable and maintained)
-- **Full docs**: See [`docs/v3/GETTING_STARTED.md`](./v3/GETTING_STARTED.md) for v3 documentation
+- **Full docs**: See [`docs/versions/v3/GETTING_STARTED.md`](../versions/v3/GETTING_STARTED.md) for v3 documentation

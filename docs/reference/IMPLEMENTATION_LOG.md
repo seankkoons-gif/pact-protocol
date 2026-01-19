@@ -102,8 +102,8 @@ This file tracks all new implementations and improvements made to PACT for v3 pr
 **Status:** Complete
 
 **Files Created:**
-- `docs/INTEGRATION_ESCROW.md` - Complete escrow integration guide
-- `docs/WALLET_VERIFICATION.md` - Wallet signature verification guide
+- `docs/integrations/INTEGRATION_ESCROW.md` - Complete escrow integration guide
+- `docs/integrations/WALLET_VERIFICATION.md` - Wallet signature verification guide
 
 **Documentation Includes:**
 - Complete API reference for all escrow functions
@@ -218,11 +218,11 @@ pnpm add @pact/sdk @pact/provider-adapter
 
 ### Files Created:
 - `IMPLEMENTATION_LOG.md` - This file (tracking all changes)
-- `docs/INTEGRATION_ESCROW.md` - Escrow integration guide
-- `docs/WALLET_VERIFICATION.md` - Wallet verification guide
-- `docs/NPM_PUBLISHING.md` - npm publishing guide
-- `docs/INTEGRATION_ZK_KYA.md` - ZK-KYA external integration guide
-- `docs/INTEGRATION_STRIPE_LIVE.md` - Stripe Live integration guide
+- `docs/integrations/INTEGRATION_ESCROW.md` - Escrow integration guide
+- `docs/integrations/WALLET_VERIFICATION.md` - Wallet verification guide
+- `docs/distribution/NPM_PUBLISHING.md` - npm publishing guide
+- `docs/integrations/INTEGRATION_ZK_KYA.md` - ZK-KYA external integration guide
+- `docs/integrations/INTEGRATION_STRIPE_LIVE.md` - Stripe Live integration guide
 - `docs/v2/V2_FOUNDATION.md` - v2 features foundation and roadmap
 - `docs/DOCUMENTATION_INDEX.md` - Complete documentation index
 
@@ -373,8 +373,8 @@ All implementations follow production best practices:
 
 **Files Modified:**
 - `README.md`
-- `docs/INTEGRATION_STRIPE_LIVE.md`
-- `docs/INTEGRATION_ZK_KYA.md`
+- `docs/integrations/INTEGRATION_STRIPE_LIVE.md`
+- `docs/integrations/INTEGRATION_ZK_KYA.md`
 
 **Changes:**
 - Added "Optional Dependencies" section to README
@@ -587,7 +587,7 @@ This makes v3 truly complete: not just documentation and implementations, but wo
 #### 11.2 Error Handling and Edge Cases
 
 **Files Created:**
-- `docs/ERROR_HANDLING.md`
+- `docs/architecture/ERROR_HANDLING.md`
 
 **Features:**
 - Comprehensive error handling guide
@@ -624,7 +624,7 @@ This makes v3 truly complete: not just documentation and implementations, but wo
 #### 11.4 Performance Considerations
 
 **Files Created:**
-- `docs/PERFORMANCE.md`
+- `docs/architecture/PERFORMANCE.md`
 
 **Features:**
 - Performance characteristics for negotiation, settlement, ZK-KYA

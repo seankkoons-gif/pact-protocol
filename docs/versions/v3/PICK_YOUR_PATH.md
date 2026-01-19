@@ -57,7 +57,7 @@ const result = await acquire({
 
 **Full examples:**
 - Stripe: [`examples/v3/04-stripe-integration.ts`](../../examples/v3/04-stripe-integration.ts)
-- Escrow: [`docs/INTEGRATION_ESCROW.md`](../INTEGRATION_ESCROW.md)
+- Escrow: [`docs/integrations/INTEGRATION_ESCROW.md`](../integrations/INTEGRATION_ESCROW.md)
 
 ---
 

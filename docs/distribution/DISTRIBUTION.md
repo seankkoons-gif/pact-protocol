@@ -191,8 +191,8 @@ The release gate (`pnpm release:gate`) is the authoritative verification that ev
 
 ## Next Steps
 
-- See [QUICKSTART.md](./QUICKSTART.md) for detailed onboarding
-- See [PROVIDER_GUIDE.md](./PROVIDER_GUIDE.md) for provider setup
-- See [BUYER_GUIDE.md](./BUYER_GUIDE.md) for buyer usage
+- See [getting-started/QUICKSTART.md](../getting-started/QUICKSTART.md) for detailed onboarding
+- See [guides/PROVIDER_GUIDE.md](../guides/PROVIDER_GUIDE.md) for provider setup
+- See [guides/BUYER_GUIDE.md](../guides/BUYER_GUIDE.md) for buyer usage
 - Check [README.md](../README.md) for project overview
 

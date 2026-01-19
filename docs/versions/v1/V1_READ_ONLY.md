@@ -7,9 +7,9 @@ PACT v1 is **feature-complete and frozen** at tag `v1.7.0-rc6`. v1 will receive 
 ## What This Means
 
 - **No new features**: v1's API surface and functionality are locked. New capabilities will be added in v2.
-- **No breaking changes**: v1 maintains backward compatibility within the v1 major version (see [V1_CONTRACT.md](../V1_CONTRACT.md)).
+- **No breaking changes**: v1 maintains backward compatibility within the v1 major version (see [V1_CONTRACT.md](./V1_CONTRACT.md)).
 - **Critical fixes only**: Only security vulnerabilities or critical bugs that prevent v1 from functioning will be addressed.
-- **v2 is an architectural reset**: v2 will break compatibility with v1 APIs. v2 is a new codebase with new primitives (see [v2 Architecture](../v2/ARCHITECTURE.md)).
+- **v2 is an architectural reset**: v2 will break compatibility with v1 APIs. v2 is a new codebase with new primitives (see [versions/v2/ARCHITECTURE.md](../versions/v2/ARCHITECTURE.md)).
 
 ## How to Use v1 Safely
 
@@ -53,8 +53,8 @@ If v1 packages are published to npm (future), pin to the exact version:
 v2 development is active on the `v2` branch. v2 is an architectural reset with:
 
 - **Breaking changes**: v2 APIs are not compatible with v1. Migration guides will be provided.
-- **New primitives**: AgentRuntime, NegotiationSession, SettlementGraph, TranscriptStream, PolicyEngineV2 (see [v2 Architecture](../v2/ARCHITECTURE.md)).
-- **Design discussions**: v2 design is evolving. See [v2 Goals](../v2/GOALS.md) and [v2 Non-Goals](../v2/NON_GOALS.md).
+- **New primitives**: AgentRuntime, NegotiationSession, SettlementGraph, TranscriptStream, PolicyEngineV2 (see [versions/v2/ARCHITECTURE.md](../versions/v2/ARCHITECTURE.md)).
+- **Design discussions**: v2 design is evolving. See [versions/v2/GOALS.md](../versions/v2/GOALS.md) and [versions/v2/NON_GOALS.md](../versions/v2/NON_GOALS.md).
 
 To participate:
 
@@ -65,10 +65,10 @@ To participate:
 
 ## v1 Resources
 
-- **Documentation**: [QUICKSTART.md](./QUICKSTART.md), [PROVIDER_GUIDE.md](./PROVIDER_GUIDE.md), [BUYER_GUIDE.md](./BUYER_GUIDE.md)
-- **API Contract**: [V1_CONTRACT.md](../V1_CONTRACT.md)
-- **Examples**: [examples/](../examples/)
-- **Protocol**: [PROTOCOL.md](../PROTOCOL.md)
+- **Documentation**: [getting-started/QUICKSTART.md](../getting-started/QUICKSTART.md), [guides/PROVIDER_GUIDE.md](../guides/PROVIDER_GUIDE.md), [guides/BUYER_GUIDE.md](../guides/BUYER_GUIDE.md)
+- **API Contract**: [V1_CONTRACT.md](./V1_CONTRACT.md)
+- **Examples**: [examples/](../../examples/)
+- **Protocol**: [PROTOCOL.md](../../reference/PROTOCOL.md)
 
 ## Summary
 

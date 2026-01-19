@@ -87,7 +87,7 @@ interface TerminalSettlementReceipt {
 
 ### 3.2 FailureEvent Tuples
 
-A **FailureEvent** tuple is a structured failure record from the Pact v4 Failure Taxonomy. It MUST conform to the schema defined in `docs/v4/FAILURE_TAXONOMY.md`.
+A **FailureEvent** tuple is a structured failure record from the Pact v4 Failure Taxonomy. It MUST conform to the schema defined in `docs/versions/v4/FAILURE_TAXONOMY.md`.
 
 **Requirements:**
 - Only terminal failures (terminality: "terminal") are scored
