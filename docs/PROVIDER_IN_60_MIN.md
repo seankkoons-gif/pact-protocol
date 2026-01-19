@@ -2,7 +2,7 @@
 
 Build a PACT provider from scratch. No databases, minimal dependencies.
 
-> **v4 is complete!** For v4 features (Policy-as-Code, Boundary Runtime, Evidence Bundles), see [v4/STATUS.md](./v4/STATUS.md). This guide covers v3 (stable and maintained).
+> **v4 is complete and production-ready!** This guide covers v4 (recommended). For v3 (stable and maintained), see [v3/GETTING_STARTED.md](./v3/GETTING_STARTED.md).
 
 ## Start a provider server
 

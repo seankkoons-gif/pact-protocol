@@ -5,10 +5,12 @@ Complete index of all PACT documentation for easy reference.
 ## Quick Start
 
 **New to PACT?** Start here:
-- **[GETTING_STARTED.md](./v3/GETTING_STARTED.md)** - v3 Getting Started Guide
-- **[RELEASE_NOTES.md](./v3/RELEASE_NOTES.md)** - v3 Release Notes (what's new, optional, experimental)
-- **[QUICKSTART.md](./QUICKSTART.md)** - Quick start guide
+- **[QUICKSTART.md](./QUICKSTART.md)** - Quick start guide (v4 recommended)
+- **[v4/STATUS.md](./v4/STATUS.md)** - v4 Status (COMPLETE ✅ — Institution-grade infrastructure)
+- **[v4/USE_CASES.md](./v4/USE_CASES.md)** - Use cases enabled by Pact v4
 - **[WHY_PACT.md](./WHY_PACT.md)** - Why PACT exists and what problems it solves
+- **[v3/GETTING_STARTED.md](./v3/GETTING_STARTED.md)** - v3 Getting Started Guide (stable and maintained)
+- **[v3/RELEASE_NOTES.md](./v3/RELEASE_NOTES.md)** - v3 Release Notes (what's new, optional, experimental)
 
 ## Integration Guides
 
@@ -81,12 +83,25 @@ Complete index of all PACT documentation for easy reference.
 - [INTEGRATION_ZK_KYA.md](./INTEGRATION_ZK_KYA.md) - External ZK integration
 
 ### Policies
-- [v3/GETTING_STARTED.md](./v3/GETTING_STARTED.md) - Policy basics
+- [v4/POLICY.md](./v4/POLICY.md) - Policy-as-Code v4 (deterministic constraint system)
+- [v3/GETTING_STARTED.md](./v3/GETTING_STARTED.md) - Policy basics (v3)
 - [v2/V2_FOUNDATION.md](./v2/V2_FOUNDATION.md) - Executable policies (v2)
 
 ### Transcripts
-- [v3/GETTING_STARTED.md](./v3/GETTING_STARTED.md) - Transcript basics
+- [v4/STATUS.md](./v4/STATUS.md) - v4 Transcripts (Proof of Negotiation, hash-linked)
+- [v3/GETTING_STARTED.md](./v3/GETTING_STARTED.md) - Transcript basics (v3)
 - [v2/V2_FOUNDATION.md](./v2/V2_FOUNDATION.md) - Transcript streams (v2)
+
+### v4 Features
+- [v4/STATUS.md](./v4/STATUS.md) - v4 Status (complete feature list)
+- [v4/USE_CASES.md](./v4/USE_CASES.md) - Use cases enabled by v4
+- [v4/POLICY.md](./v4/POLICY.md) - Policy-as-Code v4
+- [v4/PASSPORT.md](./v4/PASSPORT.md) - Passport v1 (agent reputation)
+- [v4/CREDIT.md](./v4/CREDIT.md) - Credit v1 (undercollateralized commitments)
+- [v4/ARBITRATION.md](./v4/ARBITRATION.md) - Arbitration (transcript-constrained)
+- [v4/EVIDENCE_BUNDLE.md](./v4/EVIDENCE_BUNDLE.md) - Evidence Bundles
+- [v4/REDACTION.md](./v4/REDACTION.md) - Transcript Redaction
+- [v4/FAILURE_TAXONOMY.md](./v4/FAILURE_TAXONOMY.md) - Failure Taxonomy
 
 ### ML & Training
 - [v2/TRAINING_DATA_FORMAT.md](./v2/TRAINING_DATA_FORMAT.md) - Training data format
@@ -98,7 +113,13 @@ Complete index of all PACT documentation for easy reference.
 
 ### Common Tasks
 
-**Getting Started:**
+**Getting Started (v4 recommended):**
+1. Read [QUICKSTART.md](./QUICKSTART.md) and run `pnpm demo:v4:canonical`
+2. Review [v4/STATUS.md](./v4/STATUS.md) for complete feature list
+3. Review [v4/USE_CASES.md](./v4/USE_CASES.md) for use cases
+4. Review [WHY_PACT.md](./WHY_PACT.md) for understanding
+
+**Getting Started (v3):**
 1. Read [GETTING_STARTED.md](./v3/GETTING_STARTED.md)
 2. Run examples: `pnpm example:v3:01`, `pnpm example:v3:02`, `pnpm example:v3:03`
 3. Review [WHY_PACT.md](./WHY_PACT.md) for understanding

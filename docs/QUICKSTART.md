@@ -2,7 +2,7 @@
 
 Get PACT running from zero to demo in under 5 minutes.
 
-> **v4 is complete and production-ready!** For the latest features (Policy-as-Code, Passport, Evidence Bundles), see [v4/STATUS.md](./v4/STATUS.md) and run `pnpm demo:v4:canonical`. This guide covers v3 (stable and maintained).
+> **v4 is complete and production-ready!** This guide covers v4 (recommended). For v3 (stable and maintained), see [v3/GETTING_STARTED.md](./v3/GETTING_STARTED.md).
 
 ## Clone and install
 
@@ -15,32 +15,33 @@ pnpm install
 rm -rf .pact
 ```
 
-## Run the canonical demo
+## Run the canonical demo (v4)
 
 ```bash
-pnpm demo:v3:canonical
+pnpm demo:v4:canonical
 ```
 
-This demo:
-- Generates buyer and seller keypairs
-- Registers a weather data provider
-- Creates receipt history (triggers negotiated regime)
-- Negotiates price using `banded_concession` strategy
-- Saves a complete transcript to `.pact/transcripts/`
-- Uses in-memory settlement (no external dependencies)
+This demo demonstrates:
+- Pact Boundary Runtime (non-bypassable policy enforcement)
+- Policy-as-Code v4 (deterministic evaluation)
+- v4 Transcript (hash-linked, cryptographically verifiable)
+- Evidence embedded (policy hash, evaluation traces)
 
 **What happened:**
-- Buyer declared intent: `weather.data` for NYC with latency/freshness constraints
-- Provider returned quote: price negotiated through banded concession rounds
-- Agreement reached: both parties agreed on final price
-- Settlement coordinated: in-memory balance transfers (boundary mode)
-- Transcript saved: complete audit trail of all decisions
+- Buyer declared intent: `weather.data` for NYC
+- Policy enforced: max_price constraint evaluated before settlement
+- Negotiation rounds: INTENT → ASK → ACCEPT (all signed and hash-linked)
+- Agreement reached: both parties agreed on final price ($0.04, within policy)
+- Transcript saved: complete v4 audit trail with Proof of Negotiation (PoN)
 
 **Expected output:**
 ```
 ✅ Negotiation Complete!
-  Agreed Price: $0.0001
-  Transcript: .pact/transcripts/intent-*.json
+  Agreed Price: $0.04
+  Policy Hash: 356a1323ec60b2d9...
+  Transcript ID: transcript-...
+  Rounds: 3
+  Integrity: VALID
 
 🎉 Demo Complete!
 ```
@@ -134,7 +135,8 @@ Transcripts are deterministic: same inputs → same transcript. Use them for deb
 
 ## Next steps
 
+- **v4 features**: See [`docs/v4/STATUS.md`](./v4/STATUS.md) for complete feature list
+- **Use cases**: See [`docs/v4/USE_CASES.md`](./v4/USE_CASES.md) for what you can build
 - **Provider setup**: See [`docs/PROVIDER_IN_60_MIN.md`](./PROVIDER_IN_60_MIN.md)
-- **Pick your path**: See [`docs/v3/PICK_YOUR_PATH.md`](./v3/PICK_YOUR_PATH.md)
-- **v3 examples**: Run `pnpm example:v3:01` through `pnpm example:v3:06`
-- **Full docs**: See [`docs/v3/GETTING_STARTED.md`](./v3/GETTING_STARTED.md)
+- **v3 examples**: Run `pnpm example:v3:01` through `pnpm example:v3:06` (v3 stable and maintained)
+- **Full docs**: See [`docs/v3/GETTING_STARTED.md`](./v3/GETTING_STARTED.md) for v3 documentation

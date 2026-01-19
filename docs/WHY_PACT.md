@@ -236,9 +236,13 @@ Escrow is essential, but it's an execution detail, not a protocol requirement. P
 
 - **Negotiation**: A protocol for agents to negotiate terms (price, constraints, settlement mode) through structured message types and deterministic flows.
 
-- **Policy**: Executable constraints that define what is acceptable, not what is optimal. Policies are machine-readable, machine-verifiable, and machine-explainable.
+- **Policy**: Executable constraints that define what is acceptable, not what is optimal. Policies are machine-readable, machine-verifiable, and machine-explainable. In v4, policies are enforced by a non-bypassable execution boundary.
 
-- **Transcripts**: Deterministic, replayable, auditable records of negotiation and settlement. Transcripts are the source of truth, not a side effect of execution.
+- **Transcripts**: Deterministic, replayable, auditable records of negotiation and settlement. Transcripts are the source of truth, not a side effect of execution. In v4, transcripts are hash-linked and cryptographically verifiable (Proof of Negotiation).
+
+- **Forensics**: Evidence bundles, failure taxonomy, and arbitration that enable post-hoc analysis and dispute resolution. In v4, evidence is portable across trust boundaries while preserving cryptographic integrity.
+
+- **Reputation & Credit**: Passport v1 provides agent reputation scoring. Credit v1 enables undercollateralized commitments based on reputation. Both are derived from deterministic transcript history.
 
 **PACT is not:**
 
@@ -250,7 +254,61 @@ Escrow is essential, but it's an execution detail, not a protocol requirement. P
 
 - **A payments company**: PACT doesn't move money. It defines how agents agree on terms and coordinate settlement. Settlement execution happens outside PACT.
 
-PACT is a negotiation and coordination layer for autonomous agents. It sits upstream of execution (settlement, delivery) and downstream of intent (what agents want). It doesn't replace markets, chains, wallets, or payment processors. It enables agents to use them safely and verifiably.
+- **A marketplace**: PACT doesn't provide order books, limit orders, or real-time price feeds. It's a deterministic negotiation protocol.
+
+PACT is a coordination, negotiation, and forensic layer for autonomous agents. It sits upstream of execution (settlement, delivery) and downstream of intent (what agents want). It doesn't replace markets, chains, wallets, or payment processors. It enables agents to use them safely and verifiably.
+
+## 8. What Pact v4 Enables (New Capabilities)
+
+Pact v4 introduces capabilities that were not possible before:
+
+**Agents Can Spend Money Without Trusting Themselves**
+
+Before Pact: An agent spends money. If it goes wrong, you inspect logs. Logs are mutable, contextual, and non-authoritative.
+
+With Pact: An agent can only spend money inside a Pact Boundary. Every decision is cryptographically recorded before settlement. If money moves, a PoN transcript exists. If it doesn't exist, money cannot move.
+
+**Negotiation Becomes a First-Class, Verifiable Primitive**
+
+Before Pact: Price is hardcoded, heuristic, or implicit. No record of why a price was chosen.
+
+With Pact: Price discovery is explicit negotiation. Every ASK/BID/COUNTER is recorded and signed. You can audit price formation, prove an agent did not overpay, and detect predatory counterparties.
+
+**Policies Are Now Hard Guarantees, Not Suggestions**
+
+Before Pact: Policies live in app code. Agents can violate them due to bugs, race conditions, or prompt drift.
+
+With Pact: Policy-as-Code is enforced before settlement. Violations halt the transaction. You can promise "This agent will never pay more than $0.05" and prove it.
+
+**Failure Is No Longer Ambiguous — It's Classified**
+
+Before Pact: Failures are strings: "timeout", "error", "exception".
+
+With Pact: Failures are typed events with blame attribution (PACT-101, PACT-202, etc.). You can distinguish who caused a failure, price risk, build insurance, and automate retries correctly.
+
+**Disputes Can Be Resolved Without Humans or Logs**
+
+Before Pact: Disputes require humans reading logs. Logs are incomplete and disputable.
+
+With Pact: Disputes are resolved using only the transcript. Arbiters issue signed decisions constrained by evidence. No trust in narratives—only evidence.
+
+**Agents Now Have Reputation and Credit, Not Just Wallets**
+
+Before Pact: Agents are anonymous wallets. Every transaction requires full collateral.
+
+With Pact: Agents have Passports (history, reliability, failure patterns). Credit can be extended safely. You can allow undercollateralized commitments, deny risky agents automatically, and increase capital velocity.
+
+**Evidence Is Now Portable and Role-Aware**
+
+Before Pact: Logs are internal. Sharing requires trust and context.
+
+With Pact: Evidence bundles are cryptographically sealed. Different views for different audiences (internal, partner, auditor). Each sees exactly what they are allowed to see.
+
+**Time Travel Debugging for Autonomous Systems Exists**
+
+Before Pact: You can't replay decisions. You can only inspect outcomes.
+
+With Pact: You can deterministically replay decisions. You can debug agent behavior post-mortem, explain decisions to humans, train better strategies, and satisfy regulators. This is the "flight recorder" moment.
 
 ---
 
@@ -260,11 +318,17 @@ PACT exists because autonomous agents need a way to negotiate under uncertainty,
 
 PACT provides:
 - A negotiation protocol for agents operating under uncertainty
-- Policy-driven constraints that are verifiable and explainable
-- Transcripts that enable determinism, replayability, and auditability
+- Policy-driven constraints that are verifiable and explainable (enforced by non-bypassable boundary in v4)
+- Transcripts that enable determinism, replayability, and auditability (hash-linked PoN in v4)
 - Bounded ML that enhances negotiation without breaking determinism
 - Pluggable settlement that works with any execution backend
+- Canonical failure taxonomy with blame attribution (v4)
+- Transcript-constrained arbitration with signed decision artifacts (v4)
+- Agent reputation and credit systems (Passport v1, Credit v1)
+- Evidence bundles for cross-trust-boundary sharing (v4)
 
 PACT is not a chain, wallet, market, or payments company. It is a protocol layer that enables agents to negotiate, coordinate, and settle transactions safely and verifiably.
+
+**Pact v4 establishes a new standard**: Institution-grade autonomous commerce infrastructure where agents can spend money without trusting themselves, policies are hard guarantees, failures are classified, disputes are evidence-based, and every decision is replayable and auditable.
 
 If you're building autonomous agents that need to transact with other agents, PACT is the protocol you need. If you're building a chain, wallet, market, or payments company, PACT is the protocol your users need.

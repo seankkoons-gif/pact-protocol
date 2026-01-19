@@ -1,10 +1,11 @@
 # PACT
 
-**PACT** coordinates negotiation, KYA (Know Your Agent) verification, and settlement between autonomous agents.
+**PACT** is a coordination, negotiation, and forensic layer for autonomous agents. It enables agents to transact safely without trusting themselves, their developers, or their runtime—only the transcript.
 
 - **Negotiation**: Deterministic pricing and terms agreement between agents
 - **Identity**: KYA verification with credential validation and cryptographic proof
 - **Settlement**: Payment-rail agnostic coordination for execution boundaries (boundary, Stripe, escrow)
+- **Forensics**: Cryptographically verifiable transcripts, evidence bundles, and replayable decision trails
 
 ```
 Buyer Agent → negotiate → Provider → settle → transcript
@@ -12,7 +13,19 @@ Buyer Agent → negotiate → Provider → settle → transcript
 
 ## For Executives
 
-Pact is a control and audit layer for autonomous spending. It ensures that any AI agent authorized to spend money does so within a deterministic policy boundary, producing cryptographically verifiable records that explain what happened, why it happened, and who is responsible. Pact does not move money or make decisions itself; it enforces constraints, records evidence, and standardizes failure, refund, and dispute resolution across payment rails. The result is that autonomous agents become auditable, insurable, and legally defensible — enabling enterprises to deploy them at scale without losing control.
+Pact is **institution-grade autonomous commerce infrastructure**. It ensures that any AI agent authorized to spend money does so within a deterministic policy boundary, producing cryptographically verifiable records that explain what happened, why it happened, and who is responsible. 
+
+**What Pact enables:**
+- **Agents can spend money without trusting themselves** — Every decision is cryptographically recorded before settlement. If money moves, a Proof of Negotiation (PoN) transcript exists. If it doesn't exist, money cannot move.
+- **Negotiation becomes a first-class, verifiable primitive** — Every ASK/BID/COUNTER is recorded and signed. You can audit price formation, prove an agent did not overpay, and detect predatory counterparties.
+- **Policies are hard guarantees, not suggestions** — Policy-as-Code is enforced before settlement. Violations halt the transaction. You can promise "This agent will never pay more than $0.05" and prove it.
+- **Failure is classified, not ambiguous** — Failures are typed events with blame attribution (PACT-101, PACT-202, etc.). You can distinguish who caused a failure, price risk, build insurance, and automate retries correctly.
+- **Disputes can be resolved without humans or logs** — Disputes are resolved using only the transcript. Arbiters issue signed decisions constrained by evidence. No trust in narratives—only evidence.
+- **Agents have reputation and credit, not just wallets** — Passport v1 provides agent reputation scoring. Credit v1 enables undercollateralized commitments. You can allow trusted agents to commit with reduced escrow.
+- **Evidence is portable and role-aware** — Evidence bundles are cryptographically sealed with different views (internal, partner, auditor). Each audience sees exactly what they are allowed to see.
+- **Time travel debugging exists** — You can deterministically replay decisions. This is the "flight recorder" moment for autonomous systems.
+
+Pact does not move money or make decisions itself; it enforces constraints, records evidence, and standardizes failure, refund, and dispute resolution across payment rails. The result is that autonomous agents become auditable, insurable, and legally defensible — enabling enterprises to deploy them at scale without losing control.
 
 ## Run the canonical demo
 
@@ -111,18 +124,51 @@ Most agent interactions today fail in one of three ways:
 3. No post-hoc explanation of *why* something happened
 
 PACT addresses this by defining:
-- A canonical negotiation flow
+- A canonical negotiation flow with hash-linked, replayable transcripts
 - Multiple settlement modes with explicit guarantees
 - Deterministic receipts and reputation signals
 - Explainable selection and rejection logic
+- Policy-as-Code enforcement (non-bypassable execution boundary)
+- Canonical failure taxonomy with blame attribution
+- Transcript-constrained arbitration with signed decision artifacts
+- Agent reputation and credit systems (Passport v1, Credit v1)
+- Evidence bundles for cross-trust-boundary sharing
 
 If two agents both implement PACT, they can transact **without prior trust**.
+
+## Use Cases
+
+Because Pact exists, developers can build:
+
+- **Autonomous procurement agents** — Agents that negotiate and purchase services autonomously within policy constraints
+- **Agent-to-agent marketplaces** — Marketplaces where agents negotiate directly without centralized order books
+- **SLA-enforced API brokers** — Brokers that enforce service level agreements through policy and evidence
+- **Agent credit systems** — Credit systems that enable undercollateralized commitments based on reputation
+- **Machine insurance products** — Insurance products that price risk based on failure taxonomy and evidence
+- **Compliance-grade AI services** — AI services that produce auditable, legally defensible transaction records
+- **Enterprise agent platforms** — Platforms that enable enterprises to deploy autonomous agents at scale with full auditability
+
+All without building compliance infrastructure themselves.
 
 ---
 
 ## Status
 
-**v4** is **COMPLETE** ✅ — Institution-grade autonomous commerce infrastructure. See [v4/STATUS.md](./docs/v4/STATUS.md) for complete feature list.
+**v4** is **COMPLETE** ✅ — Institution-grade autonomous commerce infrastructure. 
+
+Pact v4 is the first moment where Pact can truthfully be described as **institution-grade autonomous commerce infrastructure**. All core components are implemented, tested, and production-ready:
+
+- ✅ **Proof of Negotiation (PoN)** — Hash-linked, replayable transcripts
+- ✅ **Pact Boundary Runtime** — Non-bypassable policy enforcement
+- ✅ **Policy-as-Code v4** — Deterministic, audit-grade constraint system
+- ✅ **Canonical Failure Taxonomy** — Typed failures with blame attribution
+- ✅ **Arbitration** — Transcript-constrained dispute resolution
+- ✅ **Passport v1** — Agent reputation scoring and credit eligibility
+- ✅ **Credit v1** — Undercollateralized commitments
+- ✅ **Evidence Bundles** — Courtroom-grade audit artifacts
+- ✅ **Transcript Redaction** — Cross-trust-boundary sharing
+
+See [v4/STATUS.md](./docs/v4/STATUS.md) for complete feature list.
 
 **v3** is stable and maintained — Recommended for production until v4 migration complete. See [v3/GETTING_STARTED.md](./docs/v3/GETTING_STARTED.md).
 
@@ -134,36 +180,25 @@ If two agents both implement PACT, they can transact **without prior trust**.
 
 ## Getting Started
 
-### Clone & Checkout
+### Quick Start (v4 Recommended)
 
 ```bash
+# Clone and install
 git clone https://github.com/seankkoons-gif/pact_.git
-cd pact_
-git checkout v1.7.0-rc5
-```
-
-### Install & Verify
-
-```bash
+cd pact
 pnpm install
-pnpm build
-pnpm test
+
+# Run the v4 canonical demo
+pnpm demo:v4:canonical
+
+# Replay the generated transcript
+pnpm replay:v4 .pact/transcripts/transcript-*.json
+
+# Generate an evidence bundle
+pnpm evidence:bundle .pact/transcripts/transcript-*.json --out ./evidence-bundle --view auditor
 ```
 
-### Run Provider (Terminal A)
-
-```bash
-PACT_DEV_IDENTITY_SEED=pact-provider-default-seed-v1 pnpm provider:serve
-```
-
-### Run Examples (Terminal B)
-
-```bash
-pnpm example:happy
-pnpm example:timeout
-pnpm example:dispute
-pnpm example:reconcile
-```
+See [QUICKSTART.md](./docs/QUICKSTART.md) for a complete walkthrough.
 
 ### Verify Transcripts
 
@@ -171,6 +206,7 @@ Strict mode skips pending transcripts and treats expired credentials as warnings
 
 ```bash
 pnpm replay:verify --strict --terminal-only -- .pact/transcripts
+```
 
 To skip historical transcripts (v1/v2 or older than threshold) and avoid expired credential warnings:
 
@@ -181,48 +217,26 @@ pnpm replay:verify --no-historical -- .pact/transcripts
 # Custom threshold (default: 30 days)
 pnpm replay:verify --no-historical --historical-days 7 -- .pact/transcripts
 ```
-```
-
-**If all steps pass, you're synced and ready to go!**
 
 ---
 
 ## Public API
 
-PACT v1.7.2+ provides a **stable public API** with guaranteed backward compatibility within the v1 major version. See [V1_CONTRACT.md](./V1_CONTRACT.md) for complete API stability guarantees.
+PACT v4 provides a **complete, production-ready API** for institution-grade autonomous commerce. See [v4/STATUS.md](./docs/v4/STATUS.md) for complete feature list.
 
-### Quickstart
+**v4 API (Recommended):**
+- `runInPactBoundary()` — Non-bypassable policy enforcement
+- `evaluatePolicy()` — Policy-as-Code evaluation
+- `replayTranscriptV4()` — Transcript verification
+- `evidence:bundle` — Evidence bundle generation
+- `openDispute()` / `resolveDispute()` — Dispute resolution
 
-```bash
-# Install dependencies
-pnpm install
+**v3 API (Stable and maintained):**
+- `acquire()` — Main entrypoint for negotiation and settlement
+- `SettlementProvider` — Interface for settlement execution
+- `replayTranscript()` / `verifyTranscriptFile()` — Transcript validation
 
-# Build packages
-pnpm build
-
-# Run tests
-pnpm test
-
-# Start provider server
-PACT_DEV_IDENTITY_SEED=pact-provider-default-seed-v1 pnpm provider:serve
-
-# Run examples
-pnpm example:happy          # Basic happy path
-pnpm example:timeout        # Streaming with timeout
-pnpm example:dispute        # Dispute resolution
-pnpm example:reconcile      # Reconcile pending settlement
-
-# Run v3 quickstart demo (recommended first step)
-pnpm demo:v3:quickstart     # One-command demo: negotiation + transcripts
-
-# Run v3 examples
-pnpm example:v3:01          # Basic negotiation (no wallets/escrow)
-pnpm example:v3:02          # Wallet + escrow boundary demonstration
-pnpm example:v3:03          # ML-assisted negotiation
-pnpm example:v3:04          # Stripe integration (requires stripe package)
-pnpm example:v3:05          # ZK-KYA verification (requires snarkjs package)
-pnpm example:v3:06          # Weather API agent (multi-provider negotiation)
-```
+See [V1_CONTRACT.md](./V1_CONTRACT.md) for v1 API stability guarantees.
 
 ### Optional Dependencies
 
@@ -252,6 +266,8 @@ Without these packages, PACT uses boundary mode (clear errors, no external calls
 - **[WHY_PACT.md](./docs/WHY_PACT.md)** — Why PACT exists and what problems it solves
 
 **v4 Features:**
+- **[v4/STATUS.md](./docs/v4/STATUS.md)** — v4 Status (COMPLETE ✅ — Institution-grade infrastructure)
+- **[v4/USE_CASES.md](./docs/v4/USE_CASES.md)** — Use cases enabled by Pact v4
 - **[v4/POLICY.md](./docs/v4/POLICY.md)** — Policy-as-Code v4 (deterministic constraint system)
 - **[v4/PASSPORT.md](./docs/v4/PASSPORT.md)** — Passport v1 (agent reputation scoring)
 - **[v4/CREDIT.md](./docs/v4/CREDIT.md)** — Credit v1 (undercollateralized commitments)
@@ -285,17 +301,25 @@ Without these packages, PACT uses boundary mode (clear errors, no external calls
 
 ### Stable Entrypoints
 
+**v4 API (Recommended):**
+- **`runInPactBoundary()`** — Non-bypassable policy enforcement
+- **`evaluatePolicy()`** — Policy-as-Code evaluation
+- **`replayTranscriptV4()`** — v4 transcript verification
+- **`evidence:bundle`** — Evidence bundle generation
+- **`openDispute()` / `resolveDispute()`** — Dispute resolution
+
+**v3 API (Stable and maintained):**
 - **`acquire()`** — Main entrypoint for negotiation and settlement
 - **`SettlementProvider`** — Interface for settlement execution
-- **`openDispute()` / `resolveDispute()`** — Dispute resolution
 - **`reconcile()`** — Reconciliation for pending settlements
 - **`replayTranscript()` / `verifyTranscriptFile()`** — Transcript validation
 
 ### Version Recommendation
 
 For production use, we recommend:
-- **v1.7.2+** — API freeze with stable public entrypoints
-- **v1.6.0-alpha+** — Includes reconciliation and signed dispute decisions
+- **v4** — Complete, production-ready, institution-grade autonomous commerce infrastructure
+- **v3** — Stable and maintained, recommended until v4 migration complete
+- **v1.7.2+** — API freeze with stable public entrypoints (v1 frozen)
 
 See [CHANGELOG.md](./CHANGELOG.md) for detailed version history.
 
@@ -314,11 +338,20 @@ Sellers advertise their capability to satisfy an intent, either:
 
 ### 3. Negotiation
 PACT defines a bounded, deterministic negotiation process:
-- Quotes
-- Acceptance
+- Quotes (ASK/BID/COUNTER)
+- Acceptance (ACCEPT/REJECT)
 - Locking of funds or bonds
 
-No open-ended haggling. No hidden state.
+No open-ended haggling. No hidden state. In v4, every round is hash-linked and cryptographically signed (Proof of Negotiation).
+
+### 4. Policy-as-Code (v4)
+Policies are executable constraints that define what is acceptable, not what is optimal. In v4, policies are enforced by a non-bypassable execution boundary (Pact Boundary Runtime). Violations halt transactions immediately.
+
+### 5. Transcripts (v4)
+Transcripts are deterministic, replayable, auditable records of negotiation and settlement. In v4, transcripts are hash-linked (Proof of Negotiation) and cryptographically verifiable. They are the source of truth, not a side effect of execution.
+
+### 6. Evidence (v4)
+Evidence bundles enable sharing transcripts across trust boundaries while preserving cryptographic integrity. Different views (internal, partner, auditor) show appropriate levels of detail.
 
 ---
 
@@ -362,25 +395,43 @@ Given the same inputs:
 - The same provider is selected
 - The same settlement path is followed
 - The same receipt is produced
+- The same transcript is generated (v4: hash-linked Proof of Negotiation)
 
-The `acquire()` API can optionally return **explanations**, describing:
-- Why providers were rejected
-- Why a winner was selected
-- Which constraints or policies applied
+**v4 Transcripts** are deterministic, replayable, and cryptographically verifiable:
+- Every round is hash-linked (previous_round_hash → round_hash)
+- Every round is cryptographically signed
+- Any tampering breaks verification immediately
+- Replay produces identical results (time travel debugging)
 
-Additionally, `acquire()` can save **transcripts** (v1.5.4+) — complete JSON audit trails of each acquisition, including directory, credential checks, quotes, selection, settlement, and receipt. Enable with `saveTranscript: true`.
+**v4 Policy-as-Code** provides explainable constraints:
+- Policies are evaluated deterministically
+- Violations produce structured failure events (PACT-101, etc.)
+- Evidence refs track which rules were violated
+- Replay shows exact policy evaluation path
 
-**Reconciliation (v1.6.0-alpha)**: The `reconcile()` function polls pending settlement handles and updates transcripts with final settlement status (committed/failed), enabling post-transaction status updates for async settlement providers.
+**v4 Evidence Bundles** enable cross-trust-boundary sharing:
+- Cryptographically sealed bundles
+- Role-aware views (internal, partner, auditor)
+- Tamper detection via hash verification
+- Machine-generated narratives
 
-**Signed Dispute Decisions (v1.6.0-alpha)**: Dispute resolution now supports cryptographically signed decision artifacts with arbiter Ed25519 signatures, enabling verifiable dispute outcomes and audit trails.
-
-This is critical for debugging, auditing, and governance.
+This is critical for debugging, auditing, governance, and legal defensibility.
 
 ### Error Codes (Handling Failures)
 
 PACT uses explicit error codes for failure modes. Integrations should branch on `code`
 and treat `reason` as human-readable context.
 
+**v4 Failure Taxonomy** (Canonical error classification):
+- **PACT-101** — Policy violation (policy constraint violated)
+- **PACT-202** — KYA/credential expiry (identity verification failed)
+- **PACT-303** — Negotiation deadlock (strategic failure)
+- **PACT-404** — Settlement timeout (settlement rail failure)
+- **PACT-505** — Recursive dependency failure (sub-agent failure)
+
+Each failure includes: `stage`, `fault_domain`, `terminality`, `evidence_refs`. See [v4/FAILURE_TAXONOMY.md](./docs/v4/FAILURE_TAXONOMY.md) for complete taxonomy.
+
+**v3/v1 Error Codes** (Legacy):
 Common `acquire()` failure codes:
 
 #### Discovery / selection
@@ -636,11 +687,27 @@ Breaking changes follow semantic versioning.
 
 PACT values:
 
-- Explicit over implicit
-- Determinism over convenience
-- Auditable outcomes over opaque success
+- **Explicit over implicit** — Policies, constraints, and decisions are explicit and verifiable
+- **Determinism over convenience** — Same inputs → same outputs → same transcripts
+- **Auditable outcomes over opaque success** — Every decision is recorded and replayable
+- **Evidence over trust** — No trust in narratives; only cryptographic evidence
+- **Institution-grade over quick wins** — Built for legal admissibility and regulatory compliance
 
 If something cannot be explained after the fact, it does not belong in the protocol.
+
+## The Standard We Set
+
+Pact v4 establishes a new standard for autonomous agent commerce:
+
+- **Agents can spend money without trusting themselves** — The boundary runtime ensures all spending occurs within policy constraints
+- **Every negotiation is verifiable** — Hash-linked transcripts prove what happened and why
+- **Policies are hard guarantees** — Policy violations halt transactions; no exceptions
+- **Failures are classified** — Canonical failure taxonomy enables risk pricing and insurance
+- **Disputes are evidence-based** — Arbitration decisions are constrained by transcript evidence only
+- **Reputation is computable** — Passport scores are derived from deterministic transcript history
+- **Evidence is portable** — Evidence bundles can be shared across trust boundaries while preserving integrity
+
+This is the standard for institution-grade autonomous commerce infrastructure.
 
 ---
 

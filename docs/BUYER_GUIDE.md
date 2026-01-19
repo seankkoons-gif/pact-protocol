@@ -2,6 +2,8 @@
 
 This guide explains how to use PACT as a buyer to acquire services from providers.
 
+> **v4 is complete and production-ready!** For v4 features (Policy-as-Code, Boundary Runtime, Passport, Credit), see [v4/STATUS.md](./v4/STATUS.md). This guide covers v3 (stable and maintained).
+
 ## Minimal acquire() Usage
 
 The core function is `acquire()`:

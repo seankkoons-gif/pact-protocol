@@ -2,6 +2,8 @@
 
 This guide explains how to run and configure PACT providers using the `@pact/provider-adapter` package.
 
+> **v4 is complete and production-ready!** For v4 features (Policy-as-Code, Boundary Runtime, Evidence Bundles), see [v4/STATUS.md](./v4/STATUS.md). This guide covers v3 (stable and maintained).
+
 ## What is provider-adapter?
 
 The `provider-adapter` package provides a standalone HTTP server that implements the PACT provider protocol. It handles:
