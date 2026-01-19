@@ -202,8 +202,11 @@ export async function runInPactBoundary(
   } catch (error) {
     if (error instanceof BoundaryAbortError) {
       // Abort - create failure event
+      // Use error.failureCode from the BoundaryAbortError instance, fallback to outer failureCode or default
+      const finalFailureCode = error.failureCode || failureCode || "PACT-101";
+      const finalAbortReason = error.reason || abortReason || "Unknown abort";
       const failureEvent: FailureEvent = {
-        code: failureCode || "PACT-101",
+        code: finalFailureCode,
         stage: "negotiation",
         fault_domain: "policy",
         terminality: "terminal",
@@ -211,7 +214,7 @@ export async function runInPactBoundary(
         transcript_hash: transcript.transcript_id,
         evidence_refs: [
           ...evidenceRefs,
-          `abort_reason:${abortReason}`,
+          `abort_reason:${finalAbortReason}`,
           `policy_hash:${policyHash}`,
         ],
       };

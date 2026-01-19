@@ -8,6 +8,7 @@ import * as fs from "fs";
 import { verifyEnvelope } from "../protocol/envelope";
 import { verifyReveal } from "../exchange/commit";
 import type { TranscriptV1 } from "./types";
+import { replayTranscriptV4, type TranscriptV4 } from "./v4/replay";
 
 export type ReplayOptions = {
   now?: () => number; // For testing credential expiration
@@ -831,14 +832,50 @@ export async function verifyTranscriptFile(
     };
   }
   
-  // H1: Check transcript_version (warn if missing, not error)
+  // Detect transcript version and route to appropriate verifier
+  const transcriptVersion = transcript.transcript_version;
+  const isV4 = transcriptVersion && typeof transcriptVersion === "string" && transcriptVersion.startsWith("pact-transcript/4.");
+  
+  if (isV4) {
+    // Route v4 transcripts to v4 verifier
+    const v4Transcript = transcript as unknown as TranscriptV4;
+    const replayResult = await replayTranscriptV4(v4Transcript);
+    
+    // Convert v4 result format to expected format
+    const convertedErrors: string[] = [];
+    const convertedWarnings: string[] = [];
+    
+    // Convert error objects to strings
+    for (const error of replayResult.errors) {
+      const errorMsg = error.round_number !== undefined 
+        ? `${error.type} (round ${error.round_number}): ${error.message}`
+        : `${error.type}: ${error.message}`;
+      convertedErrors.push(errorMsg);
+    }
+    
+    // Add warnings
+    convertedWarnings.push(...replayResult.warnings);
+    
+    // Add integrity status as warning if not VALID
+    if (replayResult.integrity_status !== "VALID") {
+      convertedWarnings.push(`Integrity status: ${replayResult.integrity_status}`);
+    }
+    
+    return {
+      ok: replayResult.ok,
+      errors: convertedErrors,
+      warnings: convertedWarnings,
+    };
+  }
+  
+  // H1: Check transcript_version (warn if missing, not error) - only for v1
   if (!transcript.transcript_version) {
     warnings.push("transcript_version missing, assuming '1.0'");
   } else if (transcript.transcript_version !== "1.0") {
     warnings.push(`transcript_version is '${transcript.transcript_version}', expected '1.0'`);
   }
   
-  // Run existing replay validation
+  // Run existing replay validation for v1
   const replayResult = await replayTranscript(transcript);
   
   // Convert replay failures to errors or warnings
