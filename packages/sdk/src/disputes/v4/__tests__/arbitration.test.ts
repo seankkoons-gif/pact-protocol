@@ -94,8 +94,8 @@ describe("Pact v4 Arbitration", () => {
 
     it("should exclude signature field from canonicalization", () => {
       const decision = createTestDecision();
-      const decision2 = createTestDecision();
-      decision2.signature.signature_b58 = "different-signature";
+      const decision2 = { ...decision };
+      decision2.signature = { ...decision.signature, signature_b58: "different-signature" };
 
       const canonical1 = canonicalizeDecision(decision);
       const canonical2 = canonicalizeDecision(decision2);
