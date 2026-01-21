@@ -7,17 +7,17 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { PassportStorage } from "@pact/passport";
+import { MemoryPassportStorage } from "@pact/passport";
 import { runInPactBoundary } from "../runtime";
 import type { BoundaryIntent, ExecuteFunction } from "../runtime";
 import type { PactPolicyV4 } from "../../policy/v4";
 import { createTranscriptV4 } from "../../transcript/v4/transcript";
 
 describe("Credit Determinism and Terminal Aborts", () => {
-  let storage: PassportStorage;
+  let storage: MemoryPassportStorage;
 
   beforeEach(() => {
-    storage = new PassportStorage(":memory:");
+    storage = new MemoryPassportStorage(":memory:");
   });
 
   describe("Transcript Determinism", () => {

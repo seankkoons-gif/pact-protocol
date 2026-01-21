@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { PassportStorage } from "@pact/passport";
+import { MemoryPassportStorage } from "@pact/passport";
 import {
   evaluateCreditBeforeSettlement,
   createCreditFailureEvent,
@@ -14,10 +14,10 @@ import {
 import type { TranscriptV4 } from "../../transcript/v4/replay";
 
 describe("Credit Integration in Boundary", () => {
-  let storage: PassportStorage;
+  let storage: MemoryPassportStorage;
 
   beforeEach(() => {
-    storage = new PassportStorage(":memory:");
+    storage = new MemoryPassportStorage(":memory:");
   });
 
   describe("evaluateCreditBeforeSettlement", () => {
