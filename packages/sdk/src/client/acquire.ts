@@ -3847,6 +3847,20 @@ export async function acquire(params: {
         let streamingAttemptIdx = 0;
         if (!streamingPolicy) {
       // STREAMING_NOT_CONFIGURED is non-retryable (policy issue)
+      // Emit SETTLEMENT_STREAM_FAIL event before returning
+      await eventRunner.emitFailure(
+        "settlement" as AcquisitionPhase,
+        "STREAMING_NOT_CONFIGURED",
+        "Streaming policy not configured",
+        false, // Non-retryable
+        {
+          event_name: "SETTLEMENT_STREAM_FAIL",
+          custom_event_id: `settlement:stream:fail:${intentId}`,
+          mode: "streaming",
+          code: "STREAMING_NOT_CONFIGURED",
+        }
+      );
+      
       const action = handleAttemptFailure("STREAMING_NOT_CONFIGURED", "Streaming policy not configured", attemptEntry);
       if (action === "return") {
         // Save transcript for STREAMING_NOT_CONFIGURED failure (v1.7.2+)
@@ -3873,6 +3887,22 @@ export async function acquire(params: {
       // If retryable, continue
       throw new Error("STREAMING_NOT_CONFIGURED"); // Will be caught by outer catch
     }
+
+    // Emit SETTLEMENT_STREAM_START event (after policy check)
+    await eventRunner.emitProgress(
+      "settlement" as AcquisitionPhase,
+      0.0,
+      "SETTLEMENT_STREAM_START",
+      {
+        event_name: "SETTLEMENT_STREAM_START",
+        custom_event_id: `settlement:stream:start:${intentId}`,
+        mode: "streaming",
+        tick_ms: streamingPolicy?.tick_ms ?? null,
+        provider_id: streamingProvider.provider_id ?? "",
+        provider_pubkey: streamingProviderPubkey,
+        total_budget: round8(agreement.agreed_price),
+      }
+    );
 
     // Unlock what the agreement locked (pay-as-you-go)
       try {
@@ -3905,6 +3935,10 @@ export async function acquire(params: {
     const totalBudget = agreement.agreed_price;
     const tickMs = streamingPolicy.tick_ms;
     const plannedTicks = 50;
+
+    // Calculate batch size (deterministic from tickMs)
+    // batch_size_ticks = min( max(5, floor(1000 / tickMs)), 50 )
+    const batchSizeTicks = Math.min(Math.max(5, Math.floor(1000 / tickMs)), 50);
 
     // Create dedicated streaming clock that the exchange will use
     let streamNow = nowFunction(); // start from whatever nowFunction returns
@@ -3946,6 +3980,12 @@ export async function acquire(params: {
           // Re-throw other errors
           throw error;
         }
+
+        // Initialize batching counters at start of each attempt
+        let batchIdx = 0;
+        let batchStartTicks = streamingTotalTicks;
+        let batchStartChunks = streamingTotalChunks;
+        let batchStartPaid = streamingTotalPaidAmount;
 
       for (let i = 1; i <= plannedTicks; i++) {
       streamNow += tickMs + 5; // Always advance the streaming clock
@@ -4070,6 +4110,38 @@ export async function acquire(params: {
         streamingTotalTicks = state.ticks;
         streamingTotalChunks = state.chunks;
 
+        // Track batch deltas
+        const batchTicks = streamingTotalTicks - batchStartTicks;
+        const batchChunks = streamingTotalChunks - batchStartChunks;
+        const batchPaid = streamingTotalPaidAmount - batchStartPaid;
+
+        // Emit batch event when batch size threshold is reached
+        if (batchTicks >= batchSizeTicks) {
+          await eventRunner.emitProgress(
+            "settlement" as AcquisitionPhase,
+            0.5 + (batchIdx * 0.05),
+            "SETTLEMENT_STREAM_BATCH",
+            {
+              event_name: "SETTLEMENT_STREAM_BATCH",
+              custom_event_id: `settlement:stream:batch:${intentId}:${streamingAttemptIdx}:${batchIdx}`,
+              attempt: streamingAttemptIdx,
+              batch: batchIdx,
+              ticks_delta: batchTicks,
+              chunks_delta: batchChunks,
+              paid_delta: round8(batchPaid),
+              ticks_total: streamingTotalTicks,
+              chunks_total: streamingTotalChunks,
+              paid_total: round8(streamingTotalPaidAmount),
+            }
+          );
+          
+          // Reset batch start variables and increment batch index
+          batchStartTicks = streamingTotalTicks;
+          batchStartChunks = streamingTotalChunks;
+          batchStartPaid = streamingTotalPaidAmount;
+          batchIdx++;
+        }
+
         // Check for receipt (completion or failure) - natural exit
         if (tickResult.receipt) {
           const epsilon = 1e-12; // Small epsilon for floating point comparison
@@ -4121,6 +4193,30 @@ export async function acquire(params: {
           streamingTotalPaidAmount = finalState.paid_amount;
           streamingTotalTicks = finalState.ticks;
           streamingTotalChunks = finalState.chunks;
+          
+          // Emit SETTLEMENT_STREAM_CUTOFF event before stopping
+          const finalBatchTicks = streamingTotalTicks - batchStartTicks;
+          const finalBatchChunks = streamingTotalChunks - batchStartChunks;
+          const finalBatchPaid = streamingTotalPaidAmount - batchStartPaid;
+          
+          await eventRunner.emitProgress(
+            "settlement" as AcquisitionPhase,
+            0.9,
+            "SETTLEMENT_STREAM_CUTOFF",
+            {
+              event_name: "SETTLEMENT_STREAM_CUTOFF",
+              custom_event_id: `settlement:stream:cutoff:${intentId}:${streamingAttemptIdx}`,
+              attempt: streamingAttemptIdx,
+              reason: "BUYER_STOP",
+              ticks_delta: finalBatchTicks,
+              chunks_delta: finalBatchChunks,
+              paid_delta: round8(finalBatchPaid),
+              ticks_total: streamingTotalTicks,
+              chunks_total: streamingTotalChunks,
+              paid_total: round8(streamingTotalPaidAmount),
+            }
+          );
+          
           streamingReceipt = exchange.stop("buyer", "Buyer requested stop");
           streamingSuccess = true; // Buyer stop is considered success
           // Record successful attempt (buyer stopped)
@@ -4177,6 +4273,23 @@ export async function acquire(params: {
           continue;
         } else {
           // Non-retryable - fail overall
+          // Emit SETTLEMENT_STREAM_FAIL event before creating failure receipt
+          await eventRunner.emitFailure(
+            "settlement" as AcquisitionPhase,
+            attemptFailureCode || "SETTLEMENT_FAILED",
+            attemptFailureReason || "Stream settlement failed",
+            false, // Non-retryable
+            {
+              event_name: "SETTLEMENT_STREAM_FAIL",
+              custom_event_id: `settlement:stream:fail:${intentId}`,
+              mode: "streaming",
+              code: attemptFailureCode || "SETTLEMENT_FAILED",
+              ticks_total: streamingTotalTicks,
+              chunks_total: streamingTotalChunks,
+              paid_total: round8(streamingTotalPaidAmount),
+            }
+          );
+          
           streamingReceipt = createReceipt({
             intent_id: intentId,
             buyer_agent_id: buyerId,
@@ -4209,6 +4322,29 @@ export async function acquire(params: {
           // Check if budget is exhausted
           const epsilon = 1e-12; // Small epsilon for floating point comparison
           if (streamingTotalPaidAmount >= totalBudget - epsilon) {
+          // Emit SETTLEMENT_STREAM_CUTOFF event before creating receipt
+          const finalBatchTicks = streamingTotalTicks - batchStartTicks;
+          const finalBatchChunks = streamingTotalChunks - batchStartChunks;
+          const finalBatchPaid = streamingTotalPaidAmount - batchStartPaid;
+          
+          await eventRunner.emitProgress(
+            "settlement" as AcquisitionPhase,
+            0.9,
+            "SETTLEMENT_STREAM_CUTOFF",
+            {
+              event_name: "SETTLEMENT_STREAM_CUTOFF",
+              custom_event_id: `settlement:stream:cutoff:${intentId}:${streamingAttemptIdx}`,
+              attempt: streamingAttemptIdx,
+              reason: "BUDGET_REACHED",
+              ticks_delta: finalBatchTicks,
+              chunks_delta: finalBatchChunks,
+              paid_delta: round8(finalBatchPaid),
+              ticks_total: streamingTotalTicks,
+              chunks_total: streamingTotalChunks,
+              paid_total: round8(streamingTotalPaidAmount),
+            }
+          );
+          
           // All budget paid - create final receipt
           streamingReceipt = createReceipt({
             intent_id: intentId,
@@ -4259,6 +4395,25 @@ export async function acquire(params: {
           receipt = streamingReceipt;
         } else if (!streamingSuccess && streamingTotalPaidAmount > 0) {
           // All attempts failed but some amount was paid - create failure receipt
+          const failureCode = streamingAttempts[streamingAttempts.length - 1]?.failure_code || "SETTLEMENT_FAILED";
+          
+          // Emit SETTLEMENT_STREAM_FAIL event before creating failure receipt
+          await eventRunner.emitFailure(
+            "settlement" as AcquisitionPhase,
+            failureCode,
+            `Stream settlement failed: ${failureCode}`,
+            false, // Terminal failure
+            {
+              event_name: "SETTLEMENT_STREAM_FAIL",
+              custom_event_id: `settlement:stream:fail:${intentId}`,
+              mode: "streaming",
+              code: failureCode,
+              ticks_total: streamingTotalTicks,
+              chunks_total: streamingTotalChunks,
+              paid_total: round8(streamingTotalPaidAmount),
+            }
+          );
+          
           receipt = createReceipt({
             intent_id: intentId,
             buyer_agent_id: buyerId,
@@ -4269,7 +4424,7 @@ export async function acquire(params: {
             paid_amount: round8(streamingTotalPaidAmount),
             ticks: streamingTotalTicks,
             chunks: streamingTotalChunks,
-            failure_code: streamingAttempts[streamingAttempts.length - 1]?.failure_code || "SETTLEMENT_FAILED",
+            failure_code: failureCode,
             asset_id: assetId,
             chain_id: chainId,
           });
@@ -4318,6 +4473,30 @@ export async function acquire(params: {
             total_paid_amount: streamingTotalPaidAmount,
             attempts_used: streamingAttempts.length,
           };
+        }
+
+        // Emit SETTLEMENT_STREAM_COMPLETE event on success (before transcript commit)
+        if (streamingSuccess && streamingReceipt && receipt) {
+          await eventRunner.emitSuccess(
+            "settlement" as AcquisitionPhase,
+            {
+              event_name: "SETTLEMENT_STREAM_COMPLETE",
+              custom_event_id: `settlement:stream:complete:${intentId}`,
+              mode: "streaming",
+              receipt_id: streamingReceipt.intent_id,
+              paid_total: round8(streamingTotalPaidAmount),
+              ticks_total: streamingTotalTicks,
+              chunks_total: streamingTotalChunks,
+            },
+            [createEvidence("settlement" as AcquisitionPhase, "settlement_complete", {
+              mode: "streaming",
+              receipt_id: streamingReceipt.intent_id,
+              fulfilled: streamingReceipt.fulfilled,
+              ticks_total: streamingTotalTicks,
+              chunks_total: streamingTotalChunks,
+              paid_total: round8(streamingTotalPaidAmount),
+            })]
+          );
         }
 
         if (agreement) {

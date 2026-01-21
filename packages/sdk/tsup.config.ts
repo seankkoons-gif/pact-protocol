@@ -10,7 +10,7 @@ export default defineConfig({
   // This ensures the SDK works without requiring dependencies to be installed in consuming projects
   noExternal: ["zod", "bs58", "ajv", "ajv-formats", "minimist"],
   // Externalize peer dependencies (they should be provided by the consumer)
-  // Externalize tweetnacl - let Node resolve it at runtime to avoid ESM bundling issues
+  // Externalize tweetnacl - it has dynamic requires that break when bundled into ESM
   external: ["@pact/passport", "tweetnacl"],
   // Ensure JSON imports are handled
   loader: {
