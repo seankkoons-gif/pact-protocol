@@ -15,7 +15,6 @@ import {
   InMemoryProviderDirectory,
   ReceiptStore,
 } from "@pact/sdk";
-import bs58 from "bs58";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -32,8 +31,8 @@ async function main() {
   // Generate keypairs
   const buyerKeyPair = generateKeyPair();
   const sellerKeyPair = generateKeyPair();
-  const buyerId = bs58.encode(Buffer.from(buyerKeyPair.publicKey));
-  const sellerId = bs58.encode(Buffer.from(sellerKeyPair.publicKey));
+  const buyerId = publicKeyToB58(buyerKeyPair.publicKey);
+  const sellerId = publicKeyToB58(sellerKeyPair.publicKey);
 
   // Provider endpoint (default: localhost:3000, override with WEATHER_PROVIDER_URL)
   const providerUrl = process.env.WEATHER_PROVIDER_URL || "http://localhost:3000";

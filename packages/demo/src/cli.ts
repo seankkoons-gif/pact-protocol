@@ -1,4 +1,3 @@
-import bs58 from "bs58";
 import minimist from "minimist";
 import {
   createDefaultPolicy,
@@ -18,11 +17,12 @@ import {
   acquire,
   InMemoryProviderDirectory,
   JsonlProviderDirectory,
+  generateKeyPair,
+  publicKeyToB58,
   type AcquireExplain,
   type SettlementProvider,
 } from "@pact/sdk";
 import { startProviderServer } from "@pact/provider-adapter";
-import nacl from "tweetnacl";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -294,11 +294,11 @@ async function main() {
 ╚══════════════════════════════════════════════════════════════╝
 `);
 
-  // Generate keypairs using tweetnacl (same as SDK tests)
-  const buyerKeyPair = nacl.sign.keyPair();
-  const sellerKeyPair = nacl.sign.keyPair();
-  const buyerId = bs58.encode(Buffer.from(buyerKeyPair.publicKey));
-  const sellerId = bs58.encode(Buffer.from(sellerKeyPair.publicKey));
+  // Generate keypairs using SDK helpers (encapsulates tweetnacl)
+  const buyerKeyPair = generateKeyPair();
+  const sellerKeyPair = generateKeyPair();
+  const buyerId = publicKeyToB58(buyerKeyPair.publicKey);
+  const sellerId = publicKeyToB58(sellerKeyPair.publicKey);
 
   console.log(`Buyer ID:  ${truncate(buyerId, 20)}`);
   console.log(`Seller ID: ${truncate(sellerId, 20)}`);
@@ -424,10 +424,10 @@ async function main() {
     directory = new InMemoryProviderDirectory();
     
     // Create additional seller keypairs for fanout demo
-    const seller2KeyPair = nacl.sign.keyPair();
-    const seller3KeyPair = nacl.sign.keyPair();
-    const seller2Id = bs58.encode(Buffer.from(seller2KeyPair.publicKey));
-    const seller3Id = bs58.encode(Buffer.from(seller3KeyPair.publicKey));
+    const seller2KeyPair = generateKeyPair();
+    const seller3KeyPair = generateKeyPair();
+    const seller2Id = publicKeyToB58(seller2KeyPair.publicKey);
+    const seller3Id = publicKeyToB58(seller3KeyPair.publicKey);
     
     // Credit additional sellers
     settlement.credit(seller2Id, 0.1);

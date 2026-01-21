@@ -52,6 +52,8 @@ Server starts on `http://localhost:3000` with:
 - Health: `http://localhost:3000/health`
 - Pact: `http://localhost:3000/pact`
 
+**Note:** The endpoint in `providers.jsonl` must match the port the provider runs on (port 3000). The registry entry's `endpoint` field should be `http://127.0.0.1:3000` or `http://localhost:3000`.
+
 ### 3. Test with curl
 
 ```bash

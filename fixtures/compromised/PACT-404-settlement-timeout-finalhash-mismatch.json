@@ -1,0 +1,82 @@
+{
+  "transcript_version": "pact-transcript/4.0",
+  "transcript_id": "transcript-3158ba3708f5c5610ac02153ee8736eeb3a7301996503833ee3e1c5ff4de2891",
+  "intent_id": "intent-pact404-test",
+  "intent_type": "weather.data",
+  "created_at_ms": 1000000000000,
+  "policy_hash": "aaa049f74895f24ca7f38f3db5e11b2d702452c0207c4459d179b8dc8833628d",
+  "strategy_hash": "bfdff987de461bf22ae33537307038b70af9440a9e5f3c7f6e7607239f58224c",
+  "identity_snapshot_hash": "f4edf4b37099e97dd380c24c37496de32c341406c2901bd830d2e35386ca1c37",
+  "rounds": [
+    {
+      "round_number": 0,
+      "round_type": "INTENT",
+      "message_hash": "62dc5e98258d21c4d7077ebe7093eed6b6d0fc0a9904cdb0d09a7de7f950f030",
+      "envelope_hash": "62dc5e98258d21c4d7077ebe7093eed6b6d0fc0a9904cdb0d09a7de7f950f030",
+      "signature": {
+        "signer_public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+        "signature_b58": "3gYKvW4kWeZtaeqDtowgwmmap5ic9YususDCH6NohWGZZKuZuwrYehtGQ4t9cbjQmVn4ATumYSvSAdjvgJ472UA6",
+        "signed_at_ms": 1000000000000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1000000000000,
+      "previous_round_hash": "1546f3d06fc940e7049b7f36db4e7172a1f4de357c3ac0fa527c85031200de87",
+      "agent_id": "buyer",
+      "public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+      "content_summary": {
+        "intent_type": "weather.data"
+      },
+      "round_hash": "99cbe8834834d72cd8c6f0d18c4decdcdbae43ae9ed0b4b4e71e51828b9d3267"
+    },
+    {
+      "round_number": 1,
+      "round_type": "ASK",
+      "message_hash": "85580491400e1c4b74a745a4e2ed106df66743155e215fe442ef53dc57fd07f0",
+      "envelope_hash": "85580491400e1c4b74a745a4e2ed106df66743155e215fe442ef53dc57fd07f0",
+      "signature": {
+        "signer_public_key_b58": "HBUkwmmQVFX3mGF6ris1mWDATY27nAupX6wQNXgJD9j9",
+        "signature_b58": "5FxQLUdkGHWbjRVAnchf5ZAHuNtyoxuWeuXBjZQRnswMoHCSUtLkHo9ZviCFZS2rax4hvi1BjWTNTpAuLg2Edz4E",
+        "signed_at_ms": 1000000001000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1000000001000,
+      "previous_round_hash": "99cbe8834834d72cd8c6f0d18c4decdcdbae43ae9ed0b4b4e71e51828b9d3267",
+      "agent_id": "seller",
+      "public_key_b58": "HBUkwmmQVFX3mGF6ris1mWDATY27nAupX6wQNXgJD9j9",
+      "content_summary": {},
+      "round_hash": "cfef4831bc38d350e26df801bb4339fe8daba5409950665c4b3c1f8b93f3e519"
+    },
+    {
+      "round_number": 2,
+      "round_type": "ACCEPT",
+      "message_hash": "a8ab9f0272d323401de7a9b68783beb8912dff7b89a63b66a5b53e402c49e091",
+      "envelope_hash": "a8ab9f0272d323401de7a9b68783beb8912dff7b89a63b66a5b53e402c49e091",
+      "signature": {
+        "signer_public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+        "signature_b58": "F8xdSncX2CbosNBAsGWugWMR4WPtXooTSXzuisnRsrvQY8yEEwSprxqhZGKejkWkiDkGVpuqC5pVtGqMv6fhiUc",
+        "signed_at_ms": 1000000002000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1000000002000,
+      "previous_round_hash": "cfef4831bc38d350e26df801bb4339fe8daba5409950665c4b3c1f8b93f3e519",
+      "agent_id": "buyer",
+      "public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+      "content_summary": {},
+      "round_hash": "30e1b543c9b32aa210ab366df4e8a45b8f59e99f25b9a3aaa90eb4819519d933"
+    }
+  ],
+  "failure_event": {
+    "code": "PACT-404",
+    "stage": "settlement",
+    "fault_domain": "settlement",
+    "terminality": "non_terminal",
+    "evidence_refs": [
+      "transcript-3158ba3708f5c5610ac02153ee8736eeb3a7301996503833ee3e1c5ff4de2891",
+      "30e1b543c9b32aa210ab366df4e8a45b8f59e99f25b9a3aaa90eb4819519d933",
+      "settlement-handle-timeout-xyz789"
+    ],
+    "timestamp": 1000000010000,
+    "transcript_hash": "transcript-22fca566cf10f2d79ee82df93adcb84af84a7839894aa516f3d1509889cbb450"
+  },
+  "final_hash": "a895f24808d96ec95acf902b5d6a40d133c2e7d873ebbe23c7c4bdd9ff2599ab"
+}

@@ -21,12 +21,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
-import bs58 from "bs58";
 import {
   replayTranscriptV4,
   createTranscriptV4,
   addRoundToTranscript,
   stableCanonicalize,
+  publicKeyToB58,
+  bytesToB58,
   type TranscriptV4,
   type TranscriptRound,
   type Signature,
@@ -87,8 +88,8 @@ export function createSignedRound(
   const envelopeHash = crypto.createHash("sha256").update(envelopeCanonical, "utf8").digest("hex");
   const hashBytes = Buffer.from(envelopeHash, "hex");
   const sigBytes = crypto.sign(null, hashBytes, keypair.privateKeyObj);
-  const signatureB58 = bs58.encode(sigBytes);
-  const publicKeyB58 = bs58.encode(Buffer.from(keypair.publicKey));
+  const signatureB58 = bytesToB58(sigBytes);
+  const publicKeyB58 = publicKeyToB58(keypair.publicKey);
 
   const signature: Signature = {
     signer_public_key_b58: publicKeyB58,
