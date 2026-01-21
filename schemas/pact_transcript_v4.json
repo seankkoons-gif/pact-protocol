@@ -76,7 +76,23 @@
     "metadata": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Optional metadata for transcript. MUST NOT affect deterministic serialization or hash computation."
+      "description": "Optional metadata for transcript. MUST NOT affect deterministic serialization or hash computation.",
+      "properties": {
+        "contention_key": {
+          "type": "string",
+          "description": "Contention key: hash(intent_type, resource_id, scope, time_window). Used for multi-agent contention resolution (see PACT_CONSTITUTION_V1.md Section 6)."
+        },
+        "contention_scope": {
+          "type": "string",
+          "enum": ["EXCLUSIVE", "NON_EXCLUSIVE"],
+          "description": "Contention scope: EXCLUSIVE (only one accept wins) or NON_EXCLUSIVE (multiple accepts allowed). Used for multi-agent contention resolution (see PACT_CONSTITUTION_V1.md Section 6)."
+        },
+        "contention_window_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Contention window in milliseconds. Claim window for exclusivity. Used for multi-agent contention resolution (see PACT_CONSTITUTION_V1.md Section 6)."
+        }
+      }
     }
   },
   "$defs": {
@@ -145,7 +161,23 @@
         "content_summary": {
           "type": "object",
           "additionalProperties": true,
-          "description": "Summary of round content for human readability. MUST NOT affect deterministic serialization or hash computation."
+          "description": "Summary of round content for human readability. MUST NOT affect deterministic serialization or hash computation.",
+          "properties": {
+            "contention_key": {
+              "type": "string",
+              "description": "Contention key: hash(intent_type, resource_id, scope, time_window). Used for multi-agent contention resolution (see PACT_CONSTITUTION_V1.md Section 6)."
+            },
+            "contention_scope": {
+              "type": "string",
+              "enum": ["EXCLUSIVE", "NON_EXCLUSIVE"],
+              "description": "Contention scope: EXCLUSIVE (only one accept wins) or NON_EXCLUSIVE (multiple accepts allowed). Used for multi-agent contention resolution (see PACT_CONSTITUTION_V1.md Section 6)."
+            },
+            "contention_window_ms": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Contention window in milliseconds. Claim window for exclusivity. Used for multi-agent contention resolution (see PACT_CONSTITUTION_V1.md Section 6)."
+            }
+          }
         }
       }
     },

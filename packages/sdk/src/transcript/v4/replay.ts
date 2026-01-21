@@ -9,6 +9,7 @@ import * as crypto from "node:crypto";
 import bs58 from "bs58";
 import nacl from "tweetnacl";
 import { stableCanonicalize } from "../../protocol/canonical";
+import { computeInitialHash } from "./genesis";
 
 export type TranscriptV4 = {
   transcript_version: "pact-transcript/4.0";
@@ -23,7 +24,12 @@ export type TranscriptV4 = {
   failure_event?: FailureEvent;
   final_hash?: string;
   arbiter_decision_ref?: string | null; // Decision artifact hash (added after arbitration)
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> & {
+    // Optional contention fields (see PACT_CONSTITUTION_V1.md Section 6)
+    contention_key?: string; // hash(intent_type, resource_id, scope, time_window)
+    contention_scope?: "EXCLUSIVE" | "NON_EXCLUSIVE";
+    contention_window_ms?: number; // Claim window for exclusivity
+  };
 };
 
 export type TranscriptRound = {
@@ -37,7 +43,12 @@ export type TranscriptRound = {
   round_hash?: string;
   agent_id: string;
   public_key_b58: string;
-  content_summary?: Record<string, unknown>;
+  content_summary?: Record<string, unknown> & {
+    // Optional contention fields (see PACT_CONSTITUTION_V1.md Section 6)
+    contention_key?: string; // hash(intent_type, resource_id, scope, time_window)
+    contention_scope?: "EXCLUSIVE" | "NON_EXCLUSIVE";
+    contention_window_ms?: number; // Claim window for exclusivity
+  };
 };
 
 export type Signature = {
@@ -100,11 +111,11 @@ function computeTranscriptHash(transcript: TranscriptV4): string {
 
 /**
  * Compute previous round hash for round 0 (uses intent_id + created_at_ms).
+ * This is the canonical genesis hash for v4 transcripts.
+ * 
+ * @deprecated Import from "./genesis" instead. This export is maintained for backward compatibility.
  */
-function computeInitialHash(intent_id: string, created_at_ms: number): string {
-  const combined = `${intent_id}:${created_at_ms}`;
-  return sha256(combined);
-}
+export { computeInitialHash } from "./genesis";
 
 /**
  * Verify Ed25519 signature over envelope hash.

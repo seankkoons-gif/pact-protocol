@@ -4,6 +4,7 @@
 
 import * as crypto from "node:crypto";
 import type { TranscriptV4, TranscriptRound } from "./replay";
+import { computeInitialHash } from "./genesis";
 import { stableCanonicalize } from "../../protocol/canonical";
 
 /**
@@ -49,7 +50,11 @@ export function addRoundToTranscript(
 ): TranscriptV4 {
   const roundNumber = transcript.rounds.length;
   const previousRound = transcript.rounds[roundNumber - 1];
-  const previousRoundHash = previousRound?.round_hash || "0".repeat(64);
+  // For round 0, use canonical initial hash (intent_id + created_at_ms)
+  // For subsequent rounds, use previous round's hash
+  const previousRoundHash = roundNumber === 0
+    ? computeInitialHash(transcript.intent_id, transcript.created_at_ms)
+    : (previousRound?.round_hash || "0".repeat(64));
 
   // Compute round hash
   const roundWithHash: TranscriptRound = {

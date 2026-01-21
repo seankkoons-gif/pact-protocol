@@ -21,6 +21,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
 import { replayTranscriptV4, type TranscriptV4 } from "../transcript/v4/replay";
 import { narrateRound, narrateFailure } from "../transcript/v4/narrative";
 import {
@@ -250,21 +251,39 @@ function renderArbitrationOutcome(
 }
 
 async function main() {
+  // Get __dirname for path resolution (ESM equivalent)
+  const __filename = fileURLToPath(import.meta.url);
+  const __dirname = path.dirname(__filename);
+  
   const args = process.argv.slice(2);
   
   if (args.length === 0) {
-    console.error("Usage: replay:v4 <transcript.json> [--bundle <dir>]");
+    console.error("Usage: replay:v4 <transcript.json> [--bundle <dir>] [--allow-compromised]");
     console.error("");
     console.error("Examples:");
     console.error("  replay:v4 .pact/transcripts/transcript-abc123.json");
     console.error("  replay:v4 --bundle fixtures/arbitration/bundle-001");
+    console.error("  replay:v4 --allow-compromised fixtures/compromised/transcript.json");
     console.error("  replay:v4 transcript.json");
+    console.error("");
+    console.error("Options:");
+    console.error("  --allow-compromised  Allow FINAL_HASH_MISMATCH errors (for intentionally compromised fixtures)");
+    console.error("                       Exit code 0 if only FINAL_HASH_MISMATCH, non-zero for other errors");
     process.exit(1);
   }
   
-  // Check for bundle mode
+  // Check for flags
+  const allowCompromised = args.includes("--allow-compromised");
   const bundleIndex = args.indexOf("--bundle");
   const bundleDir = bundleIndex >= 0 && args[bundleIndex + 1] ? args[bundleIndex + 1] : null;
+  
+  // Filter out flags to find transcript path
+  const filteredArgs = args.filter((arg, i) => {
+    if (arg === "--allow-compromised") return false;
+    if (arg === "--bundle") return false;
+    if (i > 0 && args[i - 1] === "--bundle") return false; // Skip bundle dir value
+    return true;
+  });
   
   let transcript: TranscriptV4;
   let decision: ArbiterDecisionV4 | null = null;
@@ -296,12 +315,40 @@ async function main() {
     }
   } else {
     // Normal mode: Load transcript directly
-    const transcriptPath = args[0];
+    let transcriptPath = filteredArgs[0];
     
-    // Validate file exists
+    if (!transcriptPath) {
+      console.error("Error: Transcript file path required");
+      console.error("Usage: replay:v4 <transcript.json> [--allow-compromised]");
+      process.exit(1);
+    }
+    
+    // Resolve path: if absolute, use as-is; if relative and exists in cwd, use as-is;
+    // otherwise try relative to repo root (for fixtures)
+    if (!path.isAbsolute(transcriptPath)) {
+      const cwdPath = path.resolve(process.cwd(), transcriptPath);
+      if (!fs.existsSync(cwdPath)) {
+        // Try relative to repo root (4 levels up from packages/sdk/src/cli/replay_v4.ts)
+        // __dirname = packages/sdk/src/cli/ → repo root = ../../../../..
+        const repoRoot = path.resolve(__dirname, "../../../..");
+        const repoRootPath = path.resolve(repoRoot, transcriptPath);
+        if (fs.existsSync(repoRootPath)) {
+          transcriptPath = repoRootPath;
+        } else {
+          console.error(`Error: File not found: ${transcriptPath}`);
+          console.error(`  Tried: ${cwdPath}`);
+          console.error(`  Tried: ${repoRootPath}`);
+          process.exit(1);
+        }
+      } else {
+        // Exists relative to current working directory
+        transcriptPath = cwdPath;
+      }
+    }
+    
+    // Final check that file exists
     if (!fs.existsSync(transcriptPath)) {
       console.error(`Error: File not found: ${transcriptPath}`);
-      console.error(`Hint: Use an absolute path or a path relative to the current directory.`);
       process.exit(1);
     }
     
@@ -429,7 +476,29 @@ async function main() {
   console.log("");
   
   // Exit with appropriate code
-  const exitCode = replayResult.ok && integrityStatus === "PASS" ? 0 : 1;
+  let exitCode: number;
+  if (replayResult.ok && integrityStatus === "PASS") {
+    exitCode = 0;
+  } else if (allowCompromised) {
+    // With --allow-compromised, only FINAL_HASH_MISMATCH is acceptable
+    const hasOnlyFinalHashMismatch = replayResult.errors.length === 1 &&
+      replayResult.errors[0].type === "FINAL_HASH_MISMATCH" &&
+      replayResult.rounds_verified > 0; // Rounds must be valid
+    
+    if (hasOnlyFinalHashMismatch) {
+      console.log("⚠️  FINAL_HASH_MISMATCH detected (allowed by --allow-compromised flag)");
+      console.log("   Rounds verified: signed rounds are valid, container hash mismatched");
+      console.log("");
+      exitCode = 0;
+    } else {
+      // Other errors or no valid rounds = still fail
+      exitCode = 1;
+    }
+  } else {
+    // Default: any integrity issue = fail
+    exitCode = 1;
+  }
+  
   process.exit(exitCode);
 }
 
