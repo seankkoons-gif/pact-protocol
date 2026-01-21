@@ -107,7 +107,7 @@ describe("acquire with ML negotiation strategy", () => {
         sellerId: seller.id,
         policy,
         settlement,
-        store,
+        store: undefined, // Stateless run - no double-commit enforcement (determinism validation)
         directory,
         now: createClock(),
       });
@@ -225,7 +225,7 @@ describe("acquire with ML negotiation strategy", () => {
         sellerId: seller.id,
         policy,
         settlement,
-        store,
+        store: undefined, // Stateless run - no double-commit enforcement (determinism validation)
         directory,
         now: clock1,
       });
@@ -234,6 +234,15 @@ describe("acquire with ML negotiation strategy", () => {
       if (!result1.ok) {
         throw new Error(`First acquisition failed: ${result1.code} - ${result1.reason}`);
       }
+
+      // Validate fingerprint stability (even without store)
+      const { computeIntentFingerprint } = await import("../acquire");
+      const fingerprint1 = computeIntentFingerprint({
+        intent_type: intentType,
+        scope: "NYC",
+        constraints: { latency_ms: 50, freshness_sec: 10 },
+        buyer_agent_id: buyer.id,
+      });
 
       // Run again with same inputs
       const clock2 = createClock(1000);
@@ -260,10 +269,19 @@ describe("acquire with ML negotiation strategy", () => {
         sellerId: seller.id,
         policy,
         settlement,
-        store,
+        store: undefined, // Stateless run - no double-commit enforcement (determinism validation)
         directory,
         now: clock2,
       });
+
+      // Validate fingerprint stability - same inputs produce same fingerprint
+      const fingerprint2 = computeIntentFingerprint({
+        intent_type: intentType,
+        scope: "NYC",
+        constraints: { latency_ms: 50, freshness_sec: 10 },
+        buyer_agent_id: buyer.id,
+      });
+      expect(fingerprint1).toBe(fingerprint2);
 
       expect(result2.ok).toBe(true);
       if (!result2.ok) {
@@ -287,6 +305,107 @@ describe("acquire with ML negotiation strategy", () => {
       expect(transcript1.negotiation.ml.top_scores).toEqual(
         transcript2.negotiation.ml.top_scores
       );
+    } finally {
+      server.close();
+    }
+  });
+
+  it("should enforce double-commit with store-backed determinism test", async () => {
+    const buyer = createKeyPair();
+    const seller = createKeyPair();
+    const policy = createDefaultPolicy();
+    const settlement = new MockSettlementProvider();
+    settlement.credit(buyer.id, 1.0);
+    settlement.credit(seller.id, 0.1);
+    const store = new ReceiptStore();
+    const directory = new InMemoryProviderDirectory();
+    
+    // Same setup as the determinism test (identical inputs)
+    const intentType = "weather.data";
+    const server = startProviderServer({
+      port: 0,
+      sellerKeyPair: seller.keyPair,
+      sellerId: seller.id,
+    });
+
+    try {
+      directory.registerProvider({
+        provider_id: seller.id,
+        intentType: intentType,
+        pubkey_b58: seller.id,
+        endpoint: server.url,
+        credentials: [],
+        baseline_latency_ms: 50,
+      });
+
+      const clock1 = createClock(1000);
+      const result1 = await acquire({
+        input: {
+          intentType: intentType,
+          scope: "NYC",
+          constraints: { latency_ms: 50, freshness_sec: 10 },
+          maxPrice: 0.0002,
+          saveTranscript: true,
+          transcriptDir: transcriptDir,
+          negotiation: {
+            strategy: "ml_stub",
+            params: {
+              scorer: "stub",
+              candidate_count: 3,
+              max_rounds: 3,
+            },
+          },
+        },
+        buyerKeyPair: buyer.keyPair,
+        sellerKeyPair: seller.keyPair,
+        buyerId: buyer.id,
+        sellerId: seller.id,
+        policy,
+        settlement,
+        store, // Store-backed - should enforce double-commit
+        directory,
+        now: clock1,
+      });
+
+      expect(result1.ok).toBe(true);
+      if (!result1.ok) {
+        throw new Error(`First acquisition failed: ${result1.code} - ${result1.reason}`);
+      }
+
+      // Second run with identical inputs should fail with PACT-331
+      const clock2 = createClock(1000);
+      const result2 = await acquire({
+        input: {
+          intentType: intentType,
+          scope: "NYC",
+          constraints: { latency_ms: 50, freshness_sec: 10 },
+          maxPrice: 0.0002,
+          saveTranscript: true,
+          transcriptDir: transcriptDir,
+          negotiation: {
+            strategy: "ml_stub",
+            params: {
+              scorer: "stub",
+              candidate_count: 3,
+              max_rounds: 3,
+            },
+          },
+        },
+        buyerKeyPair: buyer.keyPair,
+        sellerKeyPair: seller.keyPair,
+        buyerId: buyer.id,
+        sellerId: seller.id,
+        policy,
+        settlement,
+        store, // Same store - should enforce double-commit
+        directory,
+        now: clock2,
+      });
+
+      expect(result2.ok).toBe(false);
+      expect(result2.code).toBe("PACT-331");
+      expect(result2.reason).toContain("Double commit detected");
+      expect(result2.reason).toContain("Prior transcript");
     } finally {
       server.close();
     }
@@ -358,7 +477,7 @@ describe("acquire with ML negotiation strategy", () => {
         sellerId: seller.id,
         policy,
         settlement,
-        store,
+        store: undefined, // Stateless run - no double-commit enforcement (determinism validation)
         directory,
         now: createClock(),
       });

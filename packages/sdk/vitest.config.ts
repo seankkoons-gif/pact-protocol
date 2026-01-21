@@ -1,5 +1,10 @@
 import { defineConfig } from "vitest/config";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+// Use fileURLToPath for ESM compatibility when running from workspace root
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = resolve(__filename, "..");
 
 export default defineConfig({
   resolve: {

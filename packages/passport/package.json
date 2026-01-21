@@ -16,7 +16,7 @@
   "scripts": {
     "build": "pnpm exec tsup src/index.ts --format esm --dts --clean --tsconfig tsconfig.build.json",
     "test": "pnpm exec vitest run",
-    "test:watch": "pnpm exec vitest",
+    "test:watch": "pnpm exec vitest watch",
     "lint": "eslint src --ext .ts"
   },
   "devDependencies": {

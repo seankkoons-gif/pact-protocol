@@ -9,6 +9,8 @@ import { readFileSync, existsSync, appendFileSync } from "node:fs";
 export class ReceiptStore {
   private receipts: any[] = [];
   private jsonlPath?: string;
+  // Track committed intent fingerprints to prevent double-commit (PACT-331)
+  private committedFingerprints: Map<string, { transcriptId: string; timestamp_ms: number }> = new Map();
 
   constructor(opts?: { jsonlPath?: string }) {
     this.jsonlPath = opts?.jsonlPath;
@@ -52,6 +54,31 @@ export class ReceiptStore {
     }
 
     return filtered;
+  }
+
+  /**
+   * Check if an intent fingerprint has already been committed.
+   * Returns the prior transcript_id if found, null otherwise.
+   */
+  hasCommittedFingerprint(fingerprint: string): { transcriptId: string; timestamp_ms: number } | null {
+    const entry = this.committedFingerprints.get(fingerprint);
+    return entry || null;
+  }
+
+  /**
+   * Mark an intent fingerprint as committed (atomic reservation).
+   * This should be called only after successful settlement commit.
+   */
+  markFingerprintCommitted(fingerprint: string, transcriptId: string, timestamp_ms: number): void {
+    this.committedFingerprints.set(fingerprint, { transcriptId, timestamp_ms });
+  }
+
+  /**
+   * Release a fingerprint reservation (on failure).
+   * This allows retries of the same intent if the first attempt failed.
+   */
+  releaseFingerprint(fingerprint: string): void {
+    this.committedFingerprints.delete(fingerprint);
   }
 
   /**

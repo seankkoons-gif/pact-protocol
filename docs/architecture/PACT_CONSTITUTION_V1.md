@@ -320,6 +320,26 @@ the time_window parameters
 
 the ACCEPT round hash if claiming a win
 
+6.8 Provider Selection Contention Semantics v1
+
+When a buyer evaluates multiple providers (fanout > 1) for the same intent:
+
+**Settlement Exclusivity Rule**: At most one provider may settle per intent. The transcript must record:
+
+the fanout (number of providers evaluated)
+
+all contenders (provider_id, pubkey_b58, endpoint, eligibility status, reject_code if applicable)
+
+the winner (selected provider_id and pubkey_b58)
+
+the decision rule (v1: "order_then_score" tie-break)
+
+**Enforcement**: Any settlement attempt by a non-winner provider is a terminal policy violation (PACT-330: CONTENTION_LOST). The exclusivity guard must abort settlement before commit/reveal/streaming execution.
+
+**Evidence**: The transcript's contention block provides deterministic, replayable proof of which provider was selected and why others were rejected. This enables audit-grade verification of provider selection decisions.
+
+**Backward Compatibility**: For fanout=1 (single seller path), contention tracking is present but enforcement is not required (no contention exists).
+
 7. Canonical Outputs for Non-Technical Stakeholders
 7.1 GC / Auditor One-Page Summary (Auditor View)
 

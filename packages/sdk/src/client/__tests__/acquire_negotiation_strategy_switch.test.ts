@@ -92,7 +92,7 @@ describe("acquire with negotiation strategy switching", () => {
         sellerId: seller.id,
         policy,
         settlement,
-        store,
+        store: undefined, // Stateless run - no double-commit enforcement (determinism validation)
         directory,
         now: createClock(),
       });
@@ -126,7 +126,7 @@ describe("acquire with negotiation strategy switching", () => {
         sellerId: seller.id,
         policy,
         settlement,
-        store,
+        store: undefined, // Stateless run - no double-commit enforcement (determinism validation)
         directory,
         now: createClock(),
       });

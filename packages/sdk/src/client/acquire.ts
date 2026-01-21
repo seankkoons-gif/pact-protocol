@@ -41,6 +41,8 @@ import { EthersWallet, SOLANA_WALLET_KIND, SolanaWallet, METAMASK_WALLET_KIND, M
 import { convertZkKyaInputToProof } from "../kya/zk";
 import { DefaultZkKyaVerifier, type ZkKyaVerifier } from "../kya/zk/verifier";
 import type { ZkKyaVerificationResult } from "../kya/zk/types";
+import { stableCanonicalize } from "../protocol/canonical";
+import { createHash } from "node:crypto";
 // Import test adapter only in test environment
 // Use dynamic require to avoid issues in production builds
 let TestWalletAdapter: any;
@@ -52,6 +54,34 @@ try {
 }
 
 const round8 = (x: number) => Math.round(x * 1e8) / 1e8;
+
+/**
+ * Compute deterministic intent fingerprint for double-commit detection (PACT-331).
+ * Fingerprint is stable across retries of the same economic intent.
+ * Exported for test validation of fingerprint stability.
+ */
+export function computeIntentFingerprint(params: {
+  intent_type: string;
+  scope: string | object; // Accept string or object, normalize internally
+  constraints: Record<string, unknown>;
+  buyer_agent_id: string;
+}): string {
+  // Normalize scope to string (handle both string and object types)
+  const normalizedScope = typeof params.scope === "string" 
+    ? params.scope 
+    : stableCanonicalize(params.scope);
+  
+  // Normalize constraints by sorting keys and using stable canonicalization
+  const normalized = {
+    intent_type: params.intent_type,
+    scope: normalizedScope,
+    constraints: params.constraints, // stableCanonicalize will handle sorting
+    buyer_agent_id: params.buyer_agent_id,
+  };
+  const canonical = stableCanonicalize(normalized);
+  const hash = createHash("sha256").update(canonical, "utf8").digest("hex");
+  return hash;
+}
 
 export async function acquire(params: {
   input: AcquireInput;
@@ -375,6 +405,14 @@ export async function acquire(params: {
       params: Object.keys(sanitizedWalletParams).length > 0 ? sanitizedWalletParams : undefined,
     };
   }
+  
+  // Compute intent fingerprint early for double-commit detection (PACT-331)
+  const intentFingerprint = computeIntentFingerprint({
+    intent_type: input.intentType,
+    scope: input.scope,
+    constraints: input.constraints || {},
+    buyer_agent_id: buyerId,
+  });
   
   const transcriptData: Partial<TranscriptV1> | null = saveTranscript ? {
     version: "1",
@@ -2645,6 +2683,66 @@ export async function acquire(params: {
         continue;
   }
 
+  // Double-commit detection (PACT-331) - store-backed enforcement
+  // Double-commit detection is store-backed; in-memory/no-store runs are considered stateless
+  // and do not enforce cross-run exclusivity.
+  // Only enforced when store is provided; skipped otherwise to support stateless/determinism tests.
+  // This check must happen before any settlement operations (credits/balances) to prevent side effects.
+  if (store) {
+    const priorCommit = store.hasCommittedFingerprint(intentFingerprint);
+    if (priorCommit) {
+      const code = "PACT-331" as DecisionCode;
+      const reason = `Double commit detected for intent. Prior transcript: ${priorCommit.transcriptId}`;
+      
+      // Emit failure event
+      await eventRunner.emitFailure(
+        "settlement" as AcquisitionPhase,
+        code,
+        reason,
+        false, // terminal
+        {
+          intent_fingerprint: intentFingerprint,
+          prior_transcript_id: priorCommit.transcriptId,
+          prior_timestamp_ms: priorCommit.timestamp_ms,
+        },
+        [
+          createEvidence("settlement" as AcquisitionPhase, "double_commit_detected", {
+            intent_fingerprint: intentFingerprint,
+            prior_transcript_id: priorCommit.transcriptId,
+          }),
+        ]
+      );
+      
+      // Save failure transcript
+      // Note: intent_fingerprint and failure_event are v4-only fields
+      // For v1 transcripts, double-commit detection works at runtime via Store
+      // but is not persisted in the transcript structure
+      if (saveTranscript && transcriptData && input.transcriptDir) {
+        // Use firstAttemptIntentId if available, otherwise generate a temporary ID
+        const failureIntentId = firstAttemptIntentId || `intent-${nowFunction()}-double-commit`;
+        transcriptPath = await saveTranscriptOnEarlyReturn(
+          failureIntentId,
+          code,
+          reason,
+          attemptEntry
+        );
+      }
+      
+      return {
+        ok: false,
+        plan: {
+          ...plan,
+          overrideActive,
+        },
+        code,
+        reason,
+        offers_eligible: evaluations.length,
+        ...(explain ? { explain } : {}),
+        ...(transcriptPath ? { transcriptPath } : {}),
+      };
+    }
+  }
+
   // 10) Compute seller bond requirement deterministically from policy
   const bonding = compiled.base.economics.bonding;
   const sellerBondRequired = Math.max(
@@ -2892,7 +2990,7 @@ export async function acquire(params: {
     strategy_id?: string; // Strategy used for this round (v2.3.1+)
   }> = [];
   
-  if (plan.regime === "negotiated" && (negotiationStrategyName === "banded_concession" || negotiationStrategyName === "aggressive_if_urgent" || negotiationStrategyName === "ml_stub")) {
+  if ((plan.regime === "negotiated" || negotiationStrategyName === "ml_stub") && (negotiationStrategyName === "banded_concession" || negotiationStrategyName === "aggressive_if_urgent" || negotiationStrategyName === "ml_stub")) {
     // Run negotiation rounds for negotiated regime with banded_concession
     const bandPct = input.negotiation?.params?.band_pct as number | undefined ?? 0.1;
     
@@ -3108,7 +3206,7 @@ export async function acquire(params: {
 
   // Negotiation succeeded - emit success event
   // Use negotiated price (for negotiated regime with rounds, this is the accepted ask price or final counter)
-  const negotiatedPrice = plan.regime === "negotiated" && (negotiationStrategyName === "banded_concession" || negotiationStrategyName === "aggressive_if_urgent" || negotiationStrategyName === "ml_stub") && negotiationRounds.length > 0
+  const negotiatedPrice = (plan.regime === "negotiated" || negotiationStrategyName === "ml_stub") && (negotiationStrategyName === "banded_concession" || negotiationStrategyName === "aggressive_if_urgent" || negotiationStrategyName === "ml_stub") && negotiationRounds.length > 0
     ? (negotiationRounds[negotiationRounds.length - 1].accepted ? selectedAskPrice : negotiationRounds[negotiationRounds.length - 1].counter_price)
     : (negotiationResult?.agreed_price ?? selectedAskPrice);
 
@@ -5080,6 +5178,17 @@ export async function acquire(params: {
         if (!transcriptData.settlement_lifecycle.paid_amount) {
           transcriptData.settlement_lifecycle.paid_amount = finalReceipt.paid_amount || (finalReceipt as any).agreed_price || 0;
         }
+      }
+    }
+    
+    // Mark intent fingerprint as committed (atomic reservation, PACT-331)
+    // This must happen inside the atomic commit gate, before transcript_commit
+    if (store && finalIntentId) {
+      try {
+        store.markFingerprintCommitted(intentFingerprint, finalIntentId, nowFn ? nowFn() : Date.now());
+      } catch (err) {
+        // Log but don't fail - fingerprint tracking is best-effort
+        // If store is unavailable, we still want to complete the transaction
       }
     }
     

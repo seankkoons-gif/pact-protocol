@@ -2042,5 +2042,123 @@ describe("acquire", () => {
       }
     });
   });
+
+  it("should detect double-commit and fail with PACT-331", async () => {
+    const buyer = createKeyPair();
+    const seller = createKeyPair();
+    const policy = createDefaultPolicy();
+    const settlement = new MockSettlementProvider();
+    settlement.credit(buyer.id, 1.0);
+    settlement.credit(seller.id, 0.1);
+    const store = new ReceiptStore();
+    
+    // Use a temporary transcript directory for this test
+    const testTranscriptDir = ".pact/test-transcripts-double-commit";
+    if (!fs.existsSync(testTranscriptDir)) {
+      fs.mkdirSync(testTranscriptDir, { recursive: true });
+    }
+
+    // First acquisition - should succeed
+    const firstResult = await acquire({
+      input: {
+        intentType: "weather.data",
+        scope: "NYC",
+        constraints: { latency_ms: 50, freshness_sec: 10 },
+        maxPrice: 0.0001,
+        saveTranscript: true,
+        transcriptDir: testTranscriptDir,
+      },
+      buyerKeyPair: buyer.keyPair,
+      sellerKeyPair: seller.keyPair,
+      buyerId: buyer.id,
+      sellerId: seller.id,
+      policy,
+      settlement,
+      store,
+      now: createClock(),
+    });
+
+    expect(firstResult.ok).toBe(true);
+    if (!firstResult.ok) {
+      throw new Error("First acquisition should succeed");
+    }
+    expect(firstResult.receipt).toBeDefined();
+    if (!firstResult.receipt) {
+      throw new Error("First acquisition should produce a receipt");
+    }
+    
+    // Store initial balances for comparison
+    const initialBuyerBalance = settlement.getBalance(buyer.id);
+    const initialSellerBalance = settlement.getBalance(seller.id);
+
+    // Second acquisition with same intent (identical buyer_id, intent_type, scope, constraints) - should fail with PACT-331
+    const secondResult = await acquire({
+      input: {
+        intentType: "weather.data",
+        scope: "NYC",
+        constraints: { latency_ms: 50, freshness_sec: 10 },
+        maxPrice: 0.0001,
+        saveTranscript: true,
+        transcriptDir: testTranscriptDir,
+      },
+      buyerKeyPair: buyer.keyPair,
+      sellerKeyPair: seller.keyPair,
+      buyerId: buyer.id, // Same buyer_id
+      sellerId: seller.id,
+      policy,
+      settlement,
+      store,
+      now: createClock(),
+    });
+
+    expect(secondResult.ok).toBe(false);
+    if (secondResult.ok) {
+      throw new Error("Second acquisition should fail with PACT-331");
+    }
+
+    expect(secondResult.code).toBe("PACT-331");
+    expect(secondResult.reason).toContain("Double commit detected");
+    expect(secondResult.reason).toContain("Prior transcript");
+
+    // Verify no settlement side effects on second attempt
+    // (receipt should not be created)
+    expect(secondResult.receipt).toBeUndefined();
+    
+    // Verify balances unchanged (no payment occurred on second attempt)
+    expect(settlement.getBalance(buyer.id)).toBe(initialBuyerBalance);
+    expect(settlement.getBalance(seller.id)).toBe(initialSellerBalance);
+
+    // Verify transcript contains v1 failure shape (outcome.code/reason)
+    // Note: intent_fingerprint and failure_event are v4-only fields
+    // For v1 transcripts, double-commit detection works at runtime via Store
+    // but failure information is stored in outcome.code/reason
+    expect(secondResult.transcriptPath).toBeDefined();
+    if (!secondResult.transcriptPath) {
+      throw new Error("Second acquisition should produce a failure transcript");
+    }
+    
+    const transcriptContent = fs.readFileSync(secondResult.transcriptPath, "utf-8");
+    const transcript = JSON.parse(transcriptContent);
+    // Verify v1 transcript structure (no intent_fingerprint in v1)
+    expect(transcript.version).toBe("1");
+    expect(transcript.outcome).toBeDefined();
+    expect(transcript.outcome.ok).toBe(false);
+    expect(transcript.outcome.code).toBe("PACT-331");
+    expect(transcript.outcome.reason).toContain("Double commit detected");
+    expect(transcript.outcome.reason).toContain("Prior transcript");
+    
+    // Clean up test transcripts
+    try {
+      if (fs.existsSync(testTranscriptDir)) {
+        const files = fs.readdirSync(testTranscriptDir);
+        for (const file of files) {
+          fs.unlinkSync(`${testTranscriptDir}/${file}`);
+        }
+        fs.rmdirSync(testTranscriptDir);
+      }
+    } catch {
+      // Ignore cleanup errors
+    }
+  });
 });
 
