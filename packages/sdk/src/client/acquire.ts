@@ -115,6 +115,9 @@ export async function acquire(params: {
   let walletSignature: WalletSignature | undefined;
   let walletCapabilitiesResponse: any; // WalletCapabilitiesResponse from capabilities() method
   
+  // Transcript path (declared at function scope for accessibility)
+  let transcriptPath: string | undefined;
+  
   // Helper to convert Address (Uint8Array) to hex string
   const addressToHex = (address: Uint8Array): string => {
     return "0x" + Array.from(address)
@@ -911,6 +914,30 @@ export async function acquire(params: {
 
   let candidates: ProviderCandidate[] = [];
   
+  // Initialize contention tracking for v4 evidence (always defined for scope access)
+  let contention: {
+    fanout: number;
+    contenders: Array<{ provider_id: string; pubkey_b58: string; endpoint?: string; eligible: boolean; reject_code?: string }>;
+    winner: null | { provider_id: string; pubkey_b58: string };
+    decision: { rule: "v1"; tie_break: "order_then_score"; note?: string };
+  } = {
+    fanout: 1,
+    contenders: [],
+    winner: null,
+    decision: { rule: "v1", tie_break: "order_then_score" },
+  };
+  
+  // Helper to update contender eligibility/rejection (observational only, no control flow change)
+  const updateContender = (providerId: string, eligible: boolean, rejectCode?: string) => {
+    const contender = contention.contenders.find(c => c.provider_id === providerId);
+    if (contender) {
+      contender.eligible = eligible;
+      if (rejectCode) {
+        contender.reject_code = rejectCode;
+      }
+    }
+  };
+  
   // Emit provider_discovery progress event
   await eventRunner.emitProgress(
     "provider_discovery" as AcquisitionPhase,
@@ -977,6 +1004,11 @@ export async function acquire(params: {
     // Take first N providers (stable order)
     const selectedProviders = allProviders.slice(0, effectiveFanout);
     
+    // Update contention for directory-based fanout
+    contention.fanout = effectiveFanout;
+    contention.contenders = [];
+    contention.winner = null;
+    
     candidates = selectedProviders.map(record => {
       const provider = record as any;
       const candidate: ProviderCandidate = {
@@ -987,6 +1019,14 @@ export async function acquire(params: {
         baseline_latency_ms: provider.baseline_latency_ms,
         endpoint: provider.endpoint,
       };
+      
+      // Initialize contender entry with eligible=false (will be updated during evaluation)
+      contention.contenders.push({
+        provider_id: candidate.provider_id,
+        pubkey_b58: candidate.pubkey_b58,
+        endpoint: candidate.endpoint,
+        eligible: false,
+      });
       
       // Collect directory data for transcript
       if (transcriptData) {
@@ -1020,6 +1060,11 @@ export async function acquire(params: {
     );
   } else {
     // Single seller path (backward compatible)
+    // Update contention for single seller (fanout=1, no contention)
+    contention.fanout = 1;
+    contention.contenders = [];
+    contention.winner = null;
+    
     candidates = [{
       provider_id: sellerId,
       pubkey_b58: sellerId,
@@ -1027,6 +1072,13 @@ export async function acquire(params: {
       region: "us-east",
       baseline_latency_ms: input.constraints.latency_ms,
     }];
+    
+    // Initialize contender entry for single seller (fanout=1)
+    contention.contenders.push({
+      provider_id: sellerId,
+      pubkey_b58: sellerId,
+      eligible: false,
+    });
     
     if (explain) {
       // Log that we're using single seller path (no decision code needed for positive directory lookup)
@@ -1131,6 +1183,7 @@ export async function acquire(params: {
           providerCreds: finalCreds,
         } : undefined
       );
+      updateContender(provider.provider_id, false, code);
       continue; // Skip provider lacking required credentials
     }
 
@@ -1207,6 +1260,7 @@ export async function acquire(params: {
         } : undefined
       );
       
+      updateContender(provider.provider_id, false, code);
       // Skip this provider (will result in NO_ELIGIBLE_PROVIDERS if all fail)
       continue;
     }
@@ -1260,6 +1314,7 @@ export async function acquire(params: {
               reason: "Credential signature verification failed",
             });
           }
+          updateContender(provider.provider_id, false, code);
           continue;
         }
         
@@ -1298,6 +1353,7 @@ export async function acquire(params: {
               actual: credentialEnvelope.signer_public_key_b58,
             } : undefined
           );
+          updateContender(provider.provider_id, false, code);
           continue;
         }
         
@@ -1341,6 +1397,7 @@ export async function acquire(params: {
               now,
             } : undefined
           );
+          updateContender(provider.provider_id, false, code);
           continue;
         }
         
@@ -1382,6 +1439,7 @@ export async function acquire(params: {
               available: capabilities.map((cap: any) => cap.intentType),
             } : undefined
           );
+          updateContender(provider.provider_id, false, code);
           continue;
         }
         
@@ -1500,6 +1558,7 @@ export async function acquire(params: {
               error: error.message,
             } : undefined
           );
+          updateContender(provider.provider_id, false, code);
           continue; // Skip provider if credential fetch fails (except 404)
         }
       }
@@ -1542,6 +1601,7 @@ export async function acquire(params: {
           require_credential: requireCredential,
         } : undefined
       );
+      updateContender(provider.provider_id, false, code);
       continue;
     }
     
@@ -1634,6 +1694,7 @@ export async function acquire(params: {
             trust_score: trustResult.trust_score,
           } : undefined
         );
+        updateContender(provider.provider_id, false, code);
         continue;
       }
       
@@ -1675,6 +1736,7 @@ export async function acquire(params: {
             reasons: trustResult.reasons,
           } : undefined
         );
+        updateContender(provider.provider_id, false, code);
         continue;
       }
     }
@@ -1741,6 +1803,7 @@ export async function acquire(params: {
               reason: "Quote envelope signature verification failed",
             });
           }
+          updateContender(provider.provider_id, false, code);
           continue;
         }
         
@@ -1778,6 +1841,7 @@ export async function acquire(params: {
             `Failed to parse quote envelope: ${error.message}`,
             explainLevel === "full" ? { error: error.message } : undefined
           );
+          updateContender(provider.provider_id, false, code);
           continue;
         }
         
@@ -1813,6 +1877,7 @@ export async function acquire(params: {
             code,
             `Signer ${parsed.signer_public_key_b58.substring(0, 8)} does not match provider ${providerPubkey.substring(0, 8)}`
           );
+          updateContender(provider.provider_id, false, code);
           continue;
         }
         
@@ -1846,6 +1911,7 @@ export async function acquire(params: {
             code,
             `Expected ASK message, got ${parsed.message.type}`
           );
+          updateContender(provider.provider_id, false, code);
           continue; // Invalid message type
         }
         
@@ -1902,6 +1968,7 @@ export async function acquire(params: {
           `HTTP error fetching quote: ${error.message}`,
           explainLevel === "full" ? { error: error.message } : undefined
         );
+        updateContender(provider.provider_id, false, code);
         continue;
       }
     } else {
@@ -2013,6 +2080,7 @@ export async function acquire(params: {
           urgent: input.urgent || false,
         } : undefined
       );
+      updateContender(provider.provider_id, false, code);
       continue; // Skip provider that fails negotiation check
     }
     
@@ -2020,6 +2088,8 @@ export async function acquire(params: {
     if (explain) {
       explain.providers_eligible = (explain.providers_eligible || 0) + 1;
     }
+    // Mark contender as eligible
+    updateContender(provider.provider_id, true);
 
     // Recompute reputation for utility calculation (V2 if enabled and credential verified, otherwise keep V1)
     if (store && input.useReputationV2 && credentialPresent) {
@@ -2120,7 +2190,6 @@ export async function acquire(params: {
       });
     }
     // Build and write transcript for error case
-    let transcriptPath: string | undefined;
     if (saveTranscript && transcriptData) {
       // Generate intent_id for error case
       const errorIntentId = `error-${nowFunction()}`;
@@ -2247,6 +2316,14 @@ export async function acquire(params: {
     const selectedAskPrice = candidateEvaluation.askPrice;
     const attemptTimestamp = nowFunction();
     
+    // Record winner deterministically (v1 contention semantics)
+    if (attemptIdx === 0 && contention.winner === null) {
+      contention.winner = {
+        provider_id: selectedProvider.provider_id,
+        pubkey_b58: selectedProviderPubkey,
+      };
+    }
+    
     // Record attempt start (will update with outcome later)
     let attemptEntry: typeof settlementAttempts[0] = {
       idx: attemptIdx,
@@ -2266,6 +2343,11 @@ export async function acquire(params: {
           utility_score: candidateEvaluation.utility,
       alternatives_considered: evaluations.length,
     };
+    
+    // Persist contention evidence into transcriptData (v1 contention semantics)
+    if ((transcriptData as any).contention === undefined) {
+      (transcriptData as any).contention = contention;
+    }
   }
   
       // Log provider selection (only on first attempt for explain)
@@ -3158,7 +3240,7 @@ export async function acquire(params: {
               // Ignore - handle_id might not be accessible
             }
           }
-          const transcriptPath = await saveTranscriptOnEarlyReturn(
+          transcriptPath = await saveTranscriptOnEarlyReturn(
             intentId,
             acceptResult.code,
             acceptResult.reason || "ACCEPT failed",
@@ -3271,6 +3353,44 @@ export async function acquire(params: {
   }
 
       if (chosenMode === "hash_reveal") {
+    // Settlement exclusivity guard (v1 contention semantics)
+    // Enforce that only the selected provider can settle
+    if (contention.winner && selectedProviderPubkey !== contention.winner.pubkey_b58) {
+      const code = "PACT-330" as DecisionCode;
+      const reason = `Contention exclusivity violated: attempted settlement with non-selected provider. Selected: ${contention.winner.provider_id}, Attempted: ${selectedProvider.provider_id}`;
+      
+      // Emit failure event
+      await eventRunner.emitFailure(
+        "settlement" as AcquisitionPhase,
+        code,
+        reason,
+        false, // terminal
+        {
+          selected_provider_id: contention.winner.provider_id,
+          selected_pubkey_b58: contention.winner.pubkey_b58,
+          attempted_provider_id: selectedProvider.provider_id,
+          attempted_pubkey_b58: selectedProviderPubkey,
+        },
+        [
+          createEvidence("settlement" as AcquisitionPhase, "contention_exclusivity_violation", {
+            winner_provider_id: contention.winner.provider_id,
+            attempted_provider_id: selectedProvider.provider_id,
+          }),
+        ]
+      );
+      
+      // Return terminal failure
+      return {
+        ok: false,
+        plan,
+        code,
+        reason,
+        offers_eligible: evaluations.length,
+        ...(explain ? { explain } : {}),
+        ...(transcriptPath ? { transcriptPath } : {}),
+      };
+    }
+    
     // Emit SETTLEMENT_START event
     await eventRunner.emitProgress(
       "settlement" as AcquisitionPhase,
@@ -3405,7 +3525,7 @@ export async function acquire(params: {
             );
             
             // Save transcript for non-retryable COMMIT failure (v1.7.2+)
-            const transcriptPath = await saveTranscriptOnEarlyReturn(
+            transcriptPath = await saveTranscriptOnEarlyReturn(
               intentId,
               commitResult.code,
               commitResult.reason || "COMMIT failed",
@@ -3508,7 +3628,7 @@ export async function acquire(params: {
                 );
                 
                 // Save transcript for non-retryable REVEAL failure (v1.7.2+)
-                const transcriptPath = await saveTranscriptOnEarlyReturn(
+                transcriptPath = await saveTranscriptOnEarlyReturn(
                   intentId,
                   failureCode,
                   revealResponse.reason || "REVEAL failed",
@@ -3587,7 +3707,7 @@ export async function acquire(params: {
           );
           
           // Save transcript for non-retryable REVEAL failure (v1.7.2+)
-          const transcriptPath = await saveTranscriptOnEarlyReturn(
+          transcriptPath = await saveTranscriptOnEarlyReturn(
             intentId,
             revealResult.code,
             revealResult.reason || "REVEAL failed",
@@ -3685,7 +3805,7 @@ export async function acquire(params: {
           );
           
           // Save transcript for non-retryable COMMIT failure (v1.7.2+)
-          const transcriptPath = await saveTranscriptOnEarlyReturn(
+          transcriptPath = await saveTranscriptOnEarlyReturn(
             intentId,
             commitResult.code,
             commitResult.reason || "COMMIT failed",
@@ -3766,7 +3886,7 @@ export async function acquire(params: {
           );
           
           // Save transcript for non-retryable REVEAL failure (v1.7.2+)
-          const transcriptPath = await saveTranscriptOnEarlyReturn(
+          transcriptPath = await saveTranscriptOnEarlyReturn(
             intentId,
             revealResult.code,
             revealResult.reason || "REVEAL failed",
@@ -3815,6 +3935,44 @@ export async function acquire(params: {
       }
 
       if (chosenMode === "streaming") {
+        // Settlement exclusivity guard (v1 contention semantics)
+        // Enforce that only the selected provider can settle
+        if (contention.winner && selectedProviderPubkey !== contention.winner.pubkey_b58) {
+          const code = "PACT-330" as DecisionCode;
+          const reason = `Contention exclusivity violated: attempted settlement with non-selected provider. Selected: ${contention.winner.provider_id}, Attempted: ${selectedProvider.provider_id}`;
+          
+          // Emit failure event
+          await eventRunner.emitFailure(
+            "settlement" as AcquisitionPhase,
+            code,
+            reason,
+            false, // terminal
+            {
+              selected_provider_id: contention.winner.provider_id,
+              selected_pubkey_b58: contention.winner.pubkey_b58,
+              attempted_provider_id: selectedProvider.provider_id,
+              attempted_pubkey_b58: selectedProviderPubkey,
+            },
+            [
+              createEvidence("settlement" as AcquisitionPhase, "contention_exclusivity_violation", {
+                winner_provider_id: contention.winner.provider_id,
+                attempted_provider_id: selectedProvider.provider_id,
+              }),
+            ]
+          );
+          
+          // Return terminal failure
+          return {
+            ok: false,
+            plan,
+            code,
+            reason,
+            offers_eligible: evaluations.length,
+            ...(explain ? { explain } : {}),
+            ...(transcriptPath ? { transcriptPath } : {}),
+          };
+        }
+        
         // Streaming settlement
         const streamingPolicy = compiled.base.settlement.streaming;
         
@@ -4669,7 +4827,6 @@ export async function acquire(params: {
     
     
     // Save transcript if requested (v1.7.2+)
-    let transcriptPath: string | undefined;
     if (saveTranscript && transcriptData && input.transcriptDir) {
       // Use first attempt intentId if available, otherwise generate one
       const transcriptIntentId = firstAttemptIntentId || finalIntentId || `intent-${nowFunction()}-failed`;
@@ -4896,7 +5053,6 @@ export async function acquire(params: {
   }
   
   // Build and write transcript if requested
-  let transcriptPath: string | undefined;
   if (saveTranscript && transcriptData) {
     transcriptData.intent_id = finalIntentId;
     transcriptData.settlement = {
