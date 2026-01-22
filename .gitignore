@@ -37,3 +37,20 @@ node
 keypair.json
 *.keypair.json
 *_keypair.json
+
+# local/WIP artifacts
+packages/sdk/src/blame/
+packages/sdk/src/transcript/v4/__tests__/contention.test.ts
+packages/passport/src/storage-memory.ts
+packages/passport/src/__tests__/storage-fallback.test.ts
+
+# macOS / editor duplicate filenames (accidental copies)
+* 2.ts
+* 2.md
+* 2.json
+* 2.yml
+* 2.yaml
+* 2.txt
+* 2.mjs
+* 2.cjs
+
