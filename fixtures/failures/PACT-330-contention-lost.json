@@ -1,0 +1,63 @@
+{
+  "transcript_version": "pact-transcript/4.0",
+  "transcript_id": "transcript-330-contention-lost-test",
+  "intent_id": "intent-pact330-test",
+  "intent_type": "weather.data",
+  "created_at_ms": 1000000000000,
+  "policy_hash": "aaa049f74895f24ca7f38f3db5e11b2d702452c0207c4459d179b8dc8833628d",
+  "strategy_hash": "bfdff987de461bf22ae33537307038b70af9440a9e5f3c7f6e7607239f58224c",
+  "identity_snapshot_hash": "f4edf4b37099e97dd380c24c37496de32c341406c2901bd830d2e35386ca1c37",
+  "rounds": [
+    {
+      "round_number": 0,
+      "round_type": "INTENT",
+      "message_hash": "ebfed91c1848f2694d64a7ee93ce8a03aa957ddd1bc670e84d91b64ff13f5a3c",
+      "envelope_hash": "ebfed91c1848f2694d64a7ee93ce8a03aa957ddd1bc670e84d91b64ff13f5a3c",
+      "signature": {
+        "signer_public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+        "signature_b58": "1hQsRfwweTArnnxFGaR3VdYppmpPrZNHwEmwAW7scbpUVHczp5sYi37ubzMG1zsGDDVN9CqG5RysGLftoyw8x91",
+        "signed_at_ms": 1000000000000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1000000000000,
+      "previous_round_hash": "4c1fb8aaab406d8920eef402efcb6bc36fbf7b1116390450e9fbccd65de77a57",
+      "agent_id": "buyer",
+      "public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+      "content_summary": {
+        "intent_type": "weather.data"
+      },
+      "round_hash": "5cc150388e3ea797b65c14a6592ec5a19d0969e306517be59cb633722aace090"
+    },
+    {
+      "round_number": 1,
+      "round_type": "ASK",
+      "message_hash": "b9857bbf689d98c68b58a5e33a8436bd8a2c25d63149c07b7fb77b45490edd14",
+      "envelope_hash": "b9857bbf689d98c68b58a5e33a8436bd8a2c25d63149c07b7fb77b45490edd14",
+      "signature": {
+        "signer_public_key_b58": "HBUkwmmQVFX3mGF6ris1mWDATY27nAupX6wQNXgJD9j9",
+        "signature_b58": "hRziQJSVC5Xs6jq2ncg1bgxViR57BUqSVumXGTUZ6bYKxvNvq3VtWf7KaQPnEdyM7xnTF491ryzRpuvFGujSSyE",
+        "signed_at_ms": 1000000001000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1000000001000,
+      "previous_round_hash": "5cc150388e3ea797b65c14a6592ec5a19d0969e306517be59cb633722aace090",
+      "agent_id": "seller",
+      "public_key_b58": "HBUkwmmQVFX3mGF6ris1mWDATY27nAupX6wQNXgJD9j9",
+      "content_summary": {},
+      "round_hash": "b1b5b325bffa07ef81ac96c4ae32ad7c88d0b66aade2a5d7717c0d4b272f7b8d"
+    }
+  ],
+  "failure_event": {
+    "code": "PACT-330",
+    "stage": "settlement",
+    "fault_domain": "policy",
+    "terminality": "terminal",
+    "evidence_refs": [
+      "contention_winner:HBUkwmmQVFX3mGF6ris1mWDATY27nAupX6wQNXgJD9j9",
+      "attempted_provider:7XqK48yeE1aEZtfpFU2AwY8odDiGgBT4JXK"
+    ],
+    "timestamp": 1000000002000,
+    "transcript_hash": "e517b8971ffee67aa1c4832a11caeb87f249b24390339ce7ee2f3c79f2429b57"
+  },
+  "final_hash": "3571fc54980bf931e3061b58ca51dffb283c041c12f32395329f7f62df72bc62"
+}
