@@ -8,13 +8,17 @@
     "judge-v4": "./dist/cli/judge_v4.js"
   },
   "scripts": {
-    "build": "pnpm exec tsc",
+    "build": "pnpm exec tsup src/cli/passport_v1_recompute.ts src/cli/judge_v4.ts src/cli/gc_view.ts src/cli/*.ts --format esm --outDir dist/cli --tsconfig tsconfig.json",
     "judge": "pnpm exec tsx src/cli/judge_v4.ts",
+    "passport:v1:recompute": "pnpm run build && node dist/cli/passport_v1_recompute.js",
+    "passport:v1:recompute:dev": "pnpm exec tsx src/cli/passport_v1_recompute.ts",
+    "gc-view": "pnpm run build && node dist/cli/gc_view.js",
     "test": "pnpm -w exec vitest run -r packages/verifier",
     "test:watch": "pnpm -w exec vitest -r packages/verifier"
   },
   "dependencies": {
     "@pact/sdk": "workspace:*",
+    "@pact/passport": "workspace:*",
     "bs58": "^5.0.0",
     "tweetnacl": "^1.0.3"
   },
