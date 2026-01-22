@@ -1,6 +1,0 @@
-node_modules/
-dist/
-.pact/
-*.log
-.env
-.DS_Store

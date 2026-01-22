@@ -1,2 +1,0 @@
-{"provider_id":"8MAHFtsA","intentType":"weather.data","pubkey_b58":"8MAHFtsAtkENKMukXZoRUhNXCtJExDHEsUPSR19rjBDp","endpoint":"http://127.0.0.1:7777","credentials":["sla_verified"],"region":"us-east","baseline_latency_ms":50}
-

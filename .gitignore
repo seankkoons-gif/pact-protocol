@@ -37,3 +37,9 @@ node
 keypair.json
 *.keypair.json
 *_keypair.json
+
+# local/WIP artifacts
+packages/sdk/src/blame/
+packages/sdk/src/transcript/v4/__tests__/contention.test.ts
+packages/passport/src/storage-memory.ts
+packages/passport/src/__tests__/storage-fallback.test.ts
