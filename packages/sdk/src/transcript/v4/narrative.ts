@@ -97,15 +97,29 @@ export function narrateFailure(failure: FailureEvent): NarrativeFailure {
     negotiation: "Negotiation protocol failure",
     settlement: "Settlement rail failure",
     recursive: "Dependency or recursive failure",
+    PROVIDER_AT_FAULT: "Provider at fault",
   };
 
   const stageDesc = stageDescriptions[failure.stage] || failure.stage;
   const faultDesc = faultDomainDescriptions[failure.fault_domain] || failure.fault_domain;
   const terminalityDesc = failure.terminality === "terminal" ? "terminal" : "non-terminal (retry possible)";
 
-  let narrative = `${faultDesc} detected ${stageDesc}. `;
-  narrative += `Error code: ${failure.code}. `;
-  narrative += `This is a ${terminalityDesc} failure. `;
+  // Special handling for provider unreachable (PACT-420)
+  let narrative = "";
+  if (failure.code === "PACT-420" && (failure.stage === "negotiation" || failure.fault_domain === "PROVIDER_AT_FAULT")) {
+    narrative = "Provider unreachable during quote request. ";
+    narrative += `Error code: ${failure.code}. `;
+    narrative += `This is a ${terminalityDesc} failure. `;
+  } else if (failure.code === "PACT-421" && (failure.stage === "negotiation" || failure.fault_domain === "PROVIDER_AT_FAULT")) {
+    // Special handling for provider API mismatch (PACT-421)
+    narrative = "Provider API mismatch (endpoint not found). ";
+    narrative += `Error code: ${failure.code}. `;
+    narrative += `This is a ${terminalityDesc} failure. `;
+  } else {
+    narrative = `${faultDesc} detected ${stageDesc}. `;
+    narrative += `Error code: ${failure.code}. `;
+    narrative += `This is a ${terminalityDesc} failure. `;
+  }
   
   if (failure.evidence_refs.length > 0) {
     narrative += `Evidence references: ${failure.evidence_refs.length} artifact(s).`;

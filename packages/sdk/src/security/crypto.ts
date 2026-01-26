@@ -10,7 +10,7 @@
  * - Base64url encoding/decoding
  */
 
-import * as crypto from "crypto";
+import * as crypto from "node:crypto";
 
 /**
  * Derive a 32-byte encryption key from a passphrase using scrypt.

@@ -1,29 +1,49 @@
 {
   "name": "@pact/verifier",
-  "version": "0.1.0",
-  "description": "Pact v4 Transcript Verifier and Default Blame Logic",
-  "private": true,
+  "version": "0.2.0",
+  "description": "Pact v4 Transcript Verifier and Default Blame Logic - Standalone CLI",
+  "private": false,
   "type": "module",
   "bin": {
-    "judge-v4": "./dist/cli/judge_v4.js"
+    "pact-verifier": "./dist/bin/pact-verifier.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "resources"
+  ],
   "scripts": {
-    "build": "pnpm exec tsup src/cli/passport_v1_recompute.ts src/cli/judge_v4.ts src/cli/gc_view.ts src/cli/*.ts --format esm --outDir dist/cli --tsconfig tsconfig.json",
+    "build": "pnpm run clean && pnpm run build:cli && pnpm run build:bin",
+    "clean": "rm -rf dist",
+    "build:cli": "pnpm exec tsup src/cli/passport_v1_recompute.ts src/cli/judge_v4.ts src/cli/gc_view.ts src/cli/gc_summary.ts src/cli/insurer_summary.ts src/cli/contention_scan.ts src/cli/auditor_pack.ts src/cli/auditor_pack_verify.ts --format esm --outDir dist/cli --tsconfig tsconfig.json --silent --clean",
+    "build:bin": "pnpm exec tsup src/bin/pact-verifier.ts --format esm --outDir dist/bin --tsconfig tsconfig.json --silent --clean",
+    "pack": "npm pack",
+    "smoke": "bash scripts/smoke_fresh_install.sh",
     "judge": "pnpm exec tsx src/cli/judge_v4.ts",
-    "passport:v1:recompute": "pnpm run build && node dist/cli/passport_v1_recompute.js",
+    "passport:v1:recompute": "pnpm run build >&2 && node dist/cli/passport_v1_recompute.js",
     "passport:v1:recompute:dev": "pnpm exec tsx src/cli/passport_v1_recompute.ts",
-    "gc-view": "pnpm run build && node dist/cli/gc_view.js",
+    "passport:v1:recompute:raw": "node dist/cli/passport_v1_recompute.js",
+    "gc-view": "pnpm run build >&2 && node dist/cli/gc_view.js",
+    "bundle:gc-view": "pnpm run build >&2 && node dist/cli/gc_view.js",
+    "bundle:gc-view:raw": "node dist/cli/gc_view.js",
+    "transcript:gc-view": "pnpm run build >&2 && node dist/cli/gc_view.js",
+    "transcript:gc-view:raw": "node dist/cli/gc_view.js",
+    "judge:v4:raw": "node dist/cli/judge_v4.js",
+    "replay:v4:raw": "node dist/cli/replay_v4.js",
+    "replay:verify:raw": "node dist/cli/replay_verify.js",
+    "contention:scan": "pnpm run build >&2 && node dist/cli/contention_scan.js",
+    "contention:scan:raw": "node dist/cli/contention_scan.js",
     "test": "pnpm -w exec vitest run -r packages/verifier",
     "test:watch": "pnpm -w exec vitest -r packages/verifier"
   },
   "dependencies": {
-    "@pact/sdk": "workspace:*",
-    "@pact/passport": "workspace:*",
     "bs58": "^5.0.0",
+    "jszip": "^3.10.1",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@types/node": "^20.10.6",
+    "tsup": "^8.0.0",
     "tsx": "^4.7.0",
     "typescript": "^5.9.3",
     "vitest": "^1.6.1"

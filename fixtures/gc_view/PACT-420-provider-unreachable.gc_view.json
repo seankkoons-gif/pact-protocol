@@ -1,0 +1,144 @@
+{
+  "version": "gc_view/1.0",
+  "constitution": {
+    "version": "constitution/1.0",
+    "hash": "a0ea6fe329251b8c92112fd7518976a031eb8db76433e8c99c77060fc76d7d9d",
+    "rules_applied": [
+      "DBL-1",
+      "DBL-2",
+      "DET-1",
+      "EVD-1",
+      "EVD-2",
+      "GC-1",
+      "INT-1",
+      "INT-2",
+      "INT-3"
+    ]
+  },
+  "gc_takeaways": {
+    "approval_risk": "HIGH",
+    "why": [
+      "Integrity validation failed - hash chain broken"
+    ],
+    "open_questions": [
+      "Final/container hash not verifiable in transcript-only mode; LVSH computed from signed rounds.",
+      "LVSH cannot be established, but PACT-420 is deterministic (provider unreachable)",
+      "Was the transcript tampered with?"
+    ],
+    "recommended_remediation": [
+      "Investigate integrity failure - do not approve transaction"
+    ]
+  },
+  "chain_of_custody": {
+    "transcript_hash": "e32f9b904118093fb58a0bbd30e13731d37c63bfb8361c9fe15f602a75092fcd",
+    "signature_verification": {
+      "verified": 0,
+      "total": 1,
+      "status": "FAILED"
+    },
+    "artifacts_trusted": false,
+    "artifacts_claimed": 3
+  },
+  "subject": {
+    "transcript_id_or_hash": "e32f9b904118093fb58a0bbd30e13731d37c63bfb8361c9fe15f602a75092fcd",
+    "intent_fingerprint": "intent-pact420-test",
+    "parties": [
+      {
+        "role": "buyer",
+        "signer_pubkey": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+        "agent_label": "buyer"
+      }
+    ]
+  },
+  "executive_summary": {
+    "status": "FAILED_PROVIDER_UNREACHABLE",
+    "what_happened": "Provider unreachable during quote request; negotiation could not be completed. Network failure or provider endpoint unavailable.",
+    "money_moved": false,
+    "settlement_attempted": false,
+    "final_outcome": "Provider unreachable during quote request"
+  },
+  "integrity": {
+    "hash_chain": "INVALID",
+    "signatures_verified": {
+      "verified": 0,
+      "total": 1
+    },
+    "final_hash_mismatch": null,
+    "final_hash_validation": "UNVERIFIABLE",
+    "notes": []
+  },
+  "policy": {
+    "policy_hash": "aaa049f74895f24ca7f38f3db5e11b2d702452c0207c4459d179b8dc8833628d",
+    "policy_status": "UNKNOWN",
+    "passport_gating_used": false,
+    "passport_state_hashes": [],
+    "policy_failures": []
+  },
+  "responsibility": {
+    "dbl_version": "dbl/2.0",
+    "judgment": {
+      "fault_domain": "PROVIDER_AT_FAULT",
+      "required_next_actor": "PROVIDER",
+      "required_action": "RETRY",
+      "terminal": true,
+      "confidence": 0.7
+    },
+    "last_valid_signed_hash": "b0dad4440d5c0b77eeac6466da1472055bf479e8d465e94d165f13238dac8261",
+    "blame_explanation": "Provider unreachable during quote request"
+  },
+  "responsibility_trace": [
+    "Last valid round: -1",
+    "Last valid state: Transcript verification failed (HASH_CHAIN_BROKEN: Hash chain broken at round 0: expected previous_round_hash 3787a9cc7ec0c6d0a94844f17ce949ccef04cd76cf47f917b20d64c74b5b6316, got 99397eb8c4a2d6076bb120d7096689eee133480d4fc5e87461006944f5f7e0d3)",
+    "Failure code: PACT-420",
+    "Claimed evidence refs: 3",
+    "Confidence: 70%",
+    "DBL determination: PROVIDER_AT_FAULT",
+    "Failure stage: NEGOTIATION",
+    "Integrity: INVALID (hash chain/signature failure)",
+    "Passport impact: -0.05",
+    "Required next actor: PROVIDER"
+  ],
+  "evidence_index": {
+    "trusted": [
+      {
+        "id": "round-0",
+        "type": "round_hash",
+        "hash": "b0dad4440d5c0b77eeac6466da1472055bf479e8d465e94d165f13238dac8261"
+      }
+    ],
+    "claimed": [
+      {
+        "id": "claimed-746e5c8c",
+        "type": "claimed_evidence",
+        "hash": "abort_reason:Quote request network error: fetch failed"
+      },
+      {
+        "id": "claimed-b4a38a92",
+        "type": "claimed_evidence",
+        "hash": "transcript-a9a6749d689cee03ec7ed8bafd10cfbedef6631c046ec89db3fc1d69706615a6"
+      },
+      {
+        "id": "claimed-d3e979fd",
+        "type": "claimed_evidence",
+        "hash": "b0dad4440d5c0b77eeac6466da1472055bf479e8d465e94d165f13238dac8261"
+      }
+    ],
+    "missing_expected": []
+  },
+  "timeline": [
+    {
+      "event": "INTENT",
+      "round": 0,
+      "signer": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+      "hash": "b0dad4440d5c0b77eeac6466da1472055bf479e8d465e94d165f13238dac8261",
+      "timestamp_ms": 1000000000000
+    }
+  ],
+  "appendix": {
+    "transcript_path": "fixtures/failures/PACT-420-provider-unreachable.json",
+    "tool_versions": {
+      "verifier": "0.1.0",
+      "passport": "passport/1.0"
+    }
+  }
+}

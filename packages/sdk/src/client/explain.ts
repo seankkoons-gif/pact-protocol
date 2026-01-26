@@ -26,7 +26,9 @@ export type DecisionCode =
   | "SETTLEMENT_COMPLETED"
   | "SETTLEMENT_FAILED"
   | "SETTLEMENT_PROVIDER_NOT_IMPLEMENTED"
-  | "RECEIPT_INGESTED";
+  | "RECEIPT_INGESTED"
+  | "PACT-330" // Contention exclusivity violation
+  | "PACT-331"; // Double commit detection
 
 export type ProviderDecision = {
   provider_id: string;

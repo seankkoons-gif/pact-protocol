@@ -1,5 +1,6 @@
 import type { NegotiationPhase } from "./types";
 import type { SettlementMode } from "../protocol/types";
+import type { PassportState } from "@pact/passport/src/v1/types";
 
 export interface IdentityContext {
   credentials: Array<{
@@ -21,6 +22,8 @@ export interface IdentityContext {
     message: string;
     scheme: string;
   };
+  // Passport v1: Deterministic passport state keyed by signer_public_key_b58
+  passport_v1?: PassportState | null;
 }
 
 export interface IntentContext {
@@ -81,6 +84,8 @@ export interface NegotiationContext {
   };
   quote_ms?: number;
   p50_ms?: number;
+  // Passport v1: Deterministic passport state keyed by signer_public_key_b58
+  passport_v1?: PassportState | null;
 }
 
 export interface LockContext {

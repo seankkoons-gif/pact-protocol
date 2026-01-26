@@ -205,10 +205,14 @@ export async function runInPactBoundary(
       // Use error.failureCode from the BoundaryAbortError instance, fallback to outer failureCode or default
       const finalFailureCode = error.failureCode || failureCode || "PACT-101";
       const finalAbortReason = error.reason || abortReason || "Unknown abort";
+      
+      // Map failure code to appropriate stage and fault_domain
+      const { stage, fault_domain } = mapFailureCodeToStageAndFaultDomain(finalFailureCode, finalAbortReason);
+      
       const failureEvent: FailureEvent = {
         code: finalFailureCode,
-        stage: "negotiation",
-        fault_domain: "policy",
+        stage,
+        fault_domain,
         terminality: "terminal",
         timestamp: Date.now(),
         transcript_hash: transcript.transcript_id,
@@ -238,6 +242,63 @@ export async function runInPactBoundary(
     // Unexpected error - rethrow
     throw error;
   }
+}
+
+/**
+ * Map failure code to appropriate stage and fault_domain
+ * 
+ * This ensures proper taxonomy classification based on failure code.
+ * PACT-404 is reserved for settlement timeout/SLA violations.
+ * PACT-420 is for provider unreachable during quote requests.
+ */
+function mapFailureCodeToStageAndFaultDomain(
+  code: string,
+  reason: string
+): { stage: string; fault_domain: string } {
+  // PACT-4xx: Settlement/Rail Failures
+  if (code === "PACT-404" || code === "PACT-405" || code === "PACT-407") {
+    // PACT-404: Settlement timeout/SLA violation (reserved for settlement stage)
+    // PACT-405: Settlement timeout
+    // PACT-407: Settlement SLA violation
+    return { stage: "settlement", fault_domain: "settlement" };
+  }
+  
+  // PACT-420: Provider unreachable during quote request
+  if (code === "PACT-420") {
+    return { stage: "negotiation", fault_domain: "PROVIDER_AT_FAULT" };
+  }
+
+  // PACT-421: Provider API mismatch (endpoint not found)
+  if (code === "PACT-421") {
+    return { stage: "negotiation", fault_domain: "PROVIDER_AT_FAULT" };
+  }
+  
+  // PACT-3xx: Negotiation failures
+  if (code.startsWith("PACT-3")) {
+    // Check if it's provider unavailable (PACT-310)
+    if (code === "PACT-310") {
+      return { stage: "discovery", fault_domain: "negotiation" };
+    }
+    return { stage: "negotiation", fault_domain: "negotiation" };
+  }
+  
+  // PACT-2xx: Identity failures
+  if (code.startsWith("PACT-2")) {
+    return { stage: "admission", fault_domain: "identity" };
+  }
+  
+  // PACT-1xx: Policy violations (default)
+  if (code.startsWith("PACT-1")) {
+    return { stage: "negotiation", fault_domain: "policy" };
+  }
+  
+  // PACT-5xx: Recursive/Dependency failures
+  if (code.startsWith("PACT-5")) {
+    return { stage: "negotiation", fault_domain: "recursive" };
+  }
+  
+  // Default: assume policy violation for unknown codes
+  return { stage: "negotiation", fault_domain: "policy" };
 }
 
 /**

@@ -288,7 +288,7 @@ export async function replayTranscriptV4(transcript: TranscriptV4): Promise<Repl
 
     if (transcript.failure_event.transcript_hash !== computedFailureHash) {
       result.warnings.push(
-        `Failure event transcript_hash mismatch: expected ${computedFailureHash}, got ${transcript.failure_event.transcript_hash}`
+        `Claimed failure-event transcript_hash did not match computed transcript hash (claimed: ${transcript.failure_event.transcript_hash}, computed: ${computedFailureHash}).`
       );
     }
   }

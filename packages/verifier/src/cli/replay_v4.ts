@@ -17,6 +17,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const sdkPath = resolve(__dirname, "../../../sdk/src/cli/replay_v4.ts");
 
+// Handle EPIPE gracefully (e.g., when piping to head/jq)
+process.stdout.on("error", (err) => {
+  if (err.code === "EPIPE") {
+    process.exit(0);
+  }
+});
+
 // Forward all arguments to the SDK implementation
 // This wrapper is run via: pnpm --filter @pact/sdk exec tsx src/cli/replay_v4.ts
 // So we spawn tsx from the SDK directory where dependencies are installed

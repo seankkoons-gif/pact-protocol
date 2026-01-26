@@ -21,6 +21,11 @@ export type AcquisitionPhase =
   | "settlement_reveal"
   | "settlement_streaming"
   | "settlement_complete"
+  | "reconciliation"
+  | "disputes_open"
+  | "disputes_evidence"
+  | "disputes_arbiter"
+  | "disputes_remedy"
   | "transcript_commit";
 
 /**

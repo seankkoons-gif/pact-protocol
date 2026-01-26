@@ -4,7 +4,7 @@
  * Zero-knowledge proof-based identity verification interface.
  */
 
-import * as crypto from "crypto";
+import * as crypto from "node:crypto";
 
 /**
  * Canonicalize public inputs to stable JSON string.

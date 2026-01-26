@@ -76,6 +76,17 @@ pnpm replay:v4 .pact/transcripts/transcript-*.json
 pnpm evidence:bundle .pact/transcripts/transcript-*.json --out ./evidence-bundle
 ```
 
+**Verifier CLI (pipe-safe):**
+```bash
+# Build verifier once
+pnpm verifier:build
+
+# Use executable entrypoint (no pnpm banners)
+./bin/pact-verifier gc-view --transcript fixtures/success/SUCCESS-001-simple.json | jq '.version'
+./bin/pact-verifier passport-v1-recompute --transcripts-dir fixtures/success | jq '.version'
+./bin/pact-verifier judge-v4 fixtures/success/SUCCESS-001-simple.json | jq '.status'
+```
+
 > **Note:** v3 remains stable and maintained. See [versions/v3/GETTING_STARTED.md](./docs/versions/v3/GETTING_STARTED.md) for v3 documentation.
 
 ---

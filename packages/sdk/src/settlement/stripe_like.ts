@@ -15,7 +15,7 @@
 import type { SettlementProvider } from "./provider";
 import type { SettlementIntent, SettlementHandle, SettlementResult } from "./types";
 import { MockSettlementProvider } from "./mock";
-import * as crypto from "crypto";
+import * as crypto from "node:crypto";
 import bs58 from "bs58";
 
 export interface StripeLikeSettlementProviderConfig {

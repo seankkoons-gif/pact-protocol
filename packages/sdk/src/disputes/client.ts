@@ -4,9 +4,9 @@
  * Functions for opening and resolving disputes.
  */
 
-import { randomBytes } from "crypto";
-import * as fs from "fs";
-import * as path from "path";
+import { randomBytes } from "node:crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import type { PactPolicy } from "../policy/types";
 import type { Receipt } from "../exchange/receipt";
 import type { SettlementProvider } from "../settlement/provider";

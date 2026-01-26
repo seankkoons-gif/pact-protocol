@@ -1,6 +1,6 @@
 import type { SettlementProvider } from "./provider";
 import type { SettlementIntent, SettlementHandle, SettlementResult } from "./types";
-import * as crypto from "crypto";
+import * as crypto from "node:crypto";
 import bs58 from "bs58";
 
 type Account = { balance: number; locked: number };

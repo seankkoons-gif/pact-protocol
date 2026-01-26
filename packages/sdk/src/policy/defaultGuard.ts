@@ -14,6 +14,7 @@ import type {
 import type { CompiledPolicy } from "./types";
 import type { PolicyGuard } from "./guard";
 import { requiredSellerBond, allowedQuoteRange, computeReferenceBand } from "./compiler";
+import { checkPassportV1Constraints } from "./passportV1Gating";
 
 export class DefaultPolicyGuard implements PolicyGuard {
   private compiled: CompiledPolicy;
@@ -86,6 +87,16 @@ export class DefaultPolicyGuard implements PolicyGuard {
       }
     }
 
+    // Check passport v1 constraints
+    // Note: signer key should be provided in context, but for identity phase we use agent_id as fallback
+    // In practice, the caller should provide the signer_public_key_b58 in the context
+    const signerKey = (ctx as any).signer_public_key_b58 || ctx.agent_id;
+    const passportCheck = checkPassportV1Constraints(ctx.passport_v1, cp.passport_v1, signerKey);
+    if (passportCheck) {
+      // Missing passport or constraint violation -> PASSPORT_REQUIRED
+      return { ok: false, code: "PASSPORT_REQUIRED" };
+    }
+
     return { ok: true };
   }
 
@@ -97,26 +108,35 @@ export class DefaultPolicyGuard implements PolicyGuard {
     const intentType = ctx.intent_type ?? ctx.intent;
     const nowMs = ctx.now_ms ?? Date.now();
 
-    // Time semantics
-    if (policy.time.require_expires_at && !expiresAt) {
-      return { ok: false, code: "MISSING_EXPIRES_AT" };
-    }
-
-    if (expiresAt && expiresAt < nowMs) {
-      return { ok: false, code: "INTENT_EXPIRED" };
-    }
-
-    if (ctx.valid_for_ms !== undefined) {
-      if (ctx.valid_for_ms < policy.time.min_valid_for_ms) {
-        return { ok: false, code: "VALID_FOR_TOO_SHORT" };
+    // Safe access: check if policy.time exists before accessing properties
+    const timeConfig = policy.time;
+    if (timeConfig && typeof timeConfig === "object") {
+      // Time semantics
+      if (timeConfig.require_expires_at && !expiresAt) {
+        return { ok: false, code: "MISSING_EXPIRES_AT" };
       }
-      if (ctx.valid_for_ms > policy.time.max_valid_for_ms) {
-        return { ok: false, code: "VALID_FOR_TOO_LONG" };
+
+      if (expiresAt && expiresAt < nowMs) {
+        return { ok: false, code: "INTENT_EXPIRED" };
+      }
+
+      if (ctx.valid_for_ms !== undefined) {
+        if (ctx.valid_for_ms < timeConfig.min_valid_for_ms) {
+          return { ok: false, code: "VALID_FOR_TOO_SHORT" };
+        }
+        if (ctx.valid_for_ms > timeConfig.max_valid_for_ms) {
+          return { ok: false, code: "VALID_FOR_TOO_LONG" };
+        }
+      }
+    } else {
+      // If time config is missing, use safe defaults
+      if (expiresAt && expiresAt < nowMs) {
+        return { ok: false, code: "INTENT_EXPIRED" };
       }
     }
 
-    if (ctx.clock_skew_ms !== undefined) {
-      if (Math.abs(ctx.clock_skew_ms) > policy.time.max_clock_skew_ms) {
+    if (ctx.clock_skew_ms !== undefined && timeConfig) {
+      if (Math.abs(ctx.clock_skew_ms) > timeConfig.max_clock_skew_ms) {
         return { ok: false, code: "CLOCK_SKEW_TOO_LARGE" };
       }
     }
@@ -253,6 +273,21 @@ export class DefaultPolicyGuard implements PolicyGuard {
     if (intent && intentConstraints && intentConstraints.minReputation !== undefined) {
       // Would check against reputation from identity phase
       // For now, this is a placeholder
+    }
+
+    // Check passport v1 constraints (for counterparty)
+    // In negotiation phase, passport_v1 should be for the counterparty being evaluated
+    const cp = policy.counterparty;
+    if (ctx.passport_v1 !== undefined && cp.passport_v1) {
+      // Get signer key from context (should be counterparty's signer key)
+      // Fallback to counterparty agent_id if available
+      const signerKey = (ctx as any).counterparty_signer_key_b58 || 
+                        (ctx.counterparty as any)?.agent_id || 
+                        "unknown";
+      const passportCheck = checkPassportV1Constraints(ctx.passport_v1, cp.passport_v1, signerKey);
+      if (passportCheck) {
+        return { ok: false, code: "PASSPORT_REQUIRED" };
+      }
     }
 
     return { ok: true };

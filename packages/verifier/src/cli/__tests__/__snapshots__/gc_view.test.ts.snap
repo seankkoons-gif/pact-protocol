@@ -1,0 +1,17 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`GC View CLI > constitution tamper-safety > should include stable constitution hash in GC view output (snapshot test) > constitution-hash 1`] = `"a0ea6fe329251b8c92112fd7518976a031eb8db76433e8c99c77060fc76d7d9d"`;
+
+exports[`GC View CLI > constitution tamper-safety > should include stable constitution hash in GC view output (snapshot test) > constitution-rules-applied 1`] = `
+[
+  "DBL-1",
+  "DBL-2",
+  "DET-1",
+  "EVD-1",
+  "GC-1",
+  "INT-1",
+  "INT-2",
+  "INT-3",
+  "LVSH-1",
+]
+`;

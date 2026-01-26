@@ -1376,7 +1376,7 @@ This will create a minimal Pact v3 provider project with:
     (config as any).noInstall = noInstall;
     await createProject(config);
   } catch (error: any) {
-    console.error(\`❌ Error: \${error.message}\`);
+    console.error(`❌ Error: ${error.message}`);
     process.exit(1);
   }
 }
@@ -1385,4 +1385,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-`;

@@ -252,7 +252,8 @@
             "identity",
             "negotiation",
             "settlement",
-            "recursive"
+            "recursive",
+            "PROVIDER_AT_FAULT"
           ],
           "description": "Responsible subsystem for failure. MUST match FaultDomain enumeration from FAILURE_TAXONOMY.md."
         },

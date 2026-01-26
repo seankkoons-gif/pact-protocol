@@ -79,6 +79,13 @@ export function createSignedRound(
   intentId: string,
   contentSummary?: Record<string, unknown>
 ): Omit<TranscriptRound, "round_number" | "previous_round_hash" | "round_hash"> {
+  // Validate keypair has private key before attempting to sign
+  if (!keypair || !keypair.privateKeyObj) {
+    throw new Error(
+      "Missing signing key: set BUYER_SECRET_KEY_B58 or run with --ephemeral-keys. " +
+      "Keypair must have privateKeyObj for signing."
+    );
+  }
   const envelope: Record<string, unknown> = {
     type: roundType,
     intent_id: intentId,

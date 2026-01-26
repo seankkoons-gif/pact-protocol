@@ -48,6 +48,7 @@ const failureCodeSchema = z.enum([
   "ZK_KYA_EXPIRED", // v2 Phase 5: ZK-KYA proof expired
   "ZK_KYA_TIER_TOO_LOW", // v2 Phase 5: ZK-KYA trust tier below minimum
   "ZK_KYA_ISSUER_NOT_ALLOWED", // v2 Phase 5: ZK-KYA issuer not in allowed list
+  "PASSPORT_REQUIRED", // Passport v1 required but missing
 ]);
 
 export const intentSchema = z

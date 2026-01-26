@@ -90,7 +90,7 @@ async function main() {
       throw new BoundaryAbortError(`Quote request network error: ${error.message}`, "PACT-404");
     }
     if (!quoteResponse.ok) {
-      throw new BoundaryAbortError(`Quote request failed: ${quoteResponse.statusText}`, "PACT-404");
+      throw new BoundaryAbortError(`Quote request failed: ${quoteResponse.statusText}`, "PACT-420");
     }
     const quote = await quoteResponse.json() as { price: number; latency_ms?: number; freshness_sec?: number };
     const offerPrice = quote.price;

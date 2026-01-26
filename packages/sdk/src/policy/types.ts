@@ -108,6 +108,14 @@ export interface CounterpartyConstraints {
   max_timeout_rate: number;
   region_allowlist: string[];
   intent_specific: Record<string, CounterpartyIntentSpecific>;
+  // Passport v1 constraints (optional)
+  passport_v1?: {
+    min_score?: number; // Minimum passport score ([-1, +1])
+    min_successful_settlements?: number; // Minimum successful settlements
+    max_disputes_lost?: number; // Maximum disputes lost
+    max_sla_violations?: number; // Maximum SLA violations
+    max_policy_aborts?: number; // Maximum policy aborts
+  };
 }
 
 export interface SLAVerification {
@@ -351,7 +359,8 @@ export type FailureCode =
   | "ZK_KYA_INVALID" // v2 Phase 5: ZK-KYA proof verification failed
   | "ZK_KYA_EXPIRED" // v2 Phase 5: ZK-KYA proof expired
   | "ZK_KYA_TIER_TOO_LOW" // v2 Phase 5: ZK-KYA trust tier below minimum
-  | "ZK_KYA_ISSUER_NOT_ALLOWED"; // v2 Phase 5: ZK-KYA issuer not in allowed list
+  | "ZK_KYA_ISSUER_NOT_ALLOWED" // v2 Phase 5: ZK-KYA issuer not in allowed list
+  | "PASSPORT_REQUIRED"; // Passport v1 required but missing
 
 export interface ValidationResult {
   ok: true;

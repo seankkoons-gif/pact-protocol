@@ -52,6 +52,21 @@ function renderIntegrityIndicator(status: "VALID" | "TAMPERED" | "INVALID"): str
   }
 }
 
+/**
+ * Get the correct fault_domain for a failure event.
+ * Ensures PACT-420/421 always show PROVIDER_AT_FAULT.
+ */
+function getFaultDomain(failure: TranscriptV4["failure_event"]): string {
+  if (!failure) return "";
+  
+  // PACT-420 (unreachable) and PACT-421 (API mismatch) must always show PROVIDER_AT_FAULT
+  if (failure.code === "PACT-420" || failure.code === "PACT-421") {
+    return "PROVIDER_AT_FAULT";
+  }
+  
+  return failure.fault_domain;
+}
+
 function renderTimeline(transcript: TranscriptV4): void {
   console.log("\n═══════════════════════════════════════════════════════════");
   console.log("  Timeline of Negotiation Rounds");
@@ -81,7 +96,7 @@ function renderFailureEvent(failure: TranscriptV4["failure_event"]): void {
 
   console.log(`Code: ${failure.code}`);
   console.log(`Stage: ${failure.stage}`);
-  console.log(`Fault Domain: ${failure.fault_domain}`);
+  console.log(`Fault Domain: ${getFaultDomain(failure)}`);
   console.log(`Terminality: ${failure.terminality}`);
   console.log(`Timestamp: ${formatTimestamp(failure.timestamp)}`);
   console.log(`Transcript Hash: ${failure.transcript_hash.substring(0, 16)}...`);
@@ -148,7 +163,41 @@ function loadEvidenceBundle(bundleDir: string): {
 
   const transcriptPath = path.join(bundleDir, transcriptEntry.path);
   const transcriptContent = fs.readFileSync(transcriptPath, "utf-8");
-  const transcript: TranscriptV4 | RedactedTranscriptV4 = JSON.parse(transcriptContent);
+  let transcript: any;
+  try {
+    transcript = JSON.parse(transcriptContent);
+  } catch (error: any) {
+    errors.push(`Invalid JSON in transcript file: ${error.message}`);
+    integrity = "FAIL";
+    return { errors, integrity };
+  }
+
+  // Validate transcript shape early
+  if (!transcript || typeof transcript !== "object") {
+    errors.push("Invalid transcript: file does not contain a valid JSON object");
+    integrity = "FAIL";
+    return { errors, integrity };
+  }
+
+  if (typeof transcript.transcript_version !== "string") {
+    errors.push(`Invalid transcript: missing or invalid transcript_version field (got ${transcript.transcript_version === undefined ? "undefined" : typeof transcript.transcript_version})`);
+    integrity = "FAIL";
+    return { errors, integrity };
+  }
+
+  if (transcript.transcript_version !== "pact-transcript/4.0") {
+    errors.push(`Invalid transcript version: ${transcript.transcript_version} (expected "pact-transcript/4.0")`);
+    integrity = "FAIL";
+    return { errors, integrity };
+  }
+
+  if (!Array.isArray(transcript.rounds)) {
+    errors.push(`Invalid transcript: rounds field is missing or not an array (got ${transcript.rounds === undefined ? "undefined" : typeof transcript.rounds})`);
+    integrity = "FAIL";
+    return { errors, integrity };
+  }
+
+  const validatedTranscript: TranscriptV4 | RedactedTranscriptV4 = transcript;
   
   // Detect redaction
   const view = manifest.view;
@@ -381,10 +430,30 @@ async function main() {
     console.log(`File: ${path.resolve(transcriptPath)}\n`);
   }
   
-  // Validate transcript version
+  // Validate transcript shape early to prevent crashes from malformed JSON
+  // Check for required fields before any property access
+  if (!transcript || typeof transcript !== "object") {
+    console.error(`Error: Invalid transcript: file does not contain a valid JSON object`);
+    process.exit(1);
+  }
+
+  if (typeof transcript.transcript_version !== "string") {
+    console.error(`Error: Invalid transcript: missing or invalid transcript_version field`);
+    console.error(`Expected: "pact-transcript/4.0"`);
+    console.error(`Got: ${transcript.transcript_version === undefined ? "undefined" : typeof transcript.transcript_version}`);
+    process.exit(1);
+  }
+
   if (transcript.transcript_version !== "pact-transcript/4.0") {
     console.error(`Error: Invalid transcript version: ${transcript.transcript_version}`);
     console.error(`Hint: This tool is for Pact v4 transcripts only.`);
+    process.exit(1);
+  }
+
+  if (!Array.isArray(transcript.rounds)) {
+    console.error(`Error: Invalid transcript: rounds field is missing or not an array`);
+    console.error(`Expected: array`);
+    console.error(`Got: ${transcript.rounds === undefined ? "undefined" : typeof transcript.rounds}`);
     process.exit(1);
   }
   
@@ -466,7 +535,7 @@ async function main() {
   console.log(`Hash Chain Links Verified: ${replayResult.hash_chain_verifications}`);
   if (transcript.failure_event) {
     console.log(`Failure Code: ${transcript.failure_event.code}`);
-    console.log(`Fault Domain: ${transcript.failure_event.fault_domain}`);
+    console.log(`Fault Domain: ${getFaultDomain(transcript.failure_event)}`);
     console.log(`Stage: ${transcript.failure_event.stage}`);
   }
   if (decision) {

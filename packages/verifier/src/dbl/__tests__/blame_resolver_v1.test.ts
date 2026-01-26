@@ -36,6 +36,12 @@ describe("resolveBlameV1", () => {
       expect(judgment.passportImpact).toBe(0.0);
       expect(judgment.recommendation).toBe("No action required.");
       expect(judgment.recommendedActions).toEqual([]);
+      
+      // DBL v2: SUCCESS => terminal=true, required_next_actor=NONE
+      expect(judgment.version).toBe("dbl/2.0");
+      expect(judgment.terminal).toBe(true);
+      expect(judgment.requiredNextActor).toBe("NONE");
+      expect(judgment.requiredAction).toBe("NONE");
     });
 
     it("should return NO_FAULT for terminal success (SUCCESS-002)", async () => {
@@ -67,6 +73,12 @@ describe("resolveBlameV1", () => {
         // Invariant: Actor fault → passport impact -0.05
         expect(judgment.passportImpact).toBe(-0.05);
         expect(judgment.recommendation).toContain("Policy violation");
+        
+        // DBL v2: PACT-101 => required_next_actor=BUYER, terminal=true, required_action="FIX_POLICY_OR_PARAMS"
+        expect(judgment.version).toBe("dbl/2.0");
+        expect(judgment.terminal).toBe(true);
+        expect(judgment.requiredNextActor).toBe("BUYER");
+        expect(judgment.requiredAction).toBe("FIX_POLICY_OR_PARAMS");
       });
 
       it("should assert PACT-101 invariant: BUYER_AT_FAULT is deterministic regardless of LVSH position", async () => {
@@ -341,6 +353,11 @@ describe("resolveBlameV1", () => {
       expect(typeof artifact.lastValidHash).toBe("string");
       expect(artifact.lastValidHash).toBe("30e1b543c9b32aa210ab366df4e8a45b8f59e99f25b9a3aaa90eb4819519d933");
       expect(artifact.requiredNextActor).toBe("PROVIDER");
+      
+      // DBL v2: PACT-404 => required_next_actor=PROVIDER, terminal=false, required_action="COMPLETE_SETTLEMENT_OR_REFUND"
+      expect(artifact.version).toBe("dbl/2.0");
+      expect(artifact.terminal).toBe(false);
+      expect(artifact.requiredAction).toBe("COMPLETE_SETTLEMENT_OR_REFUND");
 
       // Verify evidence refs structure - should include LVSH hash and ACCEPT hash
       expect(artifact.evidenceRefs.length).toBeGreaterThanOrEqual(1);
@@ -380,8 +397,11 @@ describe("resolveBlameV1", () => {
         expect(judgment.recommendation).toContain("duplicate commit attempt");
         expect(judgment.recommendation).toContain("intent_fingerprint");
         
-        // Invariant: Terminal by policy, not a "next move" timeout
-        expect(judgment.requiredNextActor).toBeNull();
+        // DBL v2: Terminal by policy => requiredNextActor=NONE, terminal=true
+        expect(judgment.version).toBe("dbl/2.0");
+        expect(judgment.terminal).toBe(true);
+        expect(judgment.requiredNextActor).toBe("NONE");
+        expect(judgment.requiredAction).toBe("ABORT");
         
         // Invariant: evidenceRefs contains only LVSH hash
         expect(judgment.evidenceRefs.length).toBeGreaterThan(0);
@@ -426,8 +446,11 @@ describe("resolveBlameV1", () => {
         // Determination is correct regardless of LVSH position
         expect(judgment.dblDetermination).toBe("BUYER_AT_FAULT");
         
-        // Required next actor should be null (terminal by policy)
-        expect(judgment.requiredNextActor).toBeNull();
+        // DBL v2: Required next actor should be NONE (terminal by policy)
+        expect(judgment.version).toBe("dbl/2.0");
+        expect(judgment.terminal).toBe(true);
+        expect(judgment.requiredNextActor).toBe("NONE");
+        expect(judgment.requiredAction).toBe("ABORT");
       });
     });
 
@@ -465,8 +488,11 @@ describe("resolveBlameV1", () => {
         expect(judgment.recommendation).toContain("non-winner provider");
         expect(judgment.recommendation).toContain("contention winner");
         
-        // Invariant: Terminal by policy, not a "next move" timeout
-        expect(judgment.requiredNextActor).toBeNull();
+        // DBL v2: Terminal by policy => requiredNextActor=NONE, terminal=true
+        expect(judgment.version).toBe("dbl/2.0");
+        expect(judgment.terminal).toBe(true);
+        expect(judgment.requiredNextActor).toBe("NONE");
+        expect(judgment.requiredAction).toBe("ABORT");
         
         // Invariant: evidenceRefs contains only LVSH hash
         expect(judgment.evidenceRefs.length).toBeGreaterThan(0);
@@ -510,8 +536,11 @@ describe("resolveBlameV1", () => {
         // If fixture has invalid signatures, lastValidRound will be -1, but determination is still correct
         expect(judgment.dblDetermination).toBe("PROVIDER_AT_FAULT");
         
-        // Required next actor should be null (terminal by policy)
-        expect(judgment.requiredNextActor).toBeNull();
+        // DBL v2: Required next actor should be NONE (terminal by policy)
+        expect(judgment.version).toBe("dbl/2.0");
+        expect(judgment.terminal).toBe(true);
+        expect(judgment.requiredNextActor).toBe("NONE");
+        expect(judgment.requiredAction).toBe("ABORT");
       });
     });
 
@@ -805,6 +834,112 @@ describe("resolveBlameV1", () => {
       if (judgment.failureCode === "PACT-505") {
         expect(judgment.notes).toBeDefined();
       }
+    });
+  });
+
+  describe("DBL v2 State Machine", () => {
+    it("should set terminal=true and requiredNextActor=NONE for SUCCESS", async () => {
+      const transcript = loadFixture("success/SUCCESS-001-simple.json");
+      const judgment = await resolveBlameV1(transcript);
+
+      expect(judgment.version).toBe("dbl/2.0");
+      expect(judgment.terminal).toBe(true);
+      expect(judgment.requiredNextActor).toBe("NONE");
+      expect(judgment.requiredAction).toBe("NONE");
+    });
+
+    it("should set requiredNextActor=BUYER, terminal=true, requiredAction=FIX_POLICY_OR_PARAMS for PACT-101", async () => {
+      const transcript = loadFixture("failures/PACT-101-policy-violation.json");
+      const judgment = await resolveBlameV1(transcript);
+
+      expect(judgment.version).toBe("dbl/2.0");
+      expect(judgment.terminal).toBe(true);
+      expect(judgment.requiredNextActor).toBe("BUYER");
+      expect(judgment.requiredAction).toBe("FIX_POLICY_OR_PARAMS");
+    });
+
+    it("should set requiredNextActor=PROVIDER, terminal=false, requiredAction=COMPLETE_SETTLEMENT_OR_REFUND for PACT-404", async () => {
+      const transcript = loadFixture("failures/PACT-404-settlement-timeout.json");
+      const judgment = await resolveBlameV1(transcript);
+
+      expect(judgment.version).toBe("dbl/2.0");
+      expect(judgment.terminal).toBe(false);
+      expect(judgment.requiredNextActor).toBe("PROVIDER");
+      expect(judgment.requiredAction).toBe("COMPLETE_SETTLEMENT_OR_REFUND");
+    });
+
+    it("should set requiredNextActor=PROVIDER, terminal=true, requiredAction=RETRY for PACT-420", async () => {
+      const transcript = loadFixture("failures/PACT-420-provider-unreachable.json");
+      const judgment = await resolveBlameV1(transcript);
+
+      expect(judgment.version).toBe("dbl/2.0");
+      expect(judgment.failureCode).toBe("PACT-420");
+      expect(judgment.dblDetermination).toBe("PROVIDER_AT_FAULT");
+      expect(judgment.terminal).toBe(true); // Transcript is terminal (sealed), remediation requires new attempt
+      expect(judgment.requiredNextActor).toBe("PROVIDER");
+      expect(judgment.requiredAction).toBe("RETRY");
+    });
+
+    it("should set terminal=true and requiredNextActor=NONE for PACT-331", async () => {
+      const transcript = loadFixture("failures/PACT-331-double-commit.json");
+      const judgment = await resolveBlameV1(transcript);
+
+      expect(judgment.version).toBe("dbl/2.0");
+      expect(judgment.terminal).toBe(true);
+      expect(judgment.requiredNextActor).toBe("NONE");
+      expect(judgment.requiredAction).toBe("ABORT");
+    });
+
+    it("should produce deterministic state machine fields across replays", async () => {
+      const transcript = loadFixture("failures/PACT-404-settlement-timeout.json");
+      
+      // Run twice
+      const judgment1 = await resolveBlameV1(transcript);
+      const judgment2 = await resolveBlameV1(transcript);
+
+      // State machine fields must be identical
+      expect(judgment1.version).toBe(judgment2.version);
+      expect(judgment1.terminal).toBe(judgment2.terminal);
+      expect(judgment1.requiredNextActor).toBe(judgment2.requiredNextActor);
+      expect(judgment1.requiredAction).toBe(judgment2.requiredAction);
+    });
+
+    it("should never return null for requiredNextActor or requiredAction", async () => {
+      // Test with various fixtures to ensure fields are never null
+      const fixtures = [
+        "success/SUCCESS-001-simple.json",
+        "success/SUCCESS-002-negotiated.json",
+        "failures/PACT-101-policy-violation.json",
+        "failures/PACT-404-settlement-timeout.json",
+        "failures/PACT-331-double-commit.json",
+      ];
+
+      for (const fixture of fixtures) {
+        const transcript = loadFixture(fixture);
+        const judgment = await resolveBlameV1(transcript);
+
+        // These fields must never be null
+        expect(judgment.requiredNextActor).not.toBeNull();
+        expect(judgment.requiredAction).not.toBeNull();
+        expect(typeof judgment.requiredNextActor).toBe("string");
+        expect(typeof judgment.requiredAction).toBe("string");
+        expect(typeof judgment.terminal).toBe("boolean");
+
+        // Verify valid enum values
+        expect(["BUYER", "PROVIDER", "RAIL", "SETTLEMENT", "ARBITER", "NONE"]).toContain(judgment.requiredNextActor);
+        expect(judgment.requiredAction.length).toBeGreaterThan(0);
+      }
+    });
+
+    it("should set requiredNextActor=NONE, requiredAction=NONE, terminal=true for NO_FAULT success", async () => {
+      const transcript = loadFixture("success/SUCCESS-001-simple.json");
+      const judgment = await resolveBlameV1(transcript);
+
+      expect(judgment.status).toBe("OK");
+      expect(judgment.dblDetermination).toBe("NO_FAULT");
+      expect(judgment.requiredNextActor).toBe("NONE");
+      expect(judgment.requiredAction).toBe("NONE");
+      expect(judgment.terminal).toBe(true);
     });
   });
 });

@@ -144,3 +144,37 @@ export async function fetchCredential(
   return { envelope: data.envelope };
 }
 
+/**
+ * Send a signed Pact protocol envelope to the /pact endpoint.
+ * This is the standard way to communicate with Pact protocol providers.
+ */
+export async function fetchPact(
+  baseUrl: string,
+  envelope: SignedEnvelope
+): Promise<{ envelope: SignedEnvelope }> {
+  const response = await fetch(`${baseUrl}/pact`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(envelope),
+  });
+
+  if (response.status === 404) {
+    const errorText = await response.text();
+    throw new Error(`PACT-421: Provider API mismatch - /pact endpoint not found: ${errorText}`);
+  }
+
+  if (!response.ok) {
+    let errorText: string;
+    try {
+      const errorJson = await response.json() as Record<string, unknown>;
+      errorText = typeof errorJson.error === "string" ? errorJson.error : JSON.stringify(errorJson);
+    } catch {
+      errorText = await response.text();
+    }
+    throw new Error(`PACT-422: Provider bad request - HTTP ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json() as SignedEnvelope;
+  return { envelope: data };
+}
+

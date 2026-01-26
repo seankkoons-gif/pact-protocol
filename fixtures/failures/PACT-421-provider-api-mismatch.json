@@ -1,0 +1,46 @@
+{
+  "transcript_version": "pact-transcript/4.0",
+  "transcript_id": "transcript-b8c7a6e4d3f21e9a0b5c8d7f6e4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5",
+  "intent_id": "intent-pact421-test",
+  "intent_type": "weather.data",
+  "created_at_ms": 1000000000000,
+  "policy_hash": "aaa049f74895f24ca7f38f3db5e11b2d702452c0207c4459d179b8dc8833628d",
+  "strategy_hash": "bfdff987de461bf22ae33537307038b70af9440a9e5f3c7f6e7607239f58224c",
+  "identity_snapshot_hash": "f4edf4b37099e97dd380c24c37496de32c341406c2901bd830d2e35386ca1c37",
+  "rounds": [
+    {
+      "round_number": 0,
+      "round_type": "INTENT",
+      "message_hash": "e1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+      "envelope_hash": "e1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+      "signature": {
+        "signer_public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+        "signature_b58": "5cDnqkIBpo9x6w0vOx7iuGWDZkhFv37TUfoHBVLU8TI8VfgzCFDnsmuu5hSl7lnOa9Tp9sZRDQPoEfF2XEElakyi",
+        "signed_at_ms": 1000000000000,
+        "scheme": "ed25519"
+      },
+      "timestamp_ms": 1000000000000,
+      "previous_round_hash": "00000000000000000000000000000000000000000000000000000000000000000",
+      "agent_id": "buyer",
+      "public_key_b58": "21wxunPRWgrzXqK48yeE1aEZtfpFU2AwY8odDiGgBT4J",
+      "content_summary": {
+        "intent_type": "weather.data"
+      },
+      "round_hash": "c0e1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7e8f9d0c1b2a3e4f5d6c7b8a9e0f1"
+    }
+  ],
+  "failure_event": {
+    "code": "PACT-421",
+    "stage": "negotiation",
+    "fault_domain": "PROVIDER_AT_FAULT",
+    "terminality": "terminal",
+    "evidence_refs": [
+      "transcript-b8c7a6e4d3f21e9a0b5c8d7f6e4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d8e7f6a5",
+      "c0e1d2c3b4a5f6e7d8c9b0a1f2e3d4c5b6a7e8f9d0c1b2a3e4f5d6c7b8a9e0f1",
+      "abort_reason:Provider API mismatch - /pact endpoint not found: 404 Not Found"
+    ],
+    "timestamp": 1000000001000,
+    "transcript_hash": "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5"
+  },
+  "final_hash": "f5e6d7c8b9a0f1e2d3c4b5a6f7e8d9c0b1a2f3e4d5c6b7a8f9e0d1c2b3a4f5e6"
+}

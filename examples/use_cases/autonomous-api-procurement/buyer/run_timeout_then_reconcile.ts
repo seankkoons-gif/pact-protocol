@@ -122,7 +122,7 @@ async function main() {
         providerAttemptDetails.timeout_ms
       );
       if (!quoteResponse.ok) {
-        throw new BoundaryAbortError(`Quote request failed: ${quoteResponse.statusText}`, "PACT-404");
+        throw new BoundaryAbortError(`Quote request failed: ${quoteResponse.statusText}`, "PACT-420");
       }
       const quote = await quoteResponse.json();
       receivedQuote = true;
@@ -134,7 +134,7 @@ async function main() {
       };
     } catch (error: any) {
       if (error.message === "Request timeout") {
-        // Timeout occurred - throw BoundaryAbortError so runInPactBoundary creates failure_event
+        // Timeout occurred - this is a settlement timeout, use PACT-404
         throw new BoundaryAbortError("Request timeout", "PACT-404");
       }
       throw error;

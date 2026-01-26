@@ -37,6 +37,15 @@ export const defaultPolicy: PactPolicy = (() => {
   policy.sla.max_latency_ms = 500;
   policy.sla.max_freshness_sec = 300;
 
+  // Relaxed admission requirements for demo provider
+  // Keep require_one_of: ["bond"] to satisfy schema (minItems: 1), but we'll always set
+  // admission.has_bond = true in intentContext to auto-satisfy the requirement
+  // This allows all valid INTENT messages to pass without needing actual bonds
+  policy.admission.require_one_of = ["bond"];
+  // Allow all intent types (empty allowlist means all allowed)
+  policy.admission.session_intent_allowlist = [];
+  // KYA is already relaxed (require_trusted_issuer: false, require_credential: false from createDefaultPolicy)
+
   // Allow max_price from buyer policy
   // (policy enforcement happens via policyGuard.checkIntent())
 

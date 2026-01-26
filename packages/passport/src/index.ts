@@ -33,3 +33,6 @@ export type {
   PerCounterpartyExposure,
   CreditEventReasonCode,
 } from "./credit/types";
+
+// Passport v1 exports
+export * as passportV1 from "./v1";

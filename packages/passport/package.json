@@ -17,6 +17,7 @@
     "build": "pnpm exec tsup src/index.ts --format esm --dts --clean --tsconfig tsconfig.build.json",
     "test": "pnpm exec vitest run",
     "test:watch": "pnpm exec vitest watch",
+    "passport:v1:test": "pnpm exec vitest run src/v1/__tests__/passport_v1.test.ts",
     "lint": "eslint src --ext .ts"
   },
   "devDependencies": {
@@ -25,5 +26,5 @@
     "tsx": "^4.7.0",
     "typescript": "^5.3.3",
     "vitest": "^1.6.1"
-  }
+  } 
 }

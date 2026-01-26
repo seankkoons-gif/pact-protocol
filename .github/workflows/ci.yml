@@ -35,3 +35,13 @@ jobs:
         run: pnpm scaffold:smoke
         env:
           CI: true
+
+      - name: Run verifier smoke test
+        run: pnpm verifier:smoke
+        env:
+          CI: true
+
+      - name: Run verifier fresh-install smoke test
+        run: bash packages/verifier/scripts/smoke_fresh_install.sh
+        env:
+          CI: true

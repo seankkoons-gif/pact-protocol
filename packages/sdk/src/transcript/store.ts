@@ -4,9 +4,9 @@
  * Writes audit/debug transcripts to disk.
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import * as crypto from "crypto";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as crypto from "node:crypto";
 
 /**
  * Find repository root by walking up from current directory

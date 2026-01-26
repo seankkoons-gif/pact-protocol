@@ -54,3 +54,11 @@ packages/passport/src/__tests__/storage-fallback.test.ts
 * 2.mjs
 * 2.cjs
 
+
+# local artifacts
+/tmp/
+/test-transcripts/
+packages/sdk/src/protocol/canonical.js
+packages/sdk/src/protocol/canonical.js.map
+packages/sdk/src/protocol/canonical.d.ts
+packages/sdk/src/protocol/canonical.d.ts.map
