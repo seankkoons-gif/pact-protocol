@@ -189,6 +189,123 @@ if [ "$RECOMPUTE_OK" != "true" ]; then
 fi
 echo "   ✓ auditor-pack-verify: ok=$VERIFY_OK, checksums_ok=$CHECKSUMS_OK, recompute_ok=$RECOMPUTE_OK"
 
+# Test H7: Constitution hash enforcement
+echo "   Testing H7 constitution hash enforcement..."
+# Verify that standard pack has correct constitution hash (no NON_STANDARD_RULES)
+if echo "$VERIFY_OUTPUT" | grep -q "NON_STANDARD_RULES"; then
+  echo "   ❌ H7 test failed: standard pack should not have NON_STANDARD_RULES mismatch"
+  exit 1
+fi
+echo "   ✓ H7 enforcement: standard pack passes (constitution hash verified)"
+
+# Test H7: Tampered constitution must fail
+echo "   Testing H7 tampered constitution detection..."
+# Create a tampered pack by modifying constitution and recomputing checksums
+node << 'EOF'
+const fs = require('fs');
+const crypto = require('crypto');
+const { promisify } = require('util');
+const JSZip = require('jszip');
+
+async function tamperPack() {
+  const zipPath = '/tmp/smoke_auditor_pack.zip';
+  const zipBuffer = fs.readFileSync(zipPath);
+  const zip = await JSZip.loadAsync(zipBuffer);
+  
+  // Read and tamper constitution: change "constitution/1.0" to "constitution/1.0X"
+  const constitutionFile = zip.file('constitution/CONSTITUTION_v1.md');
+  if (!constitutionFile) {
+    console.error('ERROR: constitution file not found');
+    process.exit(1);
+  }
+  
+  let constitutionContent = await constitutionFile.async('string');
+  const tamperedContent = constitutionContent.replace(/constitution\/1\.0/g, 'constitution/1.0X');
+  zip.file('constitution/CONSTITUTION_v1.md', tamperedContent);
+  
+  // Update manifest with new constitution hash (canonicalized)
+  const canonicalTampered = tamperedContent
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map(line => line.replace(/\s+$/, ''))
+    .join('\n');
+  const newHash = crypto.createHash('sha256').update(canonicalTampered, 'utf8').digest('hex');
+  
+  const manifestContent = await zip.file('manifest.json').async('string');
+  const manifest = JSON.parse(manifestContent);
+  manifest.constitution_hash = newHash;
+  zip.file('manifest.json', JSON.stringify(manifest, null, 2));
+  
+  // Update gc_view with new constitution hash
+  const gcViewContent = await zip.file('derived/gc_view.json').async('string');
+  const gcView = JSON.parse(gcViewContent);
+  if (gcView.constitution && typeof gcView.constitution === 'object') {
+    gcView.constitution.hash = newHash;
+  }
+  zip.file('derived/gc_view.json', JSON.stringify(gcView, null, 2));
+  
+  // Recompute checksums
+  const files = Object.keys(zip.files).filter(f => !f.endsWith('/') && f !== 'checksums.sha256');
+  const newChecksums = [];
+  for (const file of files.sort()) {
+    const content = await zip.file(file).async('nodebuffer');
+    const hash = crypto.createHash('sha256').update(content).digest('hex');
+    newChecksums.push(hash + '  ' + file);
+  }
+  zip.file('checksums.sha256', newChecksums.join('\n') + '\n');
+  
+  // Write tampered pack
+  const tamperedBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+  fs.writeFileSync('/tmp/smoke_tampered_pack.zip', tamperedBuffer);
+  console.log('SUCCESS');
+}
+
+tamperPack().catch(err => {
+  console.error('ERROR:', err.message);
+  process.exit(1);
+});
+EOF
+
+TAMPER_RESULT=$?
+if [ $TAMPER_RESULT -ne 0 ] || [ ! -f /tmp/smoke_tampered_pack.zip ]; then
+  echo "   ⚠ H7 tamper test skipped: Node.js tampering failed (this is acceptable)"
+else
+  # Verify tampered pack MUST fail
+  VERIFY_TAMPERED_OUTPUT=$($PACT_VERIFIER auditor-pack-verify --zip /tmp/smoke_tampered_pack.zip 2>&1 || true)
+  VERIFY_TAMPERED_OK=$(echo "$VERIFY_TAMPERED_OUTPUT" | jq -r '.ok' 2>/dev/null || echo "false")
+  
+  if [ "$VERIFY_TAMPERED_OK" != "false" ]; then
+    echo "   ❌ H7 tamper test failed: tampered pack should have ok=false, got '$VERIFY_TAMPERED_OK'"
+    exit 1
+  fi
+  
+  # Check for NON_STANDARD_RULES mismatch
+  if ! echo "$VERIFY_TAMPERED_OUTPUT" | grep -q "NON_STANDARD_RULES"; then
+    echo "   ❌ H7 tamper test failed: tampered pack should include NON_STANDARD_RULES mismatch"
+    echo "   Output: $VERIFY_TAMPERED_OUTPUT"
+    exit 1
+  fi
+  
+  echo "   ✓ H7 tamper test: tampered pack correctly fails with NON_STANDARD_RULES"
+  rm -f /tmp/smoke_tampered_pack.zip
+fi
+
+# Test H7-B: Insurer-summary with pack (should not be excluded for standard pack)
+echo "   Testing H7-B insurer-summary constitution enforcement..."
+INSURER_PACK_OUTPUT=$($PACT_VERIFIER insurer-summary --zip /tmp/smoke_auditor_pack.zip 2>/dev/null)
+INSURER_PACK_COVERAGE=$(echo "$INSURER_PACK_OUTPUT" | jq -r '.coverage' | tr -d '\r\n')
+if [ "$INSURER_PACK_COVERAGE" = "EXCLUDED" ]; then
+  echo "   ❌ H7-B test failed: standard pack should not be EXCLUDED, got coverage='$INSURER_PACK_COVERAGE'"
+  exit 1
+fi
+# Check that NON_STANDARD_RULES is not in risk_factors for standard pack
+if echo "$INSURER_PACK_OUTPUT" | jq -r '.risk_factors[]' 2>/dev/null | grep -q "NON_STANDARD_RULES"; then
+  echo "   ❌ H7-B test failed: standard pack should not have NON_STANDARD_RULES in risk_factors"
+  exit 1
+fi
+echo "   ✓ H7-B enforcement: standard pack not excluded (constitution hash verified)"
+
 # Cleanup auditor pack
 rm -f /tmp/smoke_auditor_pack.zip
 

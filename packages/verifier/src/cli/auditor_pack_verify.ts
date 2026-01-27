@@ -17,6 +17,7 @@ import { renderGCView } from "../gc_view/renderer.js";
 import { resolveBlameV1 } from "../dbl/blame_resolver_v1.js";
 import type { TranscriptV4 } from "../util/transcript_types.js";
 import { stableCanonicalize } from "../util/canonical.js";
+import { isAcceptedConstitutionHash, getAcceptedConstitutionHashes } from "../util/constitution_hashes.js";
 
 // Version constants
 const PACKAGE_VERSION = "auditor_pack_verify/1.0";
@@ -32,6 +33,7 @@ process.stdout.on("error", (err: NodeJS.ErrnoException) => {
 interface VerifyArgs {
   zip?: string;
   out?: string;
+  allowNonstandard?: boolean;
 }
 
 interface VerifyReport {
@@ -52,6 +54,8 @@ function parseArgs(): VerifyArgs {
       args.zip = process.argv[++i];
     } else if (arg === "--out" && i + 1 < process.argv.length) {
       args.out = process.argv[++i];
+    } else if (arg === "--allow-nonstandard") {
+      args.allowNonstandard = true;
     }
     i++;
   }
@@ -59,15 +63,17 @@ function parseArgs(): VerifyArgs {
 }
 
 function printUsage(): void {
-  console.error("Usage: pact-verifier auditor-pack-verify --zip <path.zip> [--out <report.json>]");
+  console.error("Usage: pact-verifier auditor-pack-verify --zip <path.zip> [--out <report.json>] [--allow-nonstandard]");
   console.error("");
   console.error("Options:");
-  console.error("  --zip <path>    Path to auditor pack ZIP file (required)");
-  console.error("  --out <path>    Optional path to write verification report");
+  console.error("  --zip <path>              Path to auditor pack ZIP file (required)");
+  console.error("  --out <path>              Optional path to write verification report");
+  console.error("  --allow-nonstandard       Allow non-standard constitution hashes (not recommended)");
   console.error("");
   console.error("Examples:");
   console.error("  pact-verifier auditor-pack-verify --zip evidence.zip");
   console.error("  pact-verifier auditor-pack-verify --zip evidence.zip --out report.json");
+  console.error("  pact-verifier auditor-pack-verify --zip evidence.zip --allow-nonstandard");
 }
 
 function sha256(content: string | Buffer): string {
@@ -393,19 +399,144 @@ export async function main(): Promise<void> {
       report.mismatches.push(...checksumMismatches);
     }
 
-    // Recompute derived artifacts
+    // Load manifest and verify constitution fields are present
+    const manifestContent = await zip.file("manifest.json")!.async("string");
+    const manifest = JSON.parse(manifestContent);
+    
+    // Verify manifest includes required constitution fields
+    if (!manifest.constitution_version) {
+      report.mismatches.push("Missing constitution_version in manifest.json");
+      report.ok = false;
+      outputReport(report, args.out);
+      process.exit(1);
+    }
+    
+    if (!manifest.constitution_hash) {
+      report.mismatches.push("Missing constitution_hash in manifest.json");
+      report.ok = false;
+      outputReport(report, args.out);
+      process.exit(1);
+    }
+
+    // Extract and verify constitution file hash directly from ZIP
+    const constitutionFile = zip.file("constitution/CONSTITUTION_v1.md");
+    if (!constitutionFile) {
+      report.mismatches.push("Missing constitution/CONSTITUTION_v1.md in ZIP");
+      report.ok = false;
+      outputReport(report, args.out);
+      process.exit(1);
+    }
+
+    // Load constitution content and canonicalize (same method as loadConstitution in renderer.ts)
+    // Note: Canonicalization normalizes whitespace only - it does NOT erase semantic changes
+    // Changes like "constitution/1.0" -> "constitution/1.0X" will still produce different hashes
+    const constitutionContent = await constitutionFile.async("string");
+    const canonicalConstitutionContent = constitutionContent
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .split("\n")
+      .map((line) => line.replace(/\s+$/, ""))
+      .join("\n");
+    
+    // Compute SHA-256 hash of canonicalized constitution (matches expected hash computation)
+    const computedConstitutionHash = sha256(canonicalConstitutionContent);
+
+    // Check if constitution hash is accepted (standard)
+    const isConstitutionHashAccepted = isAcceptedConstitutionHash(computedConstitutionHash);
+    
+    // Track constitution_ok for final verdict
+    let constitution_ok = isConstitutionHashAccepted;
+    
+    // Always add mismatch if constitution doesn't match (even with --allow-nonstandard)
+    if (!isConstitutionHashAccepted) {
+      const acceptedHashes = getAcceptedConstitutionHashes();
+      const expectedHash = acceptedHashes[0] || "unknown";
+      const mismatchMsg = `NON_STANDARD_RULES: constitution hash mismatch (got ${computedConstitutionHash}, expected ${expectedHash})`;
+      report.mismatches.push(mismatchMsg);
+      
+      if (!args.allowNonstandard) {
+        // CRITICAL: Fail immediately if non-standard and --allow-nonstandard not set
+        report.ok = false;
+        report.recompute_ok = false;
+        outputReport(report, args.out);
+        process.exit(1);
+      }
+      // If --allow-nonstandard is set, we continue but constitution_ok remains false
+      // Final verdict will check: ok = checksums_ok && recompute_ok && (constitution_ok || allowNonstandard)
+    }
+
+    // Recompute derived artifacts to get deterministic constitution values
     const transcriptContent = await zip.file("input/transcript.json")!.async("string");
     const transcript: TranscriptV4 = JSON.parse(transcriptContent);
 
     const recomputeMismatches: string[] = [];
-
-    // Recompute gc_view
+    
+    // Recompute gc_view to get deterministic constitution hash
+    // NOTE: renderGCView always uses the standard constitution from resources,
+    // so recomputedConstitutionHash will always be the standard hash
     const recomputedGcView = await renderGCView(transcript);
+    
+    // Deterministic comparison: manifest constitution_hash must match recomputed gc_view constitution hash
+    const manifestConstitutionHash = manifest.constitution_hash;
+    const recomputedConstitutionHash = recomputedGcView.constitution.hash;
+    
+    // Verify constitution hash consistency
+    // If --allow-nonstandard is NOT set, non-standard constitutions cause recompute failure
+    // If --allow-nonstandard IS set, we skip these checks (allow consistent non-standard packs)
+    if (!args.allowNonstandard) {
+      // Without flag: strict enforcement - constitution must match standard
+      if (manifestConstitutionHash !== recomputedConstitutionHash) {
+        recomputeMismatches.push(`Constitution hash mismatch: manifest has ${manifestConstitutionHash.substring(0, 16)}..., recomputed has ${recomputedConstitutionHash.substring(0, 16)}...`);
+      }
+      
+      // Also verify that the computed hash from the file matches the recomputed hash
+      if (computedConstitutionHash !== recomputedConstitutionHash) {
+        recomputeMismatches.push(`Constitution hash mismatch: file hash ${computedConstitutionHash.substring(0, 16)}... does not match recomputed hash ${recomputedConstitutionHash.substring(0, 16)}...`);
+      }
+    } else {
+      // With --allow-nonstandard: skip hash mismatch checks, but verify internal consistency
+      // Check that manifest hash matches file hash (internal consistency check)
+      if (manifestConstitutionHash !== computedConstitutionHash) {
+        recomputeMismatches.push(`Constitution hash mismatch: manifest has ${manifestConstitutionHash.substring(0, 16)}..., file has ${computedConstitutionHash.substring(0, 16)}...`);
+      }
+      
+      // Add warning about non-standard constitution (but don't fail recompute)
+      if (!isConstitutionHashAccepted) {
+        const acceptedHashes = getAcceptedConstitutionHashes();
+        const expectedHash = acceptedHashes[0] || "unknown";
+        report.mismatches.push(`NON_STANDARD_RULES: constitution hash mismatch (got ${computedConstitutionHash}, expected ${expectedHash})`);
+      }
+    }
+    
+    // Check constitution version matches
+    const manifestConstitutionVersion = manifest.constitution_version;
+    const recomputedConstitutionVersion = recomputedGcView.constitution.version;
+    
+    if (manifestConstitutionVersion !== recomputedConstitutionVersion) {
+      recomputeMismatches.push(`Constitution version mismatch: manifest has ${manifestConstitutionVersion}, recomputed has ${recomputedConstitutionVersion}`);
+    }
+
+    // Load original gc_view for comparison (recomputedGcView already computed above)
     const originalGcViewContent = await zip.file("derived/gc_view.json")!.async("string");
 
     // Strip non-deterministic fields and compare by canonical hash
-    const strippedRecomputedGcView = stripNondeterministic(recomputedGcView as Record<string, unknown>, "gc_view");
-    const strippedOriginalGcView = stripNondeterministic(JSON.parse(originalGcViewContent), "gc_view");
+    let strippedRecomputedGcView = stripNondeterministic(recomputedGcView as Record<string, unknown>, "gc_view");
+    let strippedOriginalGcView = stripNondeterministic(JSON.parse(originalGcViewContent), "gc_view");
+
+    // If --allow-nonstandard is set, strip constitution hash from comparison
+    // (allows consistent non-standard packs to pass, but tampered packs still fail on other checks)
+    if (args.allowNonstandard) {
+      if (strippedRecomputedGcView.constitution && typeof strippedRecomputedGcView.constitution === "object") {
+        const recomputedConstitution = { ...(strippedRecomputedGcView.constitution as Record<string, unknown>) };
+        delete recomputedConstitution.hash;
+        strippedRecomputedGcView = { ...strippedRecomputedGcView, constitution: recomputedConstitution };
+      }
+      if (strippedOriginalGcView.constitution && typeof strippedOriginalGcView.constitution === "object") {
+        const originalConstitution = { ...(strippedOriginalGcView.constitution as Record<string, unknown>) };
+        delete originalConstitution.hash;
+        strippedOriginalGcView = { ...strippedOriginalGcView, constitution: originalConstitution };
+      }
+    }
 
     const recomputedGcViewCanonical = stableCanonicalize(strippedRecomputedGcView);
     const originalGcViewCanonical = stableCanonicalize(strippedOriginalGcView);
@@ -454,7 +585,10 @@ export async function main(): Promise<void> {
     }
 
     // Final verdict
-    report.ok = report.checksums_ok && report.recompute_ok;
+    // ALWAYS require checksums_ok AND recompute_ok AND (constitution_ok OR allowNonstandard)
+    // The --allow-nonstandard flag allows ok=true even if constitution doesn't match, but mismatch is still recorded
+    const constitutionCheckPasses = constitution_ok || !!args.allowNonstandard;
+    report.ok = report.checksums_ok && report.recompute_ok && constitutionCheckPasses;
 
     // Output report
     outputReport(report, args.out);

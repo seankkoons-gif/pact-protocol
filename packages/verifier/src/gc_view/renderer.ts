@@ -14,6 +14,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sha256Hex } from "../util/sha256.js";
+import { isAcceptedConstitutionHash } from "../util/constitution_hashes.js";
 
 /** Transcript hash excluding final_hash (same as SDK computeTranscriptHash). */
 function computeTranscriptHash(transcript: TranscriptV4): string {
@@ -681,7 +682,8 @@ function generateGCTakeaways(
   status: GCView["executive_summary"]["status"],
   integrity: GCView["integrity"],
   judgment: JudgmentArtifact | null,
-  policyFailures: GCView["policy"]["policy_failures"]
+  policyFailures: GCView["policy"]["policy_failures"],
+  constitution: { version: "constitution/1.0"; hash: string }
 ): GCView["gc_takeaways"] {
   let approval_risk: "LOW" | "MEDIUM" | "HIGH" = "LOW";
   const why: string[] = [];
@@ -824,6 +826,12 @@ function generateGCTakeaways(
   // If validation === "UNVERIFIABLE", add transcript-only message
   if (integrity.final_hash_validation === "UNVERIFIABLE") {
     open_questions.push("Final/container hash not verifiable in transcript-only mode; LVSH computed from signed rounds.");
+  }
+  
+  // Check constitution hash - add warning if non-standard
+  const constitutionHash = constitution.hash;
+  if (!isAcceptedConstitutionHash(constitutionHash)) {
+    open_questions.push(`NON-STANDARD RULES: constitution hash mismatch (hash: ${constitutionHash.substring(0, 16)}...). This transcript uses non-standard rules that are not recognized.`);
   }
   
   // Sort for determinism
@@ -1085,7 +1093,10 @@ export async function renderGCView(
       hash: constitution.hash,
       rules_applied: rulesApplied,
     },
-    gc_takeaways: generateGCTakeaways(status, integrity, judgment, policyFailures),
+    gc_takeaways: generateGCTakeaways(status, integrity, judgment, policyFailures, {
+      version: constitution.version,
+      hash: constitution.hash,
+    }),
     chain_of_custody: generateChainOfCustody(transcript, replayResult, evidenceIndex, options.bundlePath),
     subject: {
       transcript_id_or_hash: transcriptId,

@@ -1,0 +1,11 @@
+UNDERWRITING SUMMARY
+
+Outcome Category: ABORTED_POLICY (policy constraint violation)
+
+Coverage Recommendation: COVERED_WITH_SURCHARGE
+  - Tier B party surcharge applies
+  - Buyer passport score impacted (-0.05)
+
+Rationale:
+  • Buyer's policy constraints were unsatisfiable by provider's offer
+  • No financial exposure - transaction terminated before commitment

@@ -1,0 +1,24 @@
+TRANSACTION ABORTED - POLICY CONSTRAINT
+
+Your transaction was automatically terminated because the provider's offer
+did not meet your pre-configured policy requirements. This is a protective
+measure that prevented you from accepting terms outside your specified
+constraints.
+
+RESPONSIBILITY: The buyer's policy constraints could not be satisfied by
+the available provider. This is not an error - your policy worked as
+designed to protect you from unwanted terms.
+
+WHAT HAPPENS NEXT: Review your policy settings and consider whether they
+should be adjusted. You may retry with different providers or modified
+policy parameters.
+
+MONEY MOVED: No - no funds were committed or transferred. The transaction
+was terminated before any financial commitment was made.
+
+HOW TO VERIFY: Run the following command to independently verify this
+transaction:
+
+    pact-verifier auditor-pack-verify --zip auditor_pack_101.zip
+
+A successful verification will show "ok": true in the output.

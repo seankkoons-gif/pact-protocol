@@ -1,0 +1,23 @@
+VERIFICATION FAILED - TAMPERING DETECTED
+
+The transaction record you submitted has been altered after it was
+originally created. The verification system detected that derived
+documents do not match what would be computed from the original
+signed transcript.
+
+RESPONSIBILITY: Unknown - tampering was detected but the responsible
+party cannot be determined from the evidence alone. This could indicate
+malicious modification, storage corruption, or software error.
+
+WHAT HAPPENS NEXT: This record cannot be relied upon for dispute
+resolution or claims processing. Contact support for investigation.
+The original signed rounds may still have forensic value.
+
+MONEY MOVED: Unknown - the integrity of this record is compromised
+and its claims cannot be trusted without further investigation.
+
+HOW TO VERIFY: Run the following command to confirm the tamper detection:
+
+    pact-verifier auditor-pack-verify --zip auditor_pack_semantic_tampered.zip
+
+Verification will show "ok": false and "recompute_ok": false.

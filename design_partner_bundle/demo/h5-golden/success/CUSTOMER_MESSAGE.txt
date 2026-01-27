@@ -1,0 +1,20 @@
+TRANSACTION COMPLETED SUCCESSFULLY
+
+Your transaction has been completed successfully. The buyer and provider
+reached agreement on terms, and the negotiation concluded normally with
+mutual acceptance.
+
+RESPONSIBILITY: No fault was identified. Both parties fulfilled their
+obligations under the protocol.
+
+WHAT HAPPENS NEXT: No further action is required. This transaction is
+complete and the record is final.
+
+MONEY MOVED: Yes - funds were transferred according to the agreed terms.
+
+HOW TO VERIFY: Run the following command to independently verify this
+transaction:
+
+    pact-verifier auditor-pack-verify --zip auditor_pack_success.zip
+
+A successful verification will show "ok": true in the output.

@@ -1,0 +1,11 @@
+UNDERWRITING SUMMARY
+
+Outcome Category: COMPROMISED (integrity failure detected)
+
+Coverage Recommendation: EXCLUDED
+  - Record integrity compromised
+  - Manual investigation required
+
+Rationale:
+  • Recompute verification failed - derived artifacts do not match transcript
+  • Checksum verification passed - indicates sophisticated tampering attempt

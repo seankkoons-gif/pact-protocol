@@ -12,13 +12,15 @@
  */
 
 import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
-import { resolve, isAbsolute, join, dirname } from "node:path";
+import { resolve, isAbsolute, join, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
+import JSZip from "jszip";
 import type { TranscriptV4 } from "../util/transcript_types.js";
 import { renderGCView } from "../gc_view/renderer.js";
 import { resolveBlameV1 } from "../dbl/blame_resolver_v1.js";
 import { stableCanonicalize } from "../util/canonical.js";
+import { isAcceptedConstitutionHash } from "../util/constitution_hashes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -56,6 +58,7 @@ interface InsurerSummary {
   risk_factors: string[];
   surcharges: string[];
   coverage: CoverageDecision;
+  constitution_warning?: string;
 }
 
 // ============================================================================
@@ -231,7 +234,8 @@ function computeSurcharges(
   riskFactors: string[],
   confidence: number,
   buyerTier?: Tier,
-  providerTier?: Tier
+  providerTier?: Tier,
+  hasNonStandardConstitution?: boolean
 ): string[] {
   const surcharges: string[] = [];
   
@@ -245,6 +249,10 @@ function computeSurcharges(
   
   if (riskFactors.includes("SLA_TIMEOUT")) {
     surcharges.push("SLA");
+  }
+  
+  if (hasNonStandardConstitution) {
+    surcharges.push("NON_STANDARD_CONSTITUTION");
   }
   
   if (confidence < 0.7) {
@@ -298,6 +306,8 @@ function determineCoverage(
 
 interface ParsedArgs {
   transcript?: string;
+  pack?: string;
+  allowNonstandard?: boolean;
 }
 
 function parseArgs(): ParsedArgs {
@@ -309,6 +319,10 @@ function parseArgs(): ParsedArgs {
 
     if (arg === "--transcript" && i + 1 < process.argv.length) {
       args.transcript = process.argv[++i];
+    } else if ((arg === "--pack" || arg === "--zip") && i + 1 < process.argv.length) {
+      args.pack = process.argv[++i];
+    } else if (arg === "--allow-nonstandard") {
+      args.allowNonstandard = true;
     } else if (arg === "-h" || arg === "--help") {
       printUsage();
       process.exit(0);
@@ -323,27 +337,17 @@ function printUsage(): void {
   console.error("Insurer Summary - Underwriter-focused transcript analysis");
   console.error("");
   console.error("Usage:");
-  console.error("  pact-verifier insurer-summary --transcript <path>");
+  console.error("  pact-verifier insurer-summary --transcript <path> [--allow-nonstandard]");
+  console.error("  pact-verifier insurer-summary --pack <path.zip> [--allow-nonstandard]");
+  console.error("  pact-verifier insurer-summary --zip <path.zip> [--allow-nonstandard]");
+  console.error("");
+  console.error("Options:");
+  console.error("  --transcript <path>        Path to transcript JSON file");
+  console.error("  --pack <path>              Path to auditor pack ZIP file");
+  console.error("  --zip <path>               Path to auditor pack ZIP file (alias for --pack)");
+  console.error("  --allow-nonstandard        Allow non-standard constitution hashes (not recommended)");
   console.error("");
   console.error("Output: JSON with version insurer_summary/1.0");
-}
-
-function loadTranscript(transcriptPath: string): TranscriptV4 {
-  const resolved = isAbsolute(transcriptPath) ? transcriptPath : resolve(process.cwd(), transcriptPath);
-  
-  if (!existsSync(resolved)) {
-    console.error(`Error: Transcript file not found: ${resolved}`);
-    process.exit(1);
-  }
-
-  try {
-    const content = readFileSync(resolved, "utf-8");
-    return JSON.parse(content) as TranscriptV4;
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`Error reading transcript: ${message}`);
-    process.exit(1);
-  }
 }
 
 function truncateHash(hash: string, length: number = 16): string {
@@ -351,15 +355,113 @@ function truncateHash(hash: string, length: number = 16): string {
   return hash.substring(0, length) + "...";
 }
 
+function sha256(content: string | Buffer): string {
+  const hash = createHash("sha256");
+  if (typeof content === "string") {
+    hash.update(content, "utf8");
+  } else {
+    hash.update(content);
+  }
+  return hash.digest("hex");
+}
+
+/**
+ * Extract and compute constitution hash from auditor pack
+ */
+async function computeConstitutionHashFromPack(packPath: string): Promise<string | null> {
+  try {
+    const resolved = isAbsolute(packPath) ? packPath : resolve(process.cwd(), packPath);
+    
+    if (!existsSync(resolved)) {
+      return null;
+    }
+
+    const zipBuffer = readFileSync(resolved);
+    const zip = await JSZip.loadAsync(zipBuffer);
+    
+    const constitutionFile = zip.file("constitution/CONSTITUTION_v1.md");
+    if (!constitutionFile) {
+      return null;
+    }
+
+    // Load constitution content and canonicalize (same method as auditor_pack_verify.ts)
+    // Note: Canonicalization normalizes whitespace only - it does NOT erase semantic changes
+    // Changes like "constitution/1.0" -> "constitution/1.0X" will still produce different hashes
+    const constitutionContent = await constitutionFile.async("string");
+    const canonicalConstitutionContent = constitutionContent
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .split("\n")
+      .map((line) => line.replace(/\s+$/, ""))
+      .join("\n");
+    
+    // Compute SHA-256 hash of canonicalized constitution (matches expected hash computation)
+    return sha256(canonicalConstitutionContent);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Load transcript from either a JSON file or an auditor pack ZIP
+ */
+async function loadTranscriptOrPack(inputPath: string): Promise<{ transcript: TranscriptV4; constitutionHash?: string }> {
+  const resolved = isAbsolute(inputPath) ? inputPath : resolve(process.cwd(), inputPath);
+  
+  if (!existsSync(resolved)) {
+    console.error(`Error: Input file not found: ${resolved}`);
+    process.exit(1);
+  }
+
+  // Check if it's a ZIP file (auditor pack)
+  if (extname(resolved).toLowerCase() === ".zip" || resolved.toLowerCase().endsWith(".zip")) {
+    try {
+      const zipBuffer = readFileSync(resolved);
+      const zip = await JSZip.loadAsync(zipBuffer);
+      
+      const transcriptFile = zip.file("input/transcript.json");
+      if (!transcriptFile) {
+        console.error("Error: Auditor pack missing input/transcript.json");
+        process.exit(1);
+      }
+
+      const transcriptContent = await transcriptFile.async("string");
+      const transcript = JSON.parse(transcriptContent) as TranscriptV4;
+      
+      // Compute constitution hash from pack
+      const constitutionHash = await computeConstitutionHashFromPack(resolved);
+      
+      return { transcript, constitutionHash: constitutionHash || undefined };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Error reading auditor pack: ${message}`);
+      process.exit(1);
+    }
+  }
+
+  // Otherwise, treat as transcript JSON
+  try {
+    const content = readFileSync(resolved, "utf-8");
+    const transcript = JSON.parse(content) as TranscriptV4;
+    return { transcript };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Error reading transcript: ${message}`);
+    process.exit(1);
+  }
+}
+
 export async function main(): Promise<void> {
   const args = parseArgs();
 
-  if (!args.transcript) {
+  const inputPath = args.pack || args.transcript;
+  if (!inputPath) {
     printUsage();
     process.exit(1);
   }
 
-  const transcript = loadTranscript(args.transcript);
+  // Load transcript (and constitution hash if from pack)
+  const { transcript, constitutionHash: packConstitutionHash } = await loadTranscriptOrPack(inputPath);
   
   // Run GC View
   const gcView = await renderGCView(transcript);
@@ -377,7 +479,7 @@ export async function main(): Promise<void> {
   // Get outcome and fault domain
   const outcome = gcView.executive_summary.status;
   const faultDomain = judgment.dblDetermination;
-  const confidence = judgment.confidence;
+  let confidence = judgment.confidence;
   
   // Detect DOUBLE_COMMIT
   const hasDoubleCommit = detectDoubleCommit(transcript);
@@ -404,17 +506,49 @@ export async function main(): Promise<void> {
     };
   }
   
+  // Check constitution hash
+  // If we have a pack hash (from --zip/--pack), use it; otherwise use the hash from GC View
+  // For transcript-only mode, we cannot verify constitution from pack, so set warning
+  const constitutionHash = packConstitutionHash || gcView.constitution.hash;
+  const isStandardConstitution = packConstitutionHash ? isAcceptedConstitutionHash(packConstitutionHash) : null;
+  const canVerifyConstitution = packConstitutionHash !== undefined;
+  
   // Compute risk factors and surcharges
   const riskFactors = computeRiskFactors(outcome, faultDomain, hasDoubleCommit, integrityValid);
-  const surcharges = computeSurcharges(riskFactors, confidence, buyerInfo?.tier, providerInfo?.tier);
+  
+  // Handle constitution verification
+  let constitutionWarning: string | undefined;
+  const hasNonStandardConstitution = isStandardConstitution === false;
+  
+  if (!canVerifyConstitution) {
+    // Transcript-only mode: cannot verify constitution from pack
+    constitutionWarning = "UNVERIFIABLE (transcript-only mode)";
+  } else if (hasNonStandardConstitution) {
+    // Pack mode: constitution hash is non-standard
+    riskFactors.push("NON_STANDARD_RULES");
+    constitutionWarning = "Verifier detected non-standard constitution rules";
+  }
+  
+  const surcharges = computeSurcharges(riskFactors, confidence, buyerInfo?.tier, providerInfo?.tier, hasNonStandardConstitution);
+  
+  // CRITICAL: Non-standard constitution hash forces EXCLUDED coverage unless --allow-nonstandard
+  // Also set confidence to 0 if non-standard (unless flag is set)
+  if (hasNonStandardConstitution && !args.allowNonstandard) {
+    confidence = 0;
+  }
   
   // Determine coverage
-  const coverage = determineCoverage(riskFactors, surcharges, buyerInfo?.tier, providerInfo?.tier);
+  let coverage = determineCoverage(riskFactors, surcharges, buyerInfo?.tier, providerInfo?.tier);
+  
+  // CRITICAL: Non-standard constitution hash forces EXCLUDED coverage unless --allow-nonstandard
+  if (hasNonStandardConstitution && !args.allowNonstandard) {
+    coverage = "EXCLUDED";
+  }
   
   // Build output
   const output: InsurerSummary = {
     version: "insurer_summary/1.0",
-    constitution_hash: truncateHash(gcView.constitution.hash),
+    constitution_hash: truncateHash(constitutionHash),
     integrity: integrityStatus,
     outcome,
     fault_domain: faultDomain,
@@ -423,6 +557,11 @@ export async function main(): Promise<void> {
     surcharges,
     coverage,
   };
+  
+  // Add constitution warning if present
+  if (constitutionWarning) {
+    output.constitution_warning = constitutionWarning;
+  }
   
   if (buyerInfo) {
     output.buyer = buyerInfo;

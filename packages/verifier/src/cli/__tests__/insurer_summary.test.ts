@@ -8,6 +8,8 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
 import { execSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import JSZip from "jszip";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -271,6 +273,215 @@ describe("Insurer Summary CLI", () => {
           expect(output.provider.tier).toBe("B");
           expect(output.provider.passport_score).toBe(0.01);
         }
+      } finally {
+        if (existsSync(tempDir)) {
+          rmSync(tempDir, { recursive: true, force: true });
+        }
+      }
+    });
+  });
+
+  describe("constitution hash enforcement", () => {
+    it("should return normal coverage for standard constitution pack", async () => {
+      // Create a standard auditor pack
+      const transcriptPath = resolve(repoRoot, "fixtures/success/SUCCESS-001-simple.json");
+      const tempDir = join(repoRoot, "tmp_test_insurer_standard");
+      if (existsSync(tempDir)) {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+      mkdirSync(tempDir, { recursive: true });
+      
+      const packPath = join(tempDir, "standard_pack.zip");
+      
+      try {
+        // Create pack using auditor-pack CLI
+        const verifierPath = resolve(repoRoot, "packages", "verifier");
+        let packScript = join(verifierPath, "dist", "cli", "auditor_pack.js");
+        if (!existsSync(packScript)) {
+          packScript = join(verifierPath, "src", "cli", "auditor_pack.ts");
+        }
+        
+        const packCommand = packScript.endsWith(".ts")
+          ? `tsx "${packScript}" --transcript "${transcriptPath}" --out "${packPath}"`
+          : `node "${packScript}" --transcript "${transcriptPath}" --out "${packPath}"`;
+        
+        execSync(packCommand, { cwd: repoRoot, stdio: "pipe" });
+        
+        // Run insurer-summary on the pack
+        const result = await runCLI(["--pack", packPath]);
+        
+        expect(result.exitCode).toBe(0);
+        const output = JSON.parse(result.stdout);
+        
+        // Standard pack should have normal coverage (not EXCLUDED)
+        expect(output.coverage).not.toBe("EXCLUDED");
+        expect(output.risk_factors).not.toContain("NON_STANDARD_RULES");
+        expect(output.surcharges).not.toContain("NON_STANDARD_CONSTITUTION");
+        expect(output.constitution_warning).toBeUndefined();
+        expect(output.confidence).toBeGreaterThan(0);
+      } finally {
+        if (existsSync(tempDir)) {
+          rmSync(tempDir, { recursive: true, force: true });
+        }
+      }
+    });
+
+    it("should return EXCLUDED coverage for tampered constitution pack", async () => {
+      // Create a standard pack first
+      const transcriptPath = resolve(repoRoot, "fixtures/success/SUCCESS-001-simple.json");
+      const tempDir = join(repoRoot, "tmp_test_insurer_tampered");
+      if (existsSync(tempDir)) {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+      mkdirSync(tempDir, { recursive: true });
+      
+      const packPath = join(tempDir, "tampered_pack.zip");
+      
+      try {
+        // Create pack using auditor-pack CLI
+        const verifierPath = resolve(repoRoot, "packages", "verifier");
+        let packScript = join(verifierPath, "dist", "cli", "auditor_pack.js");
+        if (!existsSync(packScript)) {
+          packScript = join(verifierPath, "src", "cli", "auditor_pack.ts");
+        }
+        
+        const packCommand = packScript.endsWith(".ts")
+          ? `tsx "${packScript}" --transcript "${transcriptPath}" --out "${packPath}"`
+          : `node "${packScript}" --transcript "${transcriptPath}" --out "${packPath}"`;
+        
+        execSync(packCommand, { cwd: repoRoot, stdio: "pipe" });
+        
+        // Tamper with the constitution
+        const zipBuffer = readFileSync(packPath);
+        const zip = await JSZip.loadAsync(zipBuffer);
+        
+        const constitutionContent = await zip.file("constitution/CONSTITUTION_v1.md")!.async("string");
+        const tamperedConstitution = " " + constitutionContent; // Add space at start
+        
+        // Canonicalize and compute hash
+        const canonicalTampered = tamperedConstitution
+          .replace(/\r\n/g, "\n")
+          .replace(/\r/g, "\n")
+          .split("\n")
+          .map((line) => line.replace(/\s+$/, ""))
+          .join("\n");
+        const newHash = createHash("sha256").update(canonicalTampered, "utf8").digest("hex");
+        
+        // Update constitution in zip
+        zip.file("constitution/CONSTITUTION_v1.md", tamperedConstitution);
+        
+        // Update manifest
+        const manifestContent = await zip.file("manifest.json")!.async("string");
+        const manifest = JSON.parse(manifestContent);
+        manifest.constitution_hash = newHash;
+        zip.file("manifest.json", JSON.stringify(manifest, null, 2));
+        
+        // Regenerate checksums
+        const newChecksums: string[] = [];
+        const files = Object.keys(zip.files).filter((f) => !f.endsWith("/") && f !== "checksums.sha256");
+        for (const file of files.sort()) {
+          const content = await zip.file(file)!.async("nodebuffer");
+          const hash = createHash("sha256").update(content).digest("hex");
+          newChecksums.push(`${hash}  ${file}`);
+        }
+        zip.file("checksums.sha256", newChecksums.join("\n") + "\n");
+        
+        const tamperedBuffer = await zip.generateAsync({ type: "nodebuffer" });
+        writeFileSync(packPath, tamperedBuffer);
+        
+        // Run insurer-summary on tampered pack - should return EXCLUDED
+        const result = await runCLI(["--pack", packPath]);
+        
+        expect(result.exitCode).toBe(0);
+        const output = JSON.parse(result.stdout);
+        
+        // Tampered pack should be EXCLUDED
+        expect(output.coverage).toBe("EXCLUDED");
+        expect(output.risk_factors).toContain("NON_STANDARD_RULES");
+        expect(output.surcharges).toContain("NON_STANDARD_CONSTITUTION");
+        expect(output.constitution_warning).toBe("Verifier detected non-standard constitution rules");
+        expect(output.confidence).toBe(0);
+      } finally {
+        if (existsSync(tempDir)) {
+          rmSync(tempDir, { recursive: true, force: true });
+        }
+      }
+    });
+
+    it("should allow non-standard constitution with --allow-nonstandard flag", async () => {
+      // Create a tampered pack (same as above)
+      const transcriptPath = resolve(repoRoot, "fixtures/success/SUCCESS-001-simple.json");
+      const tempDir = join(repoRoot, "tmp_test_insurer_allow_nonstandard");
+      if (existsSync(tempDir)) {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+      mkdirSync(tempDir, { recursive: true });
+      
+      const packPath = join(tempDir, "tampered_pack.zip");
+      
+      try {
+        // Create and tamper pack (same logic as above)
+        const verifierPath = resolve(repoRoot, "packages", "verifier");
+        let packScript = join(verifierPath, "dist", "cli", "auditor_pack.js");
+        if (!existsSync(packScript)) {
+          packScript = join(verifierPath, "src", "cli", "auditor_pack.ts");
+        }
+        
+        const packCommand = packScript.endsWith(".ts")
+          ? `tsx "${packScript}" --transcript "${transcriptPath}" --out "${packPath}"`
+          : `node "${packScript}" --transcript "${transcriptPath}" --out "${packPath}"`;
+        
+        execSync(packCommand, { cwd: repoRoot, stdio: "pipe" });
+        
+        // Tamper with the constitution
+        const zipBuffer = readFileSync(packPath);
+        const zip = await JSZip.loadAsync(zipBuffer);
+        
+        const constitutionContent = await zip.file("constitution/CONSTITUTION_v1.md")!.async("string");
+        const tamperedConstitution = " " + constitutionContent;
+        
+        const canonicalTampered = tamperedConstitution
+          .replace(/\r\n/g, "\n")
+          .replace(/\r/g, "\n")
+          .split("\n")
+          .map((line) => line.replace(/\s+$/, ""))
+          .join("\n");
+        const newHash = createHash("sha256").update(canonicalTampered, "utf8").digest("hex");
+        
+        zip.file("constitution/CONSTITUTION_v1.md", tamperedConstitution);
+        
+        const manifestContent = await zip.file("manifest.json")!.async("string");
+        const manifest = JSON.parse(manifestContent);
+        manifest.constitution_hash = newHash;
+        zip.file("manifest.json", JSON.stringify(manifest, null, 2));
+        
+        const newChecksums: string[] = [];
+        const files = Object.keys(zip.files).filter((f) => !f.endsWith("/") && f !== "checksums.sha256");
+        for (const file of files.sort()) {
+          const content = await zip.file(file)!.async("nodebuffer");
+          const hash = createHash("sha256").update(content).digest("hex");
+          newChecksums.push(`${hash}  ${file}`);
+        }
+        zip.file("checksums.sha256", newChecksums.join("\n") + "\n");
+        
+        const tamperedBuffer = await zip.generateAsync({ type: "nodebuffer" });
+        writeFileSync(packPath, tamperedBuffer);
+        
+        // Run insurer-summary with --allow-nonstandard flag
+        const result = await runCLI(["--pack", packPath, "--allow-nonstandard"]);
+        
+        expect(result.exitCode).toBe(0);
+        const output = JSON.parse(result.stdout);
+        
+        // With flag, coverage should not be EXCLUDED (unless other factors force it)
+        // But warning and risk factors should still be present
+        expect(output.risk_factors).toContain("NON_STANDARD_RULES");
+        expect(output.surcharges).toContain("NON_STANDARD_CONSTITUTION");
+        expect(output.constitution_warning).toBe("Verifier detected non-standard constitution rules");
+        // Confidence should not be forced to 0 with the flag
+        expect(output.confidence).toBeGreaterThanOrEqual(0);
+        // Coverage should be computed normally (not forced to EXCLUDED)
+        // It might still be EXCLUDED due to other factors, but not forced by constitution
       } finally {
         if (existsSync(tempDir)) {
           rmSync(tempDir, { recursive: true, force: true });

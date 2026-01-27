@@ -7,6 +7,9 @@ coverage/
 
 # Local artifacts
 .pact/
+demo/h5-golden/**/auditor_pack_*.zip
+demo/h5-golden/**/*_MESSAGE.txt
+demo/h5-golden/tamper/.tamper_workdir/
 packages/demo/.pact/
 packages/demo/demo_receipts_*.jsonl
 evidence-bundle/
@@ -38,6 +41,7 @@ keypair.json
 *.keypair.json
 *_keypair.json
 
+
 # local/WIP artifacts
 packages/sdk/src/blame/
 packages/sdk/src/transcript/v4/__tests__/contention.test.ts
@@ -54,11 +58,3 @@ packages/passport/src/__tests__/storage-fallback.test.ts
 * 2.mjs
 * 2.cjs
 
-
-# local artifacts
-/tmp/
-/test-transcripts/
-packages/sdk/src/protocol/canonical.js
-packages/sdk/src/protocol/canonical.js.map
-packages/sdk/src/protocol/canonical.d.ts
-packages/sdk/src/protocol/canonical.d.ts.map

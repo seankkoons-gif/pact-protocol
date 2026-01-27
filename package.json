@@ -80,6 +80,7 @@
     "demo:v3:quickstart": "tsx examples/v3/quickstart-demo.ts",
     "demo:v4:canonical": "pnpm -w exec tsx examples/v4/quickstart-demo.ts",
     "demo:v4:gc": "node scripts/demo-v4-gc.mjs",
+    "demo:h5": "bash scripts/demo-h5-golden.sh",
     "doctor:v4": "rm -rf .pact && pnpm --filter @pact/sdk build && pnpm demo:v4:canonical | tee /tmp/canon.log && T=$(grep -Eo '/Users/[^ ]+\\.pact/transcripts/[^ ]+\\.json' /tmp/canon.log | tail -n 1) && echo \"Latest transcript: $T\" && pnpm replay:v4 \"$T\" && pnpm judge:v4 \"$T\"",
     "demo:v4:provider": "tsx examples/v4/provider-backed-weather-demo.ts",
     "example:provider:weather": "pnpm --filter weather-provider exec tsx src/server.ts",

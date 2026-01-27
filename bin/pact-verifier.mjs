@@ -22,6 +22,8 @@ const repoRoot = resolve(__dirname, "..");
 const verifierDist = join(repoRoot, "packages", "verifier", "dist", "cli");
 
 const subcommands = {
+  "auditor-pack": join(verifierDist, "auditor_pack.js"),
+  "auditor-pack-verify": join(verifierDist, "auditor_pack_verify.js"),
   "gc-view": join(verifierDist, "gc_view.js"),
   "gc-summary": join(verifierDist, "gc_summary.js"),
   "insurer-summary": join(verifierDist, "insurer_summary.js"),

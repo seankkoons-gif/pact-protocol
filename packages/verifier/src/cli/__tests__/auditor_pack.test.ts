@@ -83,7 +83,7 @@ describe("Auditor Pack CLI", () => {
       expect(zip.file("README.txt")).not.toBeNull();
     });
 
-    it("should have valid manifest.json", async () => {
+    it("should have valid manifest.json with constitution fields", async () => {
       const outPath = join(tempDir, "test.zip");
       const transcriptPath = join(repoRoot, "fixtures/success/SUCCESS-001-simple.json");
 
@@ -96,6 +96,19 @@ describe("Auditor Pack CLI", () => {
       expect(manifestContent).toBeDefined();
 
       const manifest = JSON.parse(manifestContent!);
+      
+      // Verify constitution fields are present
+      expect(manifest.constitution_version).toBeDefined();
+      expect(manifest.constitution_version).toBe("constitution/1.0");
+      expect(manifest.constitution_hash).toBeDefined();
+      expect(typeof manifest.constitution_hash).toBe("string");
+      expect(manifest.constitution_hash.length).toBe(64); // SHA-256 hex string
+      
+      // Verify constitution hash matches gc_view
+      const gcViewContent = await zip.file("derived/gc_view.json")?.async("string");
+      const gcView = JSON.parse(gcViewContent!);
+      expect(manifest.constitution_hash).toBe(gcView.constitution.hash);
+      expect(manifest.constitution_version).toBe(gcView.constitution.version);
 
       // Check required fields
       expect(manifest.package_version).toBe("auditor_pack/1.0");
