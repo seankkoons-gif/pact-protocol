@@ -1,0 +1,63 @@
+.generate-claims-package-button {
+  font-size: 12px;
+  padding: 8px 16px;
+  background: white;
+  border: 1px solid #333;
+  border-radius: 3px;
+  cursor: pointer;
+  color: #333;
+  font-family: 'Helvetica', 'Arial', sans-serif;
+  font-weight: 500;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.generate-claims-package-button:hover:not(.disabled):not(.generating) {
+  background: #f5f5f5;
+  border-color: #000;
+}
+
+.generate-claims-package-button:active:not(.disabled):not(.generating) {
+  background: #e0e0e0;
+}
+
+.generate-claims-package-button.disabled {
+  background: #f5f5f5;
+  border-color: #ddd;
+  color: #999;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.generate-claims-package-button.generating {
+  background: #f0f0f0;
+  border-color: #999;
+  color: #666;
+  cursor: wait;
+}
+
+.claims-package-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #006600;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}

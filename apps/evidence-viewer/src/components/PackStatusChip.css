@@ -1,0 +1,55 @@
+.pack-status-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.pack-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.pack-status-chip.loaded {
+  background: #e6f7e6;
+  border: 1px solid #006600;
+  color: #006600;
+}
+
+.pack-status-chip.tampered {
+  background: #ffe6e6;
+  border: 1px solid #CC0000;
+  color: #CC0000;
+}
+
+.status-label {
+  font-weight: bold;
+}
+
+.status-file {
+  font-family: 'Courier New', Courier, monospace;
+  font-weight: normal;
+}
+
+.tamper-alert {
+  padding: 6px 12px;
+  background: #CC0000;
+  color: white;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}

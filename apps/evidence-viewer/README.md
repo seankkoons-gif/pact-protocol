@@ -59,7 +59,9 @@ cp demo/h5-golden/tamper/auditor_pack_semantic_tampered.zip apps/evidence-viewer
 ## Architecture
 
 - **Vite + React + TypeScript**: Modern frontend stack
-- **jszip**: Client-side ZIP parsing
+- **jszip**: Client-side ZIP parsing (loaded on demand when you upload a pack or download a file)
+- **jspdf**: PDF generation (loaded on demand when you export a PDF or generate the claims package)
+- **Lazy-loaded heavy libs**: jsPDF and JSZip are loaded only when needed (first export, first pack load, or first file download). This keeps the initial bundle smaller and improves first-load performance.
 - **No backend**: Fully client-side, no data leaves your browser
 - **Read-only**: No editing, no auth, no data storage
 

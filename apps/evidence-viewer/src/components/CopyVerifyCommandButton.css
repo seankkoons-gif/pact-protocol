@@ -1,0 +1,64 @@
+.copy-verify-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.copy-verify-button {
+  font-size: 11px;
+  padding: 6px 12px;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  cursor: pointer;
+  color: #333;
+  font-family: 'Courier New', Courier, monospace;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.copy-verify-button:hover:not(.copied):not(.error) {
+  background: #f0f0f0;
+  border-color: #666;
+}
+
+.copy-verify-button:active:not(.copied):not(.error) {
+  background: #e0e0e0;
+}
+
+.copy-verify-button.copied {
+  background: #e6f7e6;
+  border-color: #006600;
+  color: #006600;
+  cursor: default;
+}
+
+.copy-verify-button.error {
+  background: #ffe6e6;
+  border-color: #CC0000;
+  color: #CC0000;
+}
+
+.copy-verify-button.disabled {
+  background: #f5f5f5;
+  border-color: #ddd;
+  color: #999;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.copy-verify-button.banner {
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+.copy-verify-button.panel {
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.copy-error-message {
+  font-size: 10px;
+  color: #CC0000;
+  font-style: italic;
+}

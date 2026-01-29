@@ -1,0 +1,66 @@
+.verify-locally {
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  padding: 20px;
+  margin-top: 20px;
+}
+
+.verify-title {
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 12px;
+  color: #000;
+}
+
+.verify-description {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 12px;
+}
+
+.verify-command-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  margin-bottom: 12px;
+}
+
+.verify-command {
+  flex: 1;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 12px;
+  color: #000;
+  background: transparent;
+  border: none;
+  outline: none;
+}
+
+.copy-button {
+  font-size: 11px;
+  padding: 6px 12px;
+  background: #f0f0f0;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  cursor: pointer;
+  color: #333;
+  white-space: nowrap;
+}
+
+.copy-button:hover {
+  background: #e0e0e0;
+}
+
+.copy-button:active {
+  background: #d0d0d0;
+}
+
+.verify-note {
+  font-size: 11px;
+  color: #666;
+  font-style: italic;
+  margin-top: 8px;
+}

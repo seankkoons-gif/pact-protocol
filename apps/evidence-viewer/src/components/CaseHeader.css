@@ -1,0 +1,78 @@
+.case-header {
+  background: white;
+  border: 1px solid #ddd;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.case-header-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.status-badge {
+  font-weight: bold;
+  font-size: 14px;
+  padding: 6px 12px;
+  border: 2px solid;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.case-header-meta {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.transcript-id-item {
+  position: relative;
+}
+
+.transcript-id-item .meta-value-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.transcript-id-item .meta-value {
+  display: inline-block;
+}
+
+.transcript-id-item .copy-transcript-id-container {
+  display: inline-block;
+}
+
+.meta-label {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.meta-value {
+  font-size: 12px;
+  color: #000;
+}
+
+.meta-value code {
+  font-family: 'Courier New', Courier, monospace;
+  background: #f5f5f5;
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+.meta-item.audit-note .meta-value.note {
+  font-size: 11px;
+  color: #666;
+  font-style: italic;
+}
