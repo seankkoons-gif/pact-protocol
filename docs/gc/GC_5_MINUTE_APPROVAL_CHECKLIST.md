@@ -88,6 +88,8 @@ Look at:
 **GC rule:**  
 If integrity ≠ VALID → transaction is inadmissible
 
+When running `pact-verifier auditor-pack-verify`, you may see stderr warnings. **Credential expiry warnings do not invalidate transcript integrity;** they indicate time-bounded KYA credentials and are expected for historical transcripts.
+
 ---
 
 ## 5. Outcome Summary (30 seconds)

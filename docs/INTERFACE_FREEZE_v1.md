@@ -114,6 +114,8 @@ The following MAY change within v4.x without a major release:
 - **Reference apps** — Example providers, buyer demos, and sample configurations.
 - **Visual presentation** — Human-readable summaries, log messages, and any non-JSON output.
 
+**Verifier warnings:** Credential expiry warnings do not invalidate transcript integrity; they indicate time-bounded KYA credentials and are expected for historical transcripts.
+
 This protects Pact from future work on presentation and tooling without breaking the frozen interfaces and semantics above.
 
 ---

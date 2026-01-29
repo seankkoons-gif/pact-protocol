@@ -215,7 +215,7 @@ Output:
   "checksums_ok": true,
   "recompute_ok": true,
   "mismatches": [],
-  "tool_version": "@pact/verifier 0.2.0"
+  "tool_version": "@pact/verifier 0.2.1"
 }
 ```
 

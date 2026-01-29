@@ -110,6 +110,10 @@ Complete index of all PACT documentation for easy reference.
 - [versions/v4/REDACTION.md](./versions/v4/REDACTION.md) - Transcript Redaction
 - [versions/v4/FAILURE_TAXONOMY.md](./versions/v4/FAILURE_TAXONOMY.md) - Failure Taxonomy
 - [versions/v4/VERIFIER.md](./versions/v4/VERIFIER.md) - Verifier CLI (gc-view, insurer-summary, passport-v1-recompute, passport-v1-query)
+- [INTERFACE_FREEZE_v1.md](./INTERFACE_FREEZE_v1.md) - Pact v4 Interface Freeze (frozen CLI, schemas, semantics for v4.x)
+- [ADDITIVE_FIELD_WHITELIST_v4x.md](./ADDITIVE_FIELD_WHITELIST_v4x.md) - Additive field whitelist (v4.x allowed additive paths)
+- [TIERED_VERIFICATION_SPEC.md](./TIERED_VERIFICATION_SPEC.md) - Tiered verification (doc-only; tiering = audit cadence; PoN unchanged)
+- [MERKLE_DIGEST_v1.md](./MERKLE_DIGEST_v1.md) - Merkle digest future spec (leaf=content hash; constitution_hash + signature; not in v4.0.5-rc1)
 
 ### Passport & Registry
 - [passport/PASSPORT_REGISTRY_CONTRACT.md](./passport/PASSPORT_REGISTRY_CONTRACT.md) - Passport registry contract (immutability, determinism, append-only, INDETERMINATE_TAMPER, explicit non-goals)
@@ -119,6 +123,9 @@ Complete index of all PACT documentation for easy reference.
 - [gc/EVIDENCE_VIEWER_SPEC.md](./gc/EVIDENCE_VIEWER_SPEC.md) - Evidence Viewer specification
 - [gc/GC_5_MINUTE_APPROVAL_CHECKLIST.md](./gc/GC_5_MINUTE_APPROVAL_CHECKLIST.md) - GC 5-minute approval checklist
 - [gc/INSURER_UNDERWRITING_VIEW.md](./gc/INSURER_UNDERWRITING_VIEW.md) - Insurer underwriting view
+- [gc/TIERED_VERIFICATION_NOTE.md](./gc/TIERED_VERIFICATION_NOTE.md) - Tiered verification note (prevention vs evidence vs tier; tier/SLA do not reduce admissibility)
+- [TIERED_VERIFICATION_SPEC.md](./TIERED_VERIFICATION_SPEC.md) - Tiered verification spec (doc-only; audit cadence; Boundary always real-time)
+- [MERKLE_DIGEST_v1.md](./MERKLE_DIGEST_v1.md) - Merkle digest future spec (not implemented in v4.0.5-rc1)
 
 ### ML & Training
 - [versions/v2/TRAINING_DATA_FORMAT.md](./versions/v2/TRAINING_DATA_FORMAT.md) - Training data format
