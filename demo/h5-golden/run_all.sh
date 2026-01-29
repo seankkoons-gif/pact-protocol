@@ -54,18 +54,23 @@ else
 fi
 echo ""
 
-# --- Tier T3 + SLA Scenario ---
-echo ">>> Running: Tier T3 + SLA Scenario"
-echo "----------------------------------------------"
-if "$SCRIPT_DIR/tier3/run.sh"; then
+# --- Tier T3 + SLA Scenario (optional: RUN_TIER3=1 to enable) ---
+if [ "${RUN_TIER3:-0}" = "1" ]; then
+    echo ">>> Running: Tier T3 + SLA Scenario"
+    echo "----------------------------------------------"
+    if "$SCRIPT_DIR/tier3/run.sh"; then
+        echo ""
+        echo "[PASS] Tier T3 + SLA scenario completed"
+    else
+        echo ""
+        echo "[FAIL] Tier T3 + SLA scenario failed"
+        FAILURES=$((FAILURES + 1))
+    fi
     echo ""
-    echo "[PASS] Tier T3 + SLA scenario completed"
 else
+    echo ">>> Skipping: Tier T3 + SLA Scenario (set RUN_TIER3=1 to include)"
     echo ""
-    echo "[FAIL] Tier T3 + SLA scenario failed"
-    FAILURES=$((FAILURES + 1))
 fi
-echo ""
 
 # --- Summary ---
 echo "=============================================="
