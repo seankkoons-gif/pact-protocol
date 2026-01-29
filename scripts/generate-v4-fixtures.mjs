@@ -260,6 +260,76 @@ function createPACT404() {
   return transcript;
 }
 
+function createPACT420() {
+  const intentId = "intent-pact420-test";
+  const createdAt = baseTime;
+  const transcriptId = `transcript-${sha256(intentId + createdAt)}`;
+  const initialHash = computeInitialHash(intentId, createdAt);
+  const envelopeHash0 = sha256(stableCanonicalize({ type: "INTENT", intent_id: intentId }));
+  const round0 = createRound(0, "INTENT", "buyer", buyerPubKeyB58, createdAt, initialHash, envelopeHash0);
+  const rounds = [round0];
+  const failureEvent = {
+    code: "PACT-420",
+    stage: "negotiation",
+    fault_domain: "PROVIDER_AT_FAULT",
+    terminality: "terminal",
+    evidence_refs: [transcriptId, rounds[0].round_hash, "abort_reason:Quote request network error: fetch failed"],
+    timestamp: createdAt + 1000,
+    transcript_hash: "",
+  };
+  const transcript = {
+    transcript_version: "pact-transcript/4.0",
+    transcript_id: transcriptId,
+    intent_id: intentId,
+    intent_type: "weather.data",
+    created_at_ms: createdAt,
+    policy_hash: sha256(stableCanonicalize({ max_price: 0.0001 })),
+    strategy_hash: sha256(stableCanonicalize({ strategy: "banded_concession" })),
+    identity_snapshot_hash: sha256(stableCanonicalize({ buyer: "test-buyer" })),
+    rounds,
+    failure_event: failureEvent,
+  };
+  const transcriptUpToFailure = { ...transcript, failure_event: undefined };
+  failureEvent.transcript_hash = sha256(stableCanonicalize(transcriptUpToFailure));
+  transcript.final_hash = computeTranscriptHash(transcript);
+  return transcript;
+}
+
+function createPACT421() {
+  const intentId = "intent-pact421-test";
+  const createdAt = baseTime;
+  const transcriptId = `transcript-${sha256(intentId + createdAt)}`;
+  const initialHash = computeInitialHash(intentId, createdAt);
+  const envelopeHash0 = sha256(stableCanonicalize({ type: "INTENT", intent_id: intentId }));
+  const round0 = createRound(0, "INTENT", "buyer", buyerPubKeyB58, createdAt, initialHash, envelopeHash0);
+  const rounds = [round0];
+  const failureEvent = {
+    code: "PACT-421",
+    stage: "negotiation",
+    fault_domain: "PROVIDER_AT_FAULT",
+    terminality: "terminal",
+    evidence_refs: [transcriptId, rounds[0].round_hash, "abort_reason:Provider API mismatch - /pact endpoint not found: 404 Not Found"],
+    timestamp: createdAt + 1000,
+    transcript_hash: "",
+  };
+  const transcript = {
+    transcript_version: "pact-transcript/4.0",
+    transcript_id: transcriptId,
+    intent_id: intentId,
+    intent_type: "weather.data",
+    created_at_ms: createdAt,
+    policy_hash: sha256(stableCanonicalize({ max_price: 0.0001 })),
+    strategy_hash: sha256(stableCanonicalize({ strategy: "banded_concession" })),
+    identity_snapshot_hash: sha256(stableCanonicalize({ buyer: "test-buyer" })),
+    rounds,
+    failure_event: failureEvent,
+  };
+  const transcriptUpToFailure = { ...transcript, failure_event: undefined };
+  failureEvent.transcript_hash = sha256(stableCanonicalize(transcriptUpToFailure));
+  transcript.final_hash = computeTranscriptHash(transcript);
+  return transcript;
+}
+
 function createPACT505() {
   const intentId = "intent-pact505-test";
   const createdAt = baseTime;
@@ -300,6 +370,8 @@ const fixtures = {
   "PACT-202-kya-expiry.json": createPACT202(),
   "PACT-303-strategic-deadlock.json": createPACT303(),
   "PACT-404-settlement-timeout.json": createPACT404(),
+  "PACT-420-provider-unreachable.json": createPACT420(),
+  "PACT-421-provider-api-mismatch.json": createPACT421(),
   "PACT-505-recursive-failure.json": createPACT505(),
 };
 

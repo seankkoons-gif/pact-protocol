@@ -1,6 +1,6 @@
 # H5 Golden Demo — Executive Script
 
-This demonstration validates the Pact Protocol's core guarantees through three scenarios. Total runtime: under 5 seconds. No network required.
+This demonstration validates the Pact Protocol's core guarantees through four scenarios. Total runtime: under 10 seconds. No network required.
 
 ---
 
@@ -64,6 +64,21 @@ Or run individually as described below.
 
 ---
 
+## Scenario D: Tier T3 + SLA (daily digest)
+
+**Command:**
+```bash
+./demo/h5-golden/tier3/run.sh
+```
+
+**Point at on screen:**
+- `ok: true` — pack with tier=T3 and SLA="daily digest" verifies like any other; tier/SLA are informational only
+- Manifest / GC view shows `audit_tier`, `audit_sla`; Evidence Viewer displays them with note that tier affects audit schedule, not admissibility
+
+**Punchline:** Tier and SLA change audit cadence only; they do not reduce verification or admissibility. See [docs/gc/TIERED_VERIFICATION_NOTE.md](../../docs/gc/TIERED_VERIFICATION_NOTE.md).
+
+---
+
 ## Output Files
 
 Each scenario generates:
@@ -93,3 +108,4 @@ pact-verifier auditor-pack-verify --zip <path-to-pack.zip>
 | A: Success | COMPLETED | Yes | NO_FAULT | COVERED |
 | B: Policy Abort | ABORTED_POLICY | No | BUYER_AT_FAULT | COVERED_WITH_SURCHARGE |
 | C: Tamper | COMPROMISED | Unknown | Unknown | EXCLUDED |
+| D: Tier T3 + SLA | COMPLETED | Yes | NO_FAULT | COVERED (tier/SLA informational only) |

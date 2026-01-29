@@ -52,6 +52,16 @@ if [ -d "$DEMO_DEST" ]; then
     fi
   fi
   
+  # Run tier3 scenario (tier T3 + SLA "daily digest")
+  if [ -f "$DEMO_DEST/tier3/run.sh" ]; then
+    echo "  Running tier3 scenario..."
+    (cd "$DEMO_DEST/tier3" && bash run.sh > /dev/null 2>&1) || true
+    if [ -f "$DEMO_DEST/tier3/auditor_pack_tier3.zip" ]; then
+      cp "$DEMO_DEST/tier3/auditor_pack_tier3.zip" "$PACKS_DEST/" 2>/dev/null || true
+      echo "    ✓ Generated auditor_pack_tier3.zip"
+    fi
+  fi
+
   # Note: tamper scenario pack should fail verification (expected behavior)
   echo ""
   echo "✓ Demo setup complete"

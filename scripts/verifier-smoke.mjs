@@ -210,6 +210,33 @@ async function main() {
     process.exit(1);
   }
 
+  // 7. Freeze check: gc-summary constitution + status (SUCCESS-001 must be stable)
+  log("7. Freeze check (gc-summary constitution + status)...");
+  try {
+    const result = spawnSync(
+      "sh",
+      ["-c", `node bin/pact-verifier.mjs gc-summary --transcript "${successFixture}"`],
+      { cwd: repoRoot, encoding: "utf8", stdio: ["pipe", "pipe", "pipe"] }
+    );
+    if (result.status !== 0) {
+      throw new Error(`gc-summary exited ${result.status}: ${result.stderr}`);
+    }
+    const out = result.stdout.trim();
+    const constitutionLine = out.split("\n").find((l) => l.startsWith("Constitution:"));
+    const outcomeLine = out.split("\n").find((l) => l.startsWith("Outcome:"));
+    if (!constitutionLine || !constitutionLine.startsWith("Constitution: a0ea6fe329251b8c")) {
+      throw new Error(`Freeze: expected constitution hash prefix a0ea6fe329251b8c..., got: ${constitutionLine}`);
+    }
+    if (!outcomeLine || !outcomeLine.includes("COMPLETED")) {
+      throw new Error(`Freeze: expected Outcome: COMPLETED, got: ${outcomeLine}`);
+    }
+    log("   constitution hash + outcome stable");
+    log("   ✓ freeze check OK\n");
+  } catch (e) {
+    err(`freeze check failed: ${e.message}`);
+    process.exit(1);
+  }
+
   log("═══════════════════════════════════════════════════════════");
   log("  ✅ All verifier smoke tests passed");
   log("═══════════════════════════════════════════════════════════\n");

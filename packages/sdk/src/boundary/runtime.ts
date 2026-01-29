@@ -8,6 +8,7 @@
  */
 
 import type { PactPolicyV4, PolicyEvaluationContext, PolicyResult } from "../policy/v4";
+export type { PactPolicyV4 } from "../policy/v4";
 import { evaluatePolicy, computePolicyHash } from "../policy/v4";
 import type { TranscriptV4, FailureEvent } from "../transcript/v4/replay";
 import { createTranscriptV4 } from "../transcript/v4/transcript";
@@ -18,6 +19,7 @@ import {
   type CreditEvaluationContext,
   type CreditEvaluationResult,
 } from "./credit";
+import { checkVelocityLimit, recordVelocitySuccess } from "./velocity";
 
 /**
  * Intent definition for boundary execution
@@ -111,6 +113,18 @@ export async function runInPactBoundary(
     identity_snapshot_hash: "", // Set by executeFn if needed
   });
 
+  // Optional audit tier metadata (informational only; default T1)
+  if (policy.audit) {
+    transcript = {
+      ...transcript,
+      metadata: {
+        ...transcript.metadata,
+        audit_tier: policy.audit.tier ?? "T1",
+        audit_sla: policy.audit.sla,
+      },
+    };
+  }
+
   const evidenceRefs: string[] = [];
   let roundNumber = 0;
   let abortReason: string | null = null;
@@ -159,6 +173,23 @@ export async function runInPactBoundary(
       // Add evidence refs from final evaluation (for success case)
       evidenceRefs.push(...policyResult.evidence_refs);
 
+      // Velocity/burst limits (prevention plane): check before settlement; abort PACT-101 if exceeded
+      if (policy.velocity && options?.buyerAgentId) {
+        const amount = result.offer_price ?? result.bid_price ?? 0;
+        const nowMs = Date.now();
+        const velocityResult = checkVelocityLimit(
+          options.buyerAgentId,
+          policy.velocity,
+          nowMs,
+          amount,
+          options.sellerAgentId
+        );
+        if (!velocityResult.allowed) {
+          evidenceRefs.push(velocityResult.reason ?? "velocity.exceeded");
+          abort(velocityResult.reason ?? "Velocity limit exceeded", "PACT-101");
+        }
+      }
+
       // Credit evaluation before settlement (if Passport storage provided)
       if (options?.passportStorage && options.passportScore !== undefined && options.passportConfidence !== undefined) {
         const commitmentAmount = result.offer_price || result.bid_price || 0;
@@ -189,6 +220,17 @@ export async function runInPactBoundary(
             }
           }
         }
+      }
+
+      // Record velocity success only after all checks pass (so we only count actual settlements)
+      if (policy.velocity && options?.buyerAgentId) {
+        const amount = result.offer_price ?? result.bid_price ?? 0;
+        recordVelocitySuccess(
+          options.buyerAgentId,
+          Date.now(),
+          amount,
+          options.sellerAgentId
+        );
       }
     }
 

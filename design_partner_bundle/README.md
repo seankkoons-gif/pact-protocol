@@ -23,6 +23,7 @@ Pre-generated, verifiable evidence bundles in `packs/`:
 | `auditor_pack_success.zip` | SUCCESS-001 | COMPLETED | Successful transaction |
 | `auditor_pack_101.zip` | PACT-101 | ABORTED_POLICY | Policy violation |
 | `auditor_pack_420.zip` | PACT-420 | FAILED_PROVIDER_UNREACHABLE | Provider unreachable |
+| `auditor_pack_tier3.zip` | SUCCESS-001-tier3 | COMPLETED | Tier T3 + SLA "daily digest" (informational only; fully verifiable) |
 
 ### H5 Golden Demo
 
@@ -33,6 +34,7 @@ Interactive demonstration suite in `demo/h5-golden/`:
 | `success/` | Successful transaction (Scenario A) |
 | `policy_abort/` | Policy violation abort (Scenario B - PACT-101) |
 | `tamper/` | Tamper detection demonstration (Scenario C) |
+| `tier3/` | Tier T3 + SLA "daily digest" (Scenario D; optional Merkle digest) |
 
 Each scenario includes:
 - `run.sh` - Executable scenario script
@@ -90,9 +92,6 @@ This will:
   Pact Design Partner Bundle - Verification
 ═══════════════════════════════════════════════════════════
 
-Installing pact-verifier from included tarball...
-   ✓ Installed pact-verifier from tarball
-
 Verifying auditor packs...
 
   Verifying: auditor_pack_101.zip
@@ -101,11 +100,18 @@ Verifying auditor packs...
     ✓ PASS: ok=true, checksums_ok=true, recompute_ok=true
   Verifying: auditor_pack_success.zip
     ✓ PASS: ok=true, checksums_ok=true, recompute_ok=true
+  Verifying: auditor_pack_tier3.zip
+    ✓ PASS: ok=true, checksums_ok=true, recompute_ok=true
+
+Verifying demo packs...
+  ...
 
 ═══════════════════════════════════════════════════════════
-  ✅ All 3 packs verified successfully!
+  ✅ All packs verified successfully!
 ═══════════════════════════════════════════════════════════
 ```
+
+When run from a repo checkout, the script prefers the repo-built verifier so tier/Merkle support matches the packs. See [docs/gc/TIERED_VERIFICATION_NOTE.md](../docs/gc/TIERED_VERIFICATION_NOTE.md) for prevention vs evidence vs tier.
 
 ---
 
@@ -201,6 +207,11 @@ pact-verifier auditor-pack-verify --zip packs/auditor_pack_success.zip
 
 ---
 
+## Tier (additive metadata)
+
+- **Tier metadata** (T1/T2/T3) and **audit SLA** (e.g. "daily digest") are informational only; they affect audit cadence, not verification or admissibility. See [docs/gc/TIERED_VERIFICATION_NOTE.md](../docs/gc/TIERED_VERIFICATION_NOTE.md) and [docs/TIERED_VERIFICATION_SPEC.md](../docs/TIERED_VERIFICATION_SPEC.md).
+- **Merkle digest** is a doc-only future spec (see [docs/MERKLE_DIGEST_v1.md](../docs/MERKLE_DIGEST_v1.md)); not implemented in v4.0.5-rc1.
+
 ## Questions?
 
 See the included documentation files for detailed explanations of:
@@ -209,4 +220,5 @@ See the included documentation files for detailed explanations of:
 - Insurance underwriting (INSURER_UNDERWRITING_VIEW.md)
 - Provider failure scenarios (PROVIDER_FAILURES.md)
 - Compliance requirements (PACT_COMPLIANCE_CHECKLIST.md)
+- Tier and verification (docs/gc/TIERED_VERIFICATION_NOTE.md)
 - Interactive demo (demo/h5-golden/README.md)

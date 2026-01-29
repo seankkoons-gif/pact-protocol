@@ -31,8 +31,12 @@ if ! command -v jq &> /dev/null; then
   exit 1
 fi
 
-# Check for pact-verifier or install from tarball
-if command -v pact-verifier &> /dev/null; then
+# Prefer repo-built verifier when available (ensures tier/Merkle support matches packs)
+REPO_VERIFIER="$SCRIPT_DIR/../bin/pact-verifier.mjs"
+if [ -f "$REPO_VERIFIER" ]; then
+  PACT_VERIFIER="node $REPO_VERIFIER"
+  echo "Using repo verifier: $REPO_VERIFIER"
+elif command -v pact-verifier &> /dev/null; then
   PACT_VERIFIER="pact-verifier"
   echo "Using installed pact-verifier: $(which pact-verifier)"
 elif [ -f "$VERIFIER_TGZ" ]; then
@@ -80,7 +84,7 @@ for ZIP_FILE in "$PACKS_DIR"/*.zip; do
   
   # Run verification - capture stdout only (JSON), ignore stderr
   # The CLI outputs JSON to stdout and errors/notifications to stderr
-  VERIFY_OUTPUT=$("$PACT_VERIFIER" auditor-pack-verify --zip "$ZIP_FILE" 2>/dev/null || true)
+  VERIFY_OUTPUT=$(eval "$PACT_VERIFIER auditor-pack-verify --zip \"$ZIP_FILE\"" 2>/dev/null || true)
   
   # Parse results from stdout (JSON only)
   OK=$(echo "$VERIFY_OUTPUT" | jq -r '.ok' 2>/dev/null || echo "false")
@@ -104,7 +108,7 @@ if [ -d "$DEMO_DIR" ]; then
   echo "Verifying demo packs..."
   echo ""
   
-  for SCENARIO_DIR in "$DEMO_DIR"/success "$DEMO_DIR"/policy_abort "$DEMO_DIR"/tamper; do
+  for SCENARIO_DIR in "$DEMO_DIR"/success "$DEMO_DIR"/policy_abort "$DEMO_DIR"/tamper "$DEMO_DIR"/tier3; do
     if [ ! -d "$SCENARIO_DIR" ]; then
       continue
     fi
@@ -121,7 +125,7 @@ if [ -d "$DEMO_DIR" ]; then
       
       # Run verification - capture stdout only (JSON), ignore stderr
       # The CLI outputs JSON to stdout and errors/notifications to stderr
-      VERIFY_OUTPUT=$("$PACT_VERIFIER" auditor-pack-verify --zip "$ZIP_FILE" 2>/dev/null || true)
+      VERIFY_OUTPUT=$(eval "$PACT_VERIFIER auditor-pack-verify --zip \"$ZIP_FILE\"" 2>/dev/null || true)
       
       # Parse results from stdout (JSON only)
       OK=$(echo "$VERIFY_OUTPUT" | jq -r '.ok' 2>/dev/null || echo "false")

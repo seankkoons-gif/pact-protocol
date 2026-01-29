@@ -234,4 +234,117 @@ describe("Pact Boundary Runtime", () => {
     expect(result.failure_event?.fault_domain).toBe("policy");
     // Deadlock would be PACT-303 with fault_domain "negotiation"
   });
+
+  describe("velocity / burst limits", () => {
+    const sellerAgentId = "seller-velocity-test";
+
+    it("should allow normal purchases under velocity limit", async () => {
+      const buyerAgentId = "buyer-velocity-under-limit";
+      const policy: PactPolicyV4 = {
+        ...basePolicy,
+        rules: [
+          { name: "max_price", condition: { field: "offer_price", operator: "<=", value: 1 } },
+        ],
+        velocity: { max_tx_per_minute: 10, max_spend_per_minute: 100 },
+      };
+
+      const r1 = await runInPactBoundary(baseIntent, policy, async () => ({
+        success: true,
+        offer_price: 0.5,
+      }), { buyerAgentId, sellerAgentId });
+      expect(r1.success).toBe(true);
+
+      const r2 = await runInPactBoundary(
+        { ...baseIntent, intent_id: "intent-velocity-2", created_at_ms: baseIntent.created_at_ms + 1000 },
+        policy,
+        async () => ({ success: true, offer_price: 0.3 }),
+        { buyerAgentId, sellerAgentId }
+      );
+      expect(r2.success).toBe(true);
+    });
+
+    it("should abort with PACT-101 when burst exceeds max_tx_per_minute", async () => {
+      const buyerAgentId = "buyer-velocity-burst";
+      const policy: PactPolicyV4 = {
+        ...basePolicy,
+        policy_id: "policy-velocity-burst",
+        rules: [
+          { name: "max_price", condition: { field: "offer_price", operator: "<=", value: 1 } },
+        ],
+        velocity: { max_tx_per_minute: 1, max_spend_per_minute: 1000 },
+      };
+
+      const r1 = await runInPactBoundary(baseIntent, policy, async () => ({
+        success: true,
+        offer_price: 0.5,
+      }), { buyerAgentId, sellerAgentId });
+      expect(r1.success).toBe(true);
+
+      const r2 = await runInPactBoundary(
+        { ...baseIntent, intent_id: "intent-velocity-burst-2", created_at_ms: baseIntent.created_at_ms + 2000 },
+        policy,
+        async () => ({ success: true, offer_price: 0.5 }),
+        { buyerAgentId, sellerAgentId }
+      );
+      expect(r2.success).toBe(false);
+      expect(r2.failure_event?.code).toBe("PACT-101");
+      expect(r2.failure_event?.evidence_refs.some((ref) => ref.includes("velocity.max_tx_per_minute"))).toBe(true);
+    });
+
+    it("should abort with PACT-101 when burst exceeds max_spend_per_minute", async () => {
+      const buyerAgentId = "buyer-velocity-spend";
+      const policy: PactPolicyV4 = {
+        ...basePolicy,
+        policy_id: "policy-velocity-spend",
+        rules: [
+          { name: "max_price", condition: { field: "offer_price", operator: "<=", value: 200 } },
+        ],
+        velocity: { max_tx_per_minute: 100, max_spend_per_minute: 50 },
+      };
+
+      const r1 = await runInPactBoundary(baseIntent, policy, async () => ({
+        success: true,
+        offer_price: 40,
+      }), { buyerAgentId, sellerAgentId });
+      expect(r1.success).toBe(true);
+
+      const r2 = await runInPactBoundary(
+        { ...baseIntent, intent_id: "intent-velocity-spend-2", created_at_ms: baseIntent.created_at_ms + 2000 },
+        policy,
+        async () => ({ success: true, offer_price: 30 }),
+        { buyerAgentId, sellerAgentId }
+      );
+      expect(r2.success).toBe(false);
+      expect(r2.failure_event?.code).toBe("PACT-101");
+      expect(r2.failure_event?.evidence_refs.some((ref) => ref.includes("velocity.max_spend_per_minute"))).toBe(true);
+    });
+
+    it("velocity abort has no settlement (money_moved remains false)", async () => {
+      const buyerAgentId = "buyer-velocity-mm";
+      const policy: PactPolicyV4 = {
+        ...basePolicy,
+        policy_id: "policy-velocity-money-moved",
+        rules: [],
+        velocity: { max_tx_per_minute: 1 },
+      };
+
+      const r1 = await runInPactBoundary(baseIntent, policy, async () => ({
+        success: true,
+        offer_price: 1,
+      }), { buyerAgentId, sellerAgentId });
+      expect(r1.success).toBe(true);
+
+      const r2 = await runInPactBoundary(
+        { ...baseIntent, intent_id: "intent-velocity-mm-2", created_at_ms: baseIntent.created_at_ms + 2000 },
+        policy,
+        async () => ({ success: true, offer_price: 1 }),
+        { buyerAgentId, sellerAgentId }
+      );
+      expect(r2.success).toBe(false);
+      expect(r2.failure_event?.code).toBe("PACT-101");
+      // Abort before settlement: no money moved
+      expect(r2.transcript.failure_event).toBeDefined();
+      expect(r2.transcript.rounds.length).toBe(0);
+    });
+  });
 });

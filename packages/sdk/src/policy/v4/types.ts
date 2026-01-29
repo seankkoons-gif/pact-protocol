@@ -5,12 +5,40 @@
  */
 
 /**
+ * Optional audit tier metadata (informational only; does not change verification).
+ * Default tier = T1 if not provided.
+ */
+export interface PolicyAuditMetadata {
+  /** Audit tier for scheduling: T1 (default), T2, T3. */
+  tier?: "T1" | "T2" | "T3";
+  /** Human-readable SLA (e.g. "replay within 15m", "daily digest"). */
+  sla?: string;
+}
+
+/**
+ * Optional velocity/burst limits (prevention plane).
+ * Enforced at boundary before settlement; when exceeded, abort with PACT-101.
+ */
+export interface PolicyVelocityLimits {
+  /** Max completed transactions per rolling minute (per buyer). */
+  max_tx_per_minute?: number;
+  /** Max total spend per rolling minute (per buyer). */
+  max_spend_per_minute?: number;
+  /** Max unique counterparties per rolling minute (optional). */
+  max_unique_counterparties_per_minute?: number;
+}
+
+/**
  * Policy v4 structure
  */
 export interface PactPolicyV4 {
   policy_version: "pact-policy/4.0";
   policy_id: string;
   rules: PolicyRule[];
+  /** Optional velocity limits; when set, enforced in boundary before settlement. */
+  velocity?: PolicyVelocityLimits;
+  /** Optional audit tier/SLA (informational only; surfaced in GC/insurer/viewer). */
+  audit?: PolicyAuditMetadata;
 }
 
 /**

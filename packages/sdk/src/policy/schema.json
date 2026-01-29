@@ -589,6 +589,29 @@
         }
       },
 
+      "velocity": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "max_tx_per_minute": { "type": "number", "minimum": 0, "description": "Max completed transactions per rolling minute (per buyer)." },
+          "max_spend_per_minute": { "type": "number", "minimum": 0, "description": "Max total spend per rolling minute (per buyer)." },
+          "max_unique_counterparties_per_minute": { "type": "number", "minimum": 0, "description": "Max unique counterparties per rolling minute (optional)." }
+        },
+        "description": "Velocity/burst limits; enforced at boundary before settlement. Additive policy fields only."
+      },
+
+      "audit": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "tier": { "type": "string", "enum": ["T1", "T2", "T3"], "description": "Audit tier for scheduling (default T1). Informational only." },
+          "sla": { "type": "string", "description": "Human-readable SLA (e.g. replay within 15m, daily digest)." }
+        },
+        "description": "Audit tier metadata; informational only, does not affect verification."
+      },
+
       "paid": {
         "type": "object",
         "additionalProperties": false,
