@@ -1,28 +1,69 @@
-# PACT Protocol
+# Pact Protocol
 
-**Pact is an evidence and verification standard for agent transactions.** It defines how negotiation and settlement outcomes are recorded, attested, and judged so that disputes can be resolved from evidence alone.
+Pact is an evidence and verification standard for agent transactions.
 
-This repo is the **evidence standard + offline verifier** distribution: schemas, verifier CLI, passport recompute, auditor packs, and constitution enforcement. Use it to build, test, and verify evidence artifacts without any runtime agent or payment stack.
+It defines how negotiation and settlement outcomes are recorded, sealed, and judged so that disputes can be resolved from evidence alone, without trusting any agent, provider, or runtime.
 
----
+This repository contains the protocol distribution: schemas, verifier CLI, deterministic recomputation, auditor packs, and constitution enforcement.
+
+If an agent can spend money, make commitments, or trigger settlement, Pact defines how that action becomes provable.
+
+## What this repo is
+
+An offline, deterministic verification system.
+
+Use this repo to:
+
+- Verify Pact transcripts
+- Attribute responsibility (DBL)
+- Produce GC / insurer-grade summaries
+- Detect tampering—even with recomputed checksums
+- Recompute reputation / credit from raw transcripts
+
+No agents run here. No payments happen here.
 
 ## In scope
 
-- **Verifier** — Offline CLI for transcript verification, blame resolution (DBL), GC view, insurer summary, auditor pack verification
-- **Passport recompute** — Deterministic reputation/credit state from transcripts
+- **Verifier (CLI)** — Transcript verification, DBL blame resolution, GC view, insurer summary
+- **Passport recompute** — Deterministic credit / reputation state from transcripts
 - **Auditor packs** — Sealed evidence bundles (success, failure, tier demos)
-- **Constitution enforcement** — Rules of evidence and responsibility attribution (DBL, constitution hashes)
+- **Constitution enforcement** — Rules of evidence and responsibility attribution
 
-## Out of scope
+## Explicitly out of scope
 
-- **SDK / runtime agent execution** — Agent-side negotiation, policy enforcement, and settlement flows live in **pact-examples**
-- **Payment rails, escrow, marketplace** — No payment or escrow implementation here; see pact-examples for integration patterns
+- **Runtime SDK / agent execution** → see pact-examples
+- **Payment rails, escrow, marketplaces** → not implemented here
 
----
+## Mental model
 
-## Quickstart
+Pact splits agent systems into two layers:
 
-From the repo root:
+- **Runtime (SDK):** agents negotiate, settle, and emit signed transcripts
+- **Protocol (Verifier):** an offline system verifies those transcripts, attributes blame, and produces audit-grade evidence
+
+Agents create evidence. Pact judges it.
+
+## 60-second mental model
+
+```
+Agent runtime (SDK)        Pact Protocol (this repo)
+------------------        --------------------------
+negotiate()      ──▶      transcript.json
+settle()         ──▶      signed rounds
+dispute()        ──▶      evidence bundle (.zip)
+                              │
+                              ▼
+                        verifier (offline)
+                              │
+                              ▼
+                 GC view · Insurer summary · DBL judgment
+```
+
+**Runtime creates evidence. Pact verifies it.**
+
+That separation is the entire point.
+
+## Quickstart (verification only)
 
 ```bash
 pnpm install --frozen-lockfile
@@ -31,21 +72,11 @@ bash demo/h5-golden/run_all.sh
 bash design_partner_bundle/verify_all.sh
 ```
 
-**Gate behavior:** Build, test, secret scan, pack check. Skips **examples** when `examples/` is missing and **transcript verification** when `.pact/transcripts` has no `.json`. Transcript verification uses the verifier only (no SDK).
+The release gate:
 
----
+- Builds and tests verifier + passport
+- Runs secret scan and pack check
+- Skips SDK/examples by design
+- Verifies evidence only
 
-## Docs to keep (pact-protocol)
-
-- **Interface / schema:** `docs/INTERFACE_FREEZE_v1.md`, `docs/ADDITIVE_FIELD_WHITELIST_v4x.md`
-- **Tier spec:** `docs/TIERED_VERIFICATION_SPEC.md`
-- **GC + insurer:** `docs/gc/` (e.g. Evidence Viewer spec, 5‑minute approval checklist, Insurer Underwriting View)
-- **Constitution:** `docs/architecture/PACT_CONSTITUTION_V1.md`, constitution-related content in design partner bundle
-
-## Docs to remove or clearly mark
-
-Any doc that implies the **SDK or provider-adapter** lives in this repo should be removed from the protocol distribution or clearly marked: *“Runtime integration lives in pact-examples.”* That includes provider/how-to-run guides and integration guides aimed at agent developers.
-
----
-
-This repo intentionally does not include the runtime SDK or providers; see **pact-examples** for integration.
+For agent integration, SDK usage, and example workflows, see **pact-examples**.
