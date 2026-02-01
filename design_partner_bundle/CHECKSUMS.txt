@@ -1,0 +1,6 @@
+# Checksums for pack zips. Values will be regenerated during the next release ritual.
+# Format: SHA256 hash (two spaces) filename
+
+PLACEHOLDER  auditor_pack_101.zip
+PLACEHOLDER  auditor_pack_420.zip
+PLACEHOLDER  auditor_pack_success.zip

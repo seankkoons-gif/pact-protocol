@@ -1,6 +1,8 @@
 # Pact Evidence Viewer Specification
 
-**Version:** `evidence_viewer/1.0`  
+**Evidence Viewer v0 (0.1.x).** This spec applies to the current pre-1.0 viewer. Interfaces and UI are subject to change until v1.
+
+**Version:** `evidence_viewer/0.1`  
 **Audience:** Auditors, General Counsel, Compliance Officers, Regulators  
 **Purpose:** Read-only evidence viewer for Auditor Packs (ZIP archives)
 

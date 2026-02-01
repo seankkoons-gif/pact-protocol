@@ -1,3 +1,7 @@
+This document mirrors the canonical Pact Constitution v1 located at [don/constitution/PACT_CONSTITUTION_V1.md](../don/constitution/PACT_CONSTITUTION_V1.md).
+
+---
+
 Pact Constitution v1
 
 Rules of Evidence & Responsibility for Autonomous Agent Transactions
