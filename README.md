@@ -13,10 +13,15 @@ Buyer Agent → negotiate → Provider → settle → transcript
 
 ## Official Artifacts (Don)
 
-- [Don](don/) — Packaging, proof, and presentation index
-- [Design Partner Kit](design_partner_bundle/) — Canonical kit for auditors and partners
-- [Evidence Viewer v0](apps/evidence-viewer/) — Read-only evidence viewer (0.1.x)
-- [Constitution v1](don/constitution/PACT_CONSTITUTION_V1.md) — Pact Constitution
+Don is the official packaging, proof, and presentation layer for Pact. It does not change protocol semantics.
+
+- [don](don/) — Don index
+- [design_partner_bundle](design_partner_bundle/) — Design Partner Kit (canonical implementation)
+- [apps/evidence-viewer](apps/evidence-viewer/) — Evidence Viewer v0 (0.1.x)
+- [don/constitution/PACT_CONSTITUTION_V1.md](don/constitution/PACT_CONSTITUTION_V1.md) — Pact Constitution v1
+- [don/release/RELEASE_RITUAL.md](don/release/RELEASE_RITUAL.md) — Release ritual / trust signals
+
+Design Partner Kit currently lives in `design_partner_bundle`; `don/design_partner_kit` is an official wrapper to avoid drift.
 
 ## For Executives
 
