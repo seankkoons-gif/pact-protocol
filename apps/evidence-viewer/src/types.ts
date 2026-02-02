@@ -158,7 +158,7 @@ export interface IntegrityResult {
     details?: string;
   };
   signatures: {
-    status: 'VALID' | 'INVALID' | 'UNVERIFIABLE';
+    status: 'VALID' | 'INVALID' | 'UNVERIFIABLE' | 'UNAVAILABLE';
     verifiedCount: number;
     totalCount: number;
     failures: string[];
@@ -182,8 +182,22 @@ export interface AuditorPackData {
   packVerifyResult?: unknown;
   /** @deprecated Packs do not contain replay_verify.json. */
   replayVerifyResult?: unknown;
-  /** Path for verify command: e.g. "packs/auditor_pack_success.zip" (demo) or original filename (drag-drop) */
-  packVerifyPath?: string;
+  /** How the pack was loaded; drives verify command (repo-root path vs <file>). */
+  source: 'demo_public' | 'drag_drop';
+  /** When source === 'demo_public': path under public (e.g. "packs/auditor_pack_success.zip"). */
+  demoPublicPath?: string;
+  /** When source === 'drag_drop': original file name (e.g. "my_pack.zip"). */
+  fileName?: string;
+  /** @deprecated Use source + demoPublicPath for verify command. */
+  verifyPath?: string;
   /** Client-side integrity from pack contents (input/transcript.json hash chain, checksums, signatures). */
   integrityResult?: IntegrityResult;
+  /** Temporary debug info for INDETERMINATE (which step failed, found files, etc.). */
+  integrityDebug?: {
+    transcriptFound: boolean;
+    transcriptPath: string | null;
+    checksumsFound: boolean;
+    checksumsPath: string | null;
+    zipEntryCount: number;
+  };
 }

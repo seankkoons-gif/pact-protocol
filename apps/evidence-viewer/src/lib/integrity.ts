@@ -12,28 +12,48 @@ export interface WarningsAndExceptions {
   missingOptionalArtifacts: string[];
 }
 
-/** Integrity derived only from auditor pack verification (pack_verify). */
+/**
+ * Integrity status. UNKNOWN may exist as internal state only.
+ * UI and PDFs must never show UNKNOWN or INDETERMINATE_TAMPER; use displayIntegrityOrFault / getIntegrityStatusForPack.
+ */
 export type IntegrityStatus = 'VALID' | 'TAMPERED' | 'INDETERMINATE' | 'UNKNOWN';
 
-/**
- * Tooltip for INDETERMINATE (UI and PDFs only).
- * Auditors must never see "tamper" as an accusation; display "INDETERMINATE" only.
- */
-export const INDETERMINATE_TOOLTIP =
-  'Insufficient evidence to classify as VALID or TAMPERED.';
+/** Subtext for VALID (optional). */
+export const INTEGRITY_VALID_SUBTEXT = 'Cryptographic verification passed.';
 
-/** Shown when integrityResult is missing; prompt to verify via CLI. */
+/** Subtext for TAMPERED. */
+export const INTEGRITY_TAMPERED_SUBTEXT =
+  'Pack recomputation failed. Do not rely on derived outputs.';
+
+/** Subtext for INDETERMINATE (when verifier could not compute in-browser). */
+export const INDETERMINATE_TOOLTIP =
+  'Unable to verify in-browser. Run the CLI command above.';
+
+/** Same as INDETERMINATE_TOOLTIP when integrityResult is missing. */
 export const INDETERMINATE_VERIFY_VIA_CLI =
-  'Insufficient evidence; verify pack via CLI.';
+  'Unable to verify in-browser. Run the CLI command above.';
+
+/** Warnings box subtext when integrity is VALID and warnings exist (UI + PDFs). */
+export const WARNINGS_VALID_SUBTEXT =
+  'This pack is cryptographically valid, but contains inconsistencies that may matter for claims.';
+
+/** Invariant: UNKNOWN and INDETERMINATE_TAMPER must never appear in UI or PDFs. */
 
 /**
  * Display value for integrity or fault domain.
- * UI and PDFs must show "INDETERMINATE" only—never "INDETERMINATE_TAMPER" or "UNKNOWN".
- * UNKNOWN is never shown; map to INDETERMINATE.
+ * UI and PDFs: INDETERMINATE only—never INDETERMINATE_TAMPER or UNKNOWN.
  */
 export function displayIntegrityOrFault(value: string): string {
   if (value === 'INDETERMINATE_TAMPER' || value === 'UNKNOWN') return 'INDETERMINATE';
   return value;
+}
+
+/**
+ * Display value for transcript ID. UI and PDFs must never show "UNKNOWN".
+ */
+export function displayTranscriptId(id: string): string {
+  if (!id || id === 'UNKNOWN') return '—';
+  return id;
 }
 
 /**
@@ -77,6 +97,7 @@ export function getIntegrityStatusForPack(packData: AuditorPackData): IntegrityS
 
 /**
  * One-line verdict summary for UI and PDFs.
+ * Integrity from pack.integrityResult.status; if missing, INDETERMINATE (never UNKNOWN).
  * Format: OUTCOME — Money moved: YES/NO — Judgment: X — Integrity: X — Confidence: 0.xx
  */
 export function getVerdictSummaryLine(packData: AuditorPackData): string {
@@ -87,7 +108,7 @@ export function getVerdictSummaryLine(packData: AuditorPackData): string {
       ? 'YES'
       : gcView.executive_summary?.money_moved === false
         ? 'NO'
-        : 'UNKNOWN';
+        : '—';
   const judgmentRaw =
     judgment?.dblDetermination ?? gcView.responsibility?.judgment?.fault_domain ?? '—';
   const judgmentDisplay = typeof judgmentRaw === 'string' ? displayIntegrityOrFault(judgmentRaw) : '—';
@@ -95,6 +116,28 @@ export function getVerdictSummaryLine(packData: AuditorPackData): string {
   const confidence =
     judgment?.confidence != null ? judgment.confidence.toFixed(2) : '—';
   return `${outcome} — Money moved: ${moneyMoved} — Judgment: ${judgmentDisplay} — Integrity: ${integrityDisplay} — Confidence: ${confidence}`;
+}
+
+/**
+ * Verify command and optional note for CLI (repo-root path for demo packs, <file> placeholder for drag-drop).
+ * Only returns commands that work from repo root for demo_public; for drag_drop returns template + note.
+ */
+export function getVerifyCommand(
+  pack: AuditorPackData | null
+): { command: string; note?: string } | null {
+  if (!pack) return null;
+  if (pack.source === 'demo_public' && pack.demoPublicPath) {
+    return {
+      command: `pact-verifier auditor-pack-verify --zip apps/evidence-viewer/public/${pack.demoPublicPath}`,
+    };
+  }
+  if (pack.source === 'drag_drop') {
+    return {
+      command: 'pact-verifier auditor-pack-verify --zip <file>',
+      note: 'Run from the directory where the ZIP is located, or replace <file> with the full path.',
+    };
+  }
+  return null;
 }
 
 /**

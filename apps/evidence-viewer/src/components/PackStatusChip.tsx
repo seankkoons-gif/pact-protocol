@@ -1,26 +1,38 @@
-import type { GCView } from '../types';
+import type { AuditorPackData } from '../types';
 import './PackStatusChip.css';
 
 interface PackStatusChipProps {
   fileName: string;
-  gcView: GCView;
+  /** Single source of truth: pack.integrityResult.status drives chip (VALID / TAMPERED / INDETERMINATE). */
+  packData: AuditorPackData;
 }
 
-export default function PackStatusChip({ fileName, gcView }: PackStatusChipProps) {
-  const status = gcView.executive_summary.status;
-  const isTampered = status.startsWith('FAILED_') || status === 'TAMPERED_STATUS' || status.includes('TAMPER');
-  const displayName = fileName.replace('.zip', '').replace('auditor_pack_', '');
+export default function PackStatusChip({ fileName, packData }: PackStatusChipProps) {
+  const status = packData.integrityResult?.status ?? 'INDETERMINATE';
+  const isTampered = status === 'TAMPERED';
+  const isValid = status === 'VALID';
+  const isIndeterminate = status === 'INDETERMINATE';
+
+  const chipClass = isTampered ? 'tampered' : isValid ? 'valid' : 'indeterminate';
+  const statusLabel = isTampered ? 'Tampered' : isValid ? 'Valid' : 'Indeterminate';
+  const displayName = fileName.replace(/\.zip$/i, '').replace(/^auditor_pack_/i, '');
 
   return (
     <div className="pack-status-container">
-      <div className={`pack-status-chip ${isTampered ? 'tampered' : 'loaded'}`}>
-        <span className="status-label">Pack Loaded:</span>
-        <span className="status-file">{displayName}</span>
-      </div>
-      {isTampered && (
-        <div className="tamper-alert">
-          <strong>⚠️ TAMPER DETECTED</strong>
+      <div className="pack-status-row">
+        <div className={`pack-status-chip ${chipClass}`}>
+          <span className="status-label">Pack:</span>
+          <span className="status-file">{displayName}</span>
+          <span className="status-integrity">{statusLabel}</span>
         </div>
+        {isTampered && (
+          <div className="tamper-alert">
+            <strong>⚠️ TAMPER DETECTED</strong>
+          </div>
+        )}
+      </div>
+      {isIndeterminate && (
+        <p className="pack-status-hint">Run CLI to verify</p>
       )}
     </div>
   );

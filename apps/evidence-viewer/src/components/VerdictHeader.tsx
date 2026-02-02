@@ -1,28 +1,34 @@
 import type { GCView, Judgment, IntegrityResult, AuditorPackData } from '../types';
-import { getIntegrityStatusForPack, displayIntegrityOrFault, INDETERMINATE_TOOLTIP, INDETERMINATE_VERIFY_VIA_CLI } from '../lib/integrity';
+import {
+  displayIntegrityOrFault,
+  INTEGRITY_VALID_SUBTEXT,
+  INTEGRITY_TAMPERED_SUBTEXT,
+  INDETERMINATE_TOOLTIP,
+  INDETERMINATE_VERIFY_VIA_CLI,
+} from '../lib/integrity';
 import './VerdictHeader.css';
 
 interface VerdictHeaderProps {
   gcView?: GCView | null;
   judgment?: Judgment | null;
   integrityResult?: IntegrityResult | null;
-  /** When provided, Integrity uses pack.integrityResult.status; missing => INDETERMINATE + verify-via-CLI hint */
+  /** When provided, Integrity is pack.integrityResult.status only; missing => INDETERMINATE */
   packData?: AuditorPackData | null;
 }
 
-export default function VerdictHeader({ gcView, judgment, integrityResult, packData }: VerdictHeaderProps) {
-  const integrityStatus = packData
-    ? getIntegrityStatusForPack(packData)
-    : (integrityResult?.status ?? 'INDETERMINATE');
+export default function VerdictHeader({ judgment, packData }: VerdictHeaderProps) {
+  // Single source of truth: pack.integrityResult.status only; if missing, INDETERMINATE
+  const integrityStatus = packData?.integrityResult?.status ?? 'INDETERMINATE';
   const integrityDisplay = displayIntegrityOrFault(integrityStatus);
   const integrityLabel = `Integrity: ${integrityDisplay}`;
-  const hasIntegrityResult = Boolean(packData?.integrityResult ?? integrityResult);
-  const integrityTooltip =
-    integrityDisplay === 'INDETERMINATE'
-      ? hasIntegrityResult
-        ? INDETERMINATE_TOOLTIP
-        : INDETERMINATE_VERIFY_VIA_CLI
-      : undefined;
+  const integritySubtext =
+    integrityDisplay === 'VALID'
+      ? INTEGRITY_VALID_SUBTEXT
+      : integrityDisplay === 'TAMPERED'
+        ? INTEGRITY_TAMPERED_SUBTEXT
+        : integrityDisplay === 'INDETERMINATE'
+          ? INDETERMINATE_VERIFY_VIA_CLI
+          : null;
 
   const judgmentDisplay =
     judgment?.dblDetermination != null
@@ -39,20 +45,22 @@ export default function VerdictHeader({ gcView, judgment, integrityResult, packD
 
   return (
     <div className="verdict-header">
-      <span
-        className={`verdict-integrity verdict-${integrityDisplay}`}
-        title={integrityTooltip}
-      >
-        {integrityLabel}
-      </span>
-      <span className="verdict-sep">|</span>
-      <span className="verdict-judgment" title={judgmentTooltip}>
-        {judgmentLabel}
-      </span>
-      <span className="verdict-sep">|</span>
-      <span className="verdict-confidence">
-        {confidenceLabel ?? 'Confidence: —'}
-      </span>
+      <div className="verdict-header-row">
+        <span className={`verdict-integrity verdict-${integrityDisplay}`}>
+          {integrityLabel}
+        </span>
+        <span className="verdict-sep">|</span>
+        <span className="verdict-judgment" title={judgmentTooltip}>
+          {judgmentLabel}
+        </span>
+        <span className="verdict-sep">|</span>
+        <span className="verdict-confidence">
+          {confidenceLabel ?? 'Confidence: —'}
+        </span>
+      </div>
+      {integritySubtext && (
+        <p className="verdict-integrity-subtext">{integritySubtext}</p>
+      )}
     </div>
   );
 }

@@ -1,24 +1,25 @@
 import { useState } from 'react';
+import { getVerifyCommand } from '../lib/integrity';
+import type { AuditorPackData } from '../types';
 import './CopyVerifyCommandButton.css';
 
 interface CopyVerifyCommandButtonProps {
-  /** Path for verify command: e.g. "packs/auditor_pack_success.zip" (demo) or original filename (drag-drop) */
-  packVerifyPath?: string;
+  /** Pack data; command is derived from pack.source (demo_public repo path, drag_drop template). */
+  packData?: AuditorPackData | null;
   variant?: 'banner' | 'panel';
 }
 
-export default function CopyVerifyCommandButton({ packVerifyPath, variant = 'banner' }: CopyVerifyCommandButtonProps) {
+export default function CopyVerifyCommandButton({ packData, variant = 'banner' }: CopyVerifyCommandButtonProps) {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isDisabled = !packVerifyPath;
-  const command = packVerifyPath
-    ? `pact-verifier auditor-pack-verify --zip ${packVerifyPath}`
-    : 'pact-verifier auditor-pack-verify --zip <file>';
+  const verify = getVerifyCommand(packData ?? null);
+  const command = verify?.command ?? '';
+  const isDisabled = !command;
 
   const handleCopy = async () => {
-    if (isDisabled || !packVerifyPath) return;
-    
+    if (isDisabled || !command) return;
+
     try {
       await navigator.clipboard.writeText(command);
       setCopied(true);
@@ -39,7 +40,7 @@ export default function CopyVerifyCommandButton({ packVerifyPath, variant = 'ban
         className={buttonClass}
         onClick={handleCopy}
         disabled={isDisabled}
-        title={command}
+        title={command || undefined}
       >
         {copied ? 'Copied ✓' : error ? 'Error' : 'Copy Verify Command'}
       </button>

@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import FileUpload from './components/FileUpload';
 import DemoPackLoader from './components/DemoPackLoader';
-import DemoMode from './components/DemoMode';
 import ReadOnlyBanner from './components/ReadOnlyBanner';
 import PackStatusChip from './components/PackStatusChip';
 import VerdictHeader from './components/VerdictHeader';
@@ -14,7 +13,8 @@ import ResponsibilityPanel from './components/ResponsibilityPanel';
 import InsurancePanel from './components/InsurancePanel';
 import PassportPanel from './components/PassportPanel';
 import EvidenceFilesPanel from './components/EvidenceFilesPanel';
-import VerifyLocally from './components/VerifyLocally';
+import VerifyBlock from './components/VerifyBlock';
+import CopyVerifyCommandButton from './components/CopyVerifyCommandButton';
 import ExportPDFButton from './components/ExportPDFButton';
 import ExportInsurerPDFButton from './components/ExportInsurerPDFButton';
 import GenerateClaimsPackageButton from './components/GenerateClaimsPackageButton';
@@ -26,7 +26,6 @@ function App() {
   const [packData, setPackData] = useState<AuditorPackData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [demoMode, setDemoMode] = useState(false);
 
   const handleFileSelect = async (file: File, verifyPath?: string) => {
     setIsLoading(true);
@@ -34,7 +33,11 @@ function App() {
     try {
       const data = await loadPackFromFile(file);
       // Demo packs: show packs/<file>.zip; dragged file: show filename
-      setPackData(verifyPath != null ? { ...data, packVerifyPath: verifyPath } : data);
+      setPackData(
+        verifyPath != null
+          ? { ...data, source: 'demo_public', demoPublicPath: verifyPath }
+          : data
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to parse auditor pack');
       setPackData(null);
@@ -62,22 +65,12 @@ function App() {
       </header>
 
       <main className="app-main">
-        <ReadOnlyBanner packVerifyPath={packData?.packVerifyPath} />
+        <ReadOnlyBanner packData={packData} />
         
         {!packData ? (
           <div className="upload-section">
-            <div className="demo-toggle-container">
-              <button 
-                className="demo-toggle"
-                onClick={() => setDemoMode(!demoMode)}
-              >
-                {demoMode ? '▼ Hide Demo Mode' : '▶ Show Demo Mode'}
-              </button>
-            </div>
             <DemoPackLoader onLoadPack={handleFileSelect} isLoading={isLoading} />
-            {demoMode && (
-              <DemoMode onLoadPack={handleFileSelect} isLoading={isLoading} />
-            )}
+            <p className="upload-helper">Choose a demo pack or drag-drop an Auditor Pack ZIP.</p>
             <FileUpload onFileSelect={handleFileSelect} isLoading={isLoading} />
             {error && (
               <div className="error-message">
@@ -104,9 +97,11 @@ function App() {
               packData={packData}
             />
 
+            <VerifyBlock packData={packData} />
+
             <PackStatusChip
-              fileName={packData.zipFile?.name || 'unknown.zip'}
-              gcView={packData.gcView}
+              fileName={packData.zipFile?.name || 'pack.zip'}
+              packData={packData}
             />
 
             <CaseHeader
@@ -128,7 +123,6 @@ function App() {
                 <IntegrityPanel 
                   gcView={packData.gcView} 
                   packFileName={packData.zipFile?.name}
-                  packVerifyPath={packData.packVerifyPath}
                   merkleDigest={packData.merkleDigest}
                   packData={packData}
                 />
@@ -151,10 +145,9 @@ function App() {
 
             <EvidenceFilesPanel packData={packData} />
 
-            <VerifyLocally
-                packVerifyPath={packData.packVerifyPath}
-                packData={packData}
-              />
+            <div className="viewer-footer-copy">
+              <CopyVerifyCommandButton packData={packData} variant="panel" />
+            </div>
           </div>
         )}
       </main>

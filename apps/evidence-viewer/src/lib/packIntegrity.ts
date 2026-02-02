@@ -1,6 +1,16 @@
 /**
- * Client-side integrity from pack contents only (no network).
- * Verifies: input/transcript.json hash chain, checksums.sha256 (if present), round signatures.
+ * Client-side pack integrity from transcript, allFilesMap, and optional checksums.
+ *
+ * IntegrityResult: status (VALID | TAMPERED | INDETERMINATE), checksums, hashChain, signatures, warnings.
+ *
+ * Rules:
+ * - Any checksums mismatch => status TAMPERED
+ * - Any hash chain invalid (broken link) => status TAMPERED
+ * - Any signature invalid => status TAMPERED
+ * - Transcript missing/parse error => status INDETERMINATE
+ * - Missing checksums file => checksums.status UNAVAILABLE (does not force INDETERMINATE)
+ *
+ * Claimed-vs-computed mismatches (e.g. round_hash, final_hash, failure_event.transcript_hash) are warnings only; never tamper if recompute passes.
  */
 
 import bs58 from 'bs58';
@@ -64,7 +74,7 @@ async function sha256Hex(data: string | ArrayBuffer | Uint8Array): Promise<strin
         : data instanceof Uint8Array
           ? data
           : new Uint8Array(data);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', bytes as BufferSource);
   return Array.from(new Uint8Array(hashBuffer))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
@@ -88,16 +98,26 @@ async function computeTranscriptHash(transcript: TranscriptV4Like): Promise<stri
   return sha256Hex(stableCanonicalize(rest));
 }
 
-/** Verify hash chain; returns status and optional details. */
-async function verifyHashChain(
-  transcript: TranscriptV4Like
-): Promise<{ status: 'VALID' | 'INVALID'; details?: string }> {
+/** Result of hash chain verification. INVALID only when links are broken; claimed-vs-computed mismatches are in claimedMismatches. */
+interface HashChainResult {
+  status: 'VALID' | 'INVALID';
+  details?: string;
+  claimedMismatches: string[];
+}
+
+/** Verify hash chain. INVALID only when previous_round_hash link is broken; claimed round_hash/final_hash mismatches are warnings only. */
+async function verifyHashChain(transcript: TranscriptV4Like): Promise<HashChainResult> {
+  const claimedMismatches: string[] = [];
   if (transcript.transcript_version !== 'pact-transcript/4.0') {
-    return { status: 'INVALID', details: `Invalid transcript version: ${transcript.transcript_version}` };
+    return {
+      status: 'INVALID',
+      details: `Invalid transcript version: ${String(transcript.transcript_version)}`,
+      claimedMismatches: [],
+    };
   }
   const rounds = transcript.rounds ?? [];
   if (rounds.length === 0) {
-    return { status: 'INVALID', details: 'Transcript has no rounds' };
+    return { status: 'INVALID', details: 'Transcript has no rounds', claimedMismatches: [] };
   }
 
   let previousHash: string | undefined;
@@ -112,16 +132,14 @@ async function verifyHashChain(
     if (round.previous_round_hash !== expectedPrevious) {
       return {
         status: 'INVALID',
-        details: `Hash chain broken at round ${i}: previous_round_hash mismatch`,
+        details: `Hash chain broken at round ${i}: previous_round_hash mismatch (expected ${expectedPrevious.slice(0, 16)}..., got ${round.previous_round_hash?.slice(0, 16)}...)`,
+        claimedMismatches: [],
       };
     }
 
     const computedRoundHash = await computeRoundHash(round);
     if (round.round_hash != null && round.round_hash !== computedRoundHash) {
-      return {
-        status: 'INVALID',
-        details: `Round hash mismatch at round ${i}`,
-      };
+      claimedMismatches.push(`Round ${i}: claimed round_hash does not match computed`);
     }
     previousHash = round.round_hash ?? computedRoundHash;
   }
@@ -129,30 +147,23 @@ async function verifyHashChain(
   if (transcript.final_hash != null) {
     const computedFinal = await computeTranscriptHash(transcript);
     if (transcript.final_hash !== computedFinal) {
-      return { status: 'INVALID', details: 'Final transcript hash mismatch' };
+      claimedMismatches.push('Claimed final_hash does not match computed transcript hash');
     }
   }
 
-  return { status: 'VALID' };
+  return { status: 'VALID', claimedMismatches };
 }
 
-/**
- * Verify Ed25519 signature over envelope hash (not JSON bytes).
- * envelope_hash is SHA-256 hex → 32 bytes; signature_b58 → 64 bytes; public_key_b58 → 32 bytes.
- * nacl.sign.detached.verify(message, signature, publicKey).
- * Failures are recorded in signatures.failures[] by verifySignatures().
- */
+/** Verify Ed25519 over hexToBytes(envelope_hash) using tweetnacl + bs58. */
 function verifySignature(
   envelopeHashHex: string,
-  signature: { signer_public_key_b58?: string; signature_b58?: string; scheme?: string },
+  signatureB58: string,
   publicKeyB58: string
 ): boolean {
   try {
-    if (signature.scheme && signature.scheme !== 'ed25519') return false;
-    if (signature.signer_public_key_b58 !== publicKeyB58) return false;
-    const hashBytes = hexToBytes(envelopeHashHex); // 32 bytes (envelope hash)
-    const sigBytes = bs58.decode(signature.signature_b58!); // 64 bytes
-    const pubBytes = bs58.decode(publicKeyB58); // 32 bytes
+    const hashBytes = hexToBytes(envelopeHashHex);
+    const sigBytes = bs58.decode(signatureB58);
+    const pubBytes = bs58.decode(publicKeyB58);
     return nacl.sign.detached.verify(hashBytes, sigBytes, pubBytes);
   } catch {
     return false;
@@ -166,7 +177,7 @@ function hexToBytes(hex: string): Uint8Array {
   return out;
 }
 
-/** Verify signatures using public keys in transcript (tweetnacl + bs58, same as verifier). */
+/** Verify Ed25519 signatures: pub key = round.public_key_b58 ?? round.signature?.signer_public_key_b58, sig = round.signature?.signature_b58. */
 function verifySignatures(transcript: TranscriptV4Like): {
   status: 'VALID' | 'INVALID' | 'UNVERIFIABLE';
   verifiedCount: number;
@@ -180,14 +191,18 @@ function verifySignatures(transcript: TranscriptV4Like): {
   for (let i = 0; i < rounds.length; i++) {
     const round = rounds[i];
     const pub = round.public_key_b58 ?? round.signature?.signer_public_key_b58;
-    const sig = round.signature;
+    const sigB58 = round.signature?.signature_b58;
     const envelopeHash = round.envelope_hash;
 
-    if (!pub || !sig?.signature_b58 || !envelopeHash) {
+    if (!pub || !sigB58 || !envelopeHash) {
       failures.push(`Round ${i}: unverifiable (missing key or signature)`);
       continue;
     }
-    const ok = verifySignature(envelopeHash, sig, pub);
+    if (round.signature?.scheme && round.signature.scheme !== 'ed25519') {
+      failures.push(`Round ${i}: unsupported scheme ${round.signature.scheme}`);
+      continue;
+    }
+    const ok = verifySignature(envelopeHash, sigB58, pub);
     if (ok) {
       verified++;
     } else {
@@ -203,16 +218,15 @@ function verifySignatures(transcript: TranscriptV4Like): {
     return { status: 'UNVERIFIABLE', verifiedCount: 0, totalCount, failures };
   }
   if (verified === totalCount) {
-    return { status: 'VALID', verifiedCount, totalCount, failures: [] };
+    return { status: 'VALID', verifiedCount: verified, totalCount, failures: [] };
   }
-  return { status: 'INVALID', verifiedCount, totalCount, failures };
+  return { status: 'INVALID', verifiedCount: verified, totalCount, failures };
 }
 
 /**
- * Checksums verification (browser SHA-256).
- * Format: checksums.sha256 lines are "<hex>  <path>" or "<hex> <path>" (single- or double-space).
- * For each line: get file bytes from unzip (allFilesMap → ArrayBuffer), digest with
- * crypto.subtle.digest('SHA-256', bytes), convert to hex, compare to expected hash.
+ * Checksums verification: parse checksums.sha256 lines "<hex>  <path>" (1+ spaces).
+ * For each listed path that exists in allFilesMap, compute SHA-256 with crypto.subtle.digest and compare.
+ * If a listed path does not exist in the pack, add a failure entry.
  */
 async function verifyChecksums(
   allFilesMap: Map<string, ArrayBuffer>,
@@ -232,8 +246,8 @@ async function verifyChecksums(
   let checkedCount = 0;
 
   for (const line of lines) {
-    // <hex> <path> or <hex>  <path>: 64 hex chars then one or more spaces then path
-    const match = line.match(/^([a-f0-9]{64})\s+(.+)$/);
+    // <hex>  <path>: 64 hex chars then 1+ spaces then path
+    const match = line.match(/^([a-f0-9]{64})\s+(.+)$/i);
     if (!match) {
       failures.push(`Invalid checksum line: ${line}`);
       continue;
@@ -248,7 +262,7 @@ async function verifyChecksums(
     const bytes = new Uint8Array(buf);
     const actualHash = await sha256Hex(bytes);
     checkedCount++;
-    if (actualHash !== expectedHash) {
+    if (actualHash.toLowerCase() !== expectedHash.toLowerCase()) {
       failures.push(`Checksum mismatch for ${relativePath}`);
     }
   }
@@ -260,19 +274,28 @@ async function verifyChecksums(
   return { status: 'VALID', checkedCount, totalCount, failures: [] };
 }
 
+/** Arguments for computePackIntegrity. */
 export interface ComputePackIntegrityArgs {
   transcript: unknown;
   allFilesMap: Map<string, ArrayBuffer>;
   checksumsText: string | null;
 }
 
+const VALID_STATUSES: Array<IntegrityResult['status']> = ['VALID', 'TAMPERED', 'INDETERMINATE'];
+
+function fullIndeterminateResult(warnings: string[]): IntegrityResult {
+  return {
+    status: 'INDETERMINATE',
+    checksums: { status: 'UNAVAILABLE', checkedCount: 0, totalCount: 0, failures: [] },
+    hashChain: { status: 'INVALID', details: 'Integrity computation failed' },
+    signatures: { status: 'UNVERIFIABLE', verifiedCount: 0, totalCount: 0, failures: [] },
+    warnings,
+  };
+}
+
 /**
- * Compute integrity from pack contents only (no network).
- * - Transcript: required; if missing or parse fails => status INDETERMINATE.
- * - Checksums: if present and any mismatch => TAMPERED.
- * - Hash chain: invalid => TAMPERED.
- * - Signatures: Ed25519 via tweetnacl + bs58 (same as @pact/verifier); invalid => TAMPERED.
- * - SHA-256 via WebCrypto (crypto.subtle.digest).
+ * Compute pack integrity from transcript, allFilesMap, and optional checksums.
+ * Always returns a full IntegrityResult (never throws). Exceptions are turned into INDETERMINATE + warning.
  */
 export async function computePackIntegrity(args: ComputePackIntegrityArgs): Promise<IntegrityResult> {
   const { transcript: transcriptObj, allFilesMap, checksumsText } = args;
@@ -280,41 +303,46 @@ export async function computePackIntegrity(args: ComputePackIntegrityArgs): Prom
   const transcript = transcriptObj as TranscriptV4Like;
 
   if (!transcript?.rounds?.length) {
-    return {
-      status: 'INDETERMINATE',
-      checksums: { status: 'UNAVAILABLE', checkedCount: 0, totalCount: 0, failures: [] },
-      hashChain: { status: 'INVALID', details: 'Transcript missing or has no rounds' },
-      signatures: { status: 'UNVERIFIABLE', verifiedCount: 0, totalCount: 0, failures: [] },
-      warnings: ['Transcript missing or has no rounds.'],
-    };
+    return fullIndeterminateResult(['Transcript missing or has no rounds.']);
   }
 
-  const [hashChainResult, checksumsResult] = await Promise.all([
-    verifyHashChain(transcript),
-    verifyChecksums(allFilesMap, checksumsText),
-  ]);
+  let hashChainResult: HashChainResult;
+  let checksumsResult: { status: 'VALID' | 'INVALID' | 'UNAVAILABLE'; checkedCount: number; totalCount: number; failures: string[] };
+  let signaturesResult: { status: 'VALID' | 'INVALID' | 'UNVERIFIABLE'; verifiedCount: number; totalCount: number; failures: string[] };
 
-  const signaturesResult = verifySignatures(transcript);
-
-  if (hashChainResult.status === 'INVALID' && hashChainResult.details) {
-    warnings.push(hashChainResult.details);
-  }
-  if (checksumsResult.status === 'INVALID' && checksumsResult.failures.length) {
-    warnings.push(...checksumsResult.failures);
-  }
-  if (signaturesResult.status === 'INVALID' && signaturesResult.failures.length) {
-    warnings.push(...signaturesResult.failures);
+  try {
+    [hashChainResult, checksumsResult] = await Promise.all([
+      verifyHashChain(transcript),
+      verifyChecksums(allFilesMap, checksumsText),
+    ]);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    warnings.push(`Hash chain or checksums verification failed: ${msg}`);
+    return fullIndeterminateResult(warnings);
   }
 
-  // Claimed failure_event transcript_hash vs computed (informational)
-  if (transcript.failure_event?.transcript_hash && hashChainResult.status === 'VALID') {
-    const { failure_event, final_hash: _f, ...upToFailure } = transcript;
-    const computedFailureHash = await sha256Hex(stableCanonicalize(upToFailure));
-    if (transcript.failure_event.transcript_hash !== computedFailureHash) {
-      warnings.push(
-        `Claimed failure-event transcript_hash does not match computed (claimed: ${transcript.failure_event.transcript_hash.substring(0, 16)}..., computed: ${computedFailureHash.substring(0, 16)}...)`
-      );
+  try {
+    signaturesResult = verifySignatures(transcript);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    warnings.push(`Signatures verification failed: ${msg}`);
+    return fullIndeterminateResult(warnings);
+  }
+
+  warnings.push(...hashChainResult.claimedMismatches);
+
+  try {
+    if (transcript.failure_event?.transcript_hash && hashChainResult.status === 'VALID') {
+      const { failure_event, final_hash: _f, ...upToFailure } = transcript;
+      const computedFailureHash = await sha256Hex(stableCanonicalize(upToFailure));
+      if (transcript.failure_event.transcript_hash !== computedFailureHash) {
+        warnings.push(
+          `Claimed failure-event transcript_hash does not match computed (claimed: ${transcript.failure_event.transcript_hash.substring(0, 16)}..., computed: ${computedFailureHash.substring(0, 16)}...)`
+        );
+      }
     }
+  } catch {
+    // Non-fatal; skip this warning
   }
 
   let status: IntegrityResult['status'];
@@ -323,7 +351,12 @@ export async function computePackIntegrity(args: ComputePackIntegrityArgs): Prom
   else if (signaturesResult.status === 'INVALID') status = 'TAMPERED';
   else status = 'VALID';
 
-  return {
+  if (!VALID_STATUSES.includes(status)) {
+    warnings.push(`Unexpected integrity status "${String(status)}"; treating as INDETERMINATE`);
+    status = 'INDETERMINATE';
+  }
+
+  const result: IntegrityResult = {
     status,
     checksums: {
       status: checksumsResult.status,
@@ -343,4 +376,5 @@ export async function computePackIntegrity(args: ComputePackIntegrityArgs): Prom
     },
     warnings,
   };
+  return result;
 }

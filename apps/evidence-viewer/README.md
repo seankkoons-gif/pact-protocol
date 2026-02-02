@@ -19,7 +19,7 @@ Read-only evidence viewer for Auditor Packs (ZIP archives).
 - **Export GC View as Legal PDF** — Multi-page, institutional-style PDF for legal and compliance teams (Executive Summary, Responsibility & Outcome, Integrity & Verification, Insurer View)
 - **Export Insurer Summary PDF** — Underwriting-grade PDF for insurers and risk teams; NOT INSURABLE / NON-STANDARD RULES banners when applicable
 - **Generate Claims Intake Package** — Single ZIP for claims systems: README, verify command, underwriting summary PDF, GC summary PDF, auditor pack, metadata JSON
-- **Demo Mode** with pre-configured packs
+- **Load demo pack** dropdown (Success / Policy Abort / Timeout / Tamper (derived output altered))
 - **Download** raw artifacts from the pack
 - **Institutional, document-viewer aesthetic**
 
@@ -44,12 +44,12 @@ To make demo packs available, copy them to `public/packs/`:
 mkdir -p apps/evidence-viewer/public/packs
 cp design_partner_bundle/packs/auditor_pack_success.zip apps/evidence-viewer/public/packs/
 cp design_partner_bundle/packs/auditor_pack_101.zip apps/evidence-viewer/public/packs/
-cp demo/h5-golden/tamper/auditor_pack_semantic_tampered.zip apps/evidence-viewer/public/packs/
+cp demo/h5-golden/tamper/auditor_pack_semantic_warning.zip apps/evidence-viewer/public/packs/
 ```
 
 ## Usage
 
-1. Click or drag-and-drop an Auditor Pack ZIP file (or use Demo Mode to load pre-configured packs)
+1. Choose a demo pack from the dropdown or drag-and-drop an Auditor Pack ZIP file
 2. The viewer parses and displays all panels, including the Passport Panel when insurer summary is present
 3. **Copy Transcript ID** — Click the copy button next to the Transcript ID in the Case Header
 4. **Export PDFs** — Use "Export GC View (PDF)" or "Export Insurer Summary (PDF)" for legal/underwriting summaries
@@ -82,8 +82,8 @@ All changes in this app are **viewer-only**.
 ✅ See status: COMPLETED  
 ✅ See integrity: VALID  
 ✅ See constitution hash displayed  
-✅ Demo Mode loads packs from repo paths  
-✅ Tamper pack shows integrity/tamper warnings clearly  
+✅ Load demo pack dropdown and drag-drop work when packs are in public/packs/  
+✅ Semantic warning pack shows warnings; real tamper shows TAMPERED  
 ✅ Download raw artifacts  
 ✅ Copy verification command  
 ✅ Copy Transcript ID to clipboard  

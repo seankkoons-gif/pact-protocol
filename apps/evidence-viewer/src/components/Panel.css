@@ -1,8 +1,10 @@
 .panel {
-  background: white;
-  border: 1px solid #ddd;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--panel-shadow);
   padding: 20px;
   margin-bottom: 20px;
+  border-radius: 6px;
 }
 
 .panel-title-row {
@@ -11,13 +13,13 @@
   align-items: center;
   margin-bottom: 16px;
   padding-bottom: 8px;
-  border-bottom: 2px solid #000;
+  border-bottom: 1px solid var(--border);
 }
 
 .panel-title {
   font-size: 14px;
   font-weight: bold;
-  color: #000;
+  color: var(--text);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin: 0;
@@ -33,14 +35,14 @@
 .outcome-panel .outcome-status {
   font-size: 18px;
   font-weight: bold;
-  color: #000;
+  color: var(--text);
   margin-bottom: 12px;
 }
 
 .outcome-panel .outcome-description {
   font-size: 13px;
   line-height: 1.6;
-  color: #333;
+  color: var(--muted);
   margin-bottom: 16px;
 }
 
@@ -58,43 +60,43 @@
 .detail-label {
   font-weight: bold;
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
   min-width: 140px;
 }
 
 .detail-value {
   font-size: 12px;
-  color: #000;
+  color: var(--text);
 }
 
 .detail-value.yes {
-  color: #006600;
+  color: var(--good);
   font-weight: bold;
 }
 
 .detail-value.no {
-  color: #CC0000;
+  color: var(--bad);
   font-weight: bold;
 }
 
 /* Integrity Panel */
 .integrity-hash-mismatch-note {
-  background: #fff3cd;
-  border: 1px solid #ffc107;
-  color: #856404;
+  border-left: 4px solid var(--warn);
+  background: rgba(242, 201, 76, 0.06);
+  color: var(--text);
   padding: 10px 12px;
   margin-bottom: 12px;
-  border-radius: 4px;
+  border-radius: 0 4px 4px 0;
   font-size: 13px;
 }
 
 .integrity-warnings {
-  background: #fff3cd;
-  border: 1px solid #ffc107;
-  color: #856404;
+  border-left: 4px solid var(--warn);
+  background: rgba(242, 201, 76, 0.06);
+  color: var(--text);
   padding: 10px 12px;
   margin-bottom: 12px;
-  border-radius: 4px;
+  border-radius: 0 4px 4px 0;
   font-size: 13px;
 }
 
@@ -104,14 +106,101 @@
 }
 
 .tamper-warning {
-  background: #ffe6e6;
-  border: 2px solid #CC0000;
-  color: #CC0000;
-  padding: 12px;
+  border-left: 4px solid var(--bad);
+  background: rgba(255, 77, 77, 0.08);
+  color: var(--text);
+  padding: 10px 12px;
   margin-bottom: 16px;
-  border-radius: 4px;
+  border-radius: 0 4px 4px 0;
   font-size: 13px;
+  font-weight: 500;
+}
+
+.indeterminate-reasons {
+  border-left: 4px solid var(--warn);
+  background: rgba(242, 201, 76, 0.06);
+  color: var(--muted);
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  border-radius: 0 4px 4px 0;
+  font-size: 12px;
+}
+
+.indeterminate-reasons-title {
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+
+.indeterminate-reasons-list {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.5;
+}
+
+.indeterminate-reasons-list li {
+  margin-bottom: 2px;
+}
+
+/* Integrity debug (INDETERMINATE diagnosis) */
+.integrity-debug-section {
+  margin-bottom: 12px;
+}
+
+.integrity-debug-toggle {
+  font-size: 12px;
+  padding: 6px 10px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.integrity-debug-toggle:hover {
+  background: var(--panel);
+  border-color: var(--accent);
+}
+
+.integrity-debug-box {
+  margin-top: 10px;
+  padding: 12px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.integrity-debug-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 6px;
+  align-items: flex-start;
+}
+
+.integrity-debug-row.integrity-debug-warnings {
+  flex-direction: column;
+}
+
+.integrity-debug-label {
   font-weight: bold;
+  color: var(--muted);
+  min-width: 180px;
+  flex-shrink: 0;
+}
+
+.integrity-debug-value {
+  color: var(--text);
+  word-break: break-word;
+}
+
+.integrity-debug-list {
+  margin: 4px 0 0 0;
+  padding-left: 20px;
+}
+
+.integrity-debug-list li {
+  margin-bottom: 4px;
 }
 
 .integrity-panel .integrity-item {
@@ -123,46 +212,63 @@
 .integrity-label {
   font-weight: bold;
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
   min-width: 120px;
 }
 
 .integrity-value {
   font-size: 12px;
-  color: #000;
+  color: var(--text);
 }
 
 .integrity-badge {
-  font-size: 11px;
-  font-weight: bold;
-  padding: 4px 8px;
-  border-radius: 3px;
-  border: 1px solid;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.integrity-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .integrity-badge.valid {
-  color: #006600;
-  border-color: #006600;
-  background: #e6f7e6;
+  color: var(--text);
+}
+
+.integrity-badge.valid::before {
+  background: var(--good);
 }
 
 .integrity-badge.invalid {
-  color: #CC0000;
-  border-color: #CC0000;
-  background: #ffe6e6;
+  color: var(--text);
+}
+
+.integrity-badge.invalid::before {
+  background: var(--bad);
 }
 
 .integrity-badge.neutral {
-  color: #666;
-  border-color: #999;
-  background: #f0f0f0;
+  color: var(--muted);
+}
+
+.integrity-badge.neutral::before {
+  background: var(--muted);
 }
 
 .integrity-failures {
   margin: 4px 0 8px 0;
   padding-left: 20px;
   font-size: 12px;
-  color: #333;
+  color: var(--muted);
 }
 
 .integrity-failures li {
@@ -173,14 +279,14 @@
   margin: 0 0 8px 0;
   padding-left: 0;
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
 }
 
 .integrity-warnings-section {
   margin-top: 12px;
   padding: 12px;
-  background: #fffbf0;
-  border-left: 3px solid #ffc107;
+  background: rgba(242, 201, 76, 0.08);
+  border-left: 3px solid var(--warn);
 }
 
 .integrity-warnings-section .warnings-group-label {
@@ -191,15 +297,15 @@
 
 .integrity-warnings-section .warnings-disclaimer {
   font-size: 11px;
-  color: #666;
+  color: var(--muted);
   margin-bottom: 8px;
 }
 
 .integrity-notes {
   margin-top: 12px;
   padding: 12px;
-  background: #f9f9f9;
-  border-left: 3px solid #ddd;
+  background: var(--panel2);
+  border-left: 3px solid var(--border);
 }
 
 .notes-label {
@@ -215,12 +321,12 @@
 
 /* Warnings & Exceptions Panel */
 .warnings-and-exceptions-panel {
-  border-left: 3px solid #ffc107;
+  border-left: 3px solid var(--warn);
 }
 
 .warnings-disclaimer {
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
   font-style: italic;
   margin-bottom: 12px;
 }
@@ -236,14 +342,14 @@
 .warnings-group-label {
   font-weight: bold;
   font-size: 12px;
-  color: #856404;
+  color: var(--warn);
   margin-bottom: 6px;
 }
 
 .warnings-group ul {
   margin: 0 0 0 20px;
   font-size: 12px;
-  color: #333;
+  color: var(--text);
 }
 
 .integrity-value.monospace {
@@ -253,19 +359,19 @@
 .merkle-digest-section {
   margin-top: 16px;
   padding-top: 12px;
-  border-top: 1px solid #e0e0e0;
+  border-top: 1px solid var(--border);
 }
 
 .merkle-digest-label {
   font-weight: bold;
   font-size: 12px;
-  color: #333;
+  color: var(--text);
   margin-bottom: 4px;
 }
 
 .merkle-digest-note {
   font-size: 11px;
-  color: #666;
+  color: var(--muted);
   font-style: italic;
   margin-bottom: 10px;
 }
@@ -281,19 +387,19 @@
 .responsibility-label {
   font-weight: bold;
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
   min-width: 140px;
 }
 
 .responsibility-value {
   font-size: 12px;
-  color: #000;
+  color: var(--text);
 }
 
 .confidence-bar {
   width: 100px;
   height: 8px;
-  background: #e0e0e0;
+  background: var(--panel2);
   border-radius: 4px;
   overflow: hidden;
   margin-left: 8px;
@@ -301,15 +407,15 @@
 
 .confidence-fill {
   height: 100%;
-  background: #006600;
+  background: var(--good);
   transition: width 0.3s;
 }
 
 .blame-explanation {
   margin-top: 16px;
   padding: 12px;
-  background: #f9f9f9;
-  border-left: 3px solid #ddd;
+  background: var(--panel2);
+  border-left: 3px solid var(--border);
 }
 
 .explanation-label {
@@ -321,7 +427,7 @@
 .blame-explanation p {
   font-size: 12px;
   line-height: 1.6;
-  color: #333;
+  color: var(--text);
 }
 
 /* Insurance Panel */
@@ -335,7 +441,7 @@
 .insurance-label {
   font-weight: bold;
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
   min-width: 120px;
 }
 
@@ -356,41 +462,41 @@
 .insurance-tag {
   font-size: 11px;
   padding: 4px 8px;
-  background: #f0f0f0;
-  border: 1px solid #ddd;
+  background: var(--panel2);
+  border: 1px solid var(--border);
   border-radius: 3px;
-  color: #333;
+  color: var(--text);
 }
 
 .insurance-empty {
   font-size: 12px;
-  color: #999;
+  color: var(--muted);
   font-style: italic;
 }
 
 .insurance-value {
   font-size: 12px;
-  color: #000;
+  color: var(--text);
 }
 
 .constitution-warning {
   margin-top: 16px;
   padding: 12px;
-  background: #fff3cd;
-  border-left: 3px solid #CC9900;
+  background: rgba(242, 201, 76, 0.12);
+  border-left: 3px solid var(--warn);
 }
 
 .warning-label {
   font-weight: bold;
   font-size: 12px;
-  color: #856404;
+  color: var(--warn);
   margin-bottom: 8px;
 }
 
 .constitution-warning p {
   font-size: 12px;
   line-height: 1.6;
-  color: #856404;
+  color: var(--warn);
 }
 
 /* Evidence Files Panel */
@@ -405,44 +511,45 @@
   justify-content: space-between;
   align-items: center;
   padding: 8px 12px;
-  background: #f9f9f9;
-  border: 1px solid #ddd;
+  background: var(--panel2);
+  border: 1px solid var(--border);
   border-radius: 3px;
 }
 
 .file-name {
   font-size: 12px;
-  color: #333;
+  color: var(--text);
   font-family: 'Courier New', Courier, monospace;
 }
 
 .download-button {
   font-size: 11px;
   padding: 4px 12px;
-  background: #f0f0f0;
-  border: 1px solid #ccc;
+  background: var(--panel);
+  border: 1px solid var(--border);
   border-radius: 3px;
   cursor: pointer;
-  color: #333;
+  color: var(--text);
 }
 
 .download-button:hover {
-  background: #e0e0e0;
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .download-button:active {
-  background: #d0d0d0;
+  background: var(--panel2);
 }
 
 /* Passport Panel */
 .passport-panel .passport-note {
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
   font-style: italic;
   margin-bottom: 16px;
   padding: 8px;
-  background: #f5f5f5;
-  border-left: 3px solid #999;
+  background: var(--panel2);
+  border-left: 3px solid var(--border);
 }
 
 .passport-section {
@@ -453,45 +560,48 @@
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  color: #666;
+  color: var(--muted);
   margin-bottom: 8px;
 }
 
 .passport-identifier {
   font-size: 12px;
   font-family: 'Courier New', Courier, monospace;
-  background: #f0f0f0;
+  background: var(--panel2);
   padding: 2px 6px;
   border-radius: 3px;
   word-break: break-all;
+  border: 1px solid var(--border);
 }
 
 .passport-entity {
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   padding: 12px;
   margin-bottom: 12px;
-  background: #fafafa;
+  background: var(--panel2);
+  border-radius: 4px;
 }
 
 .passport-disputes,
 .passport-flags {
   display: block;
   font-size: 12px;
-  color: #333;
+  color: var(--text);
   margin-bottom: 4px;
 }
 
 .passport-timestamp {
   font-size: 12px;
   font-family: 'Courier New', Courier, monospace;
-  color: #555;
+  color: var(--muted);
 }
 
 .passport-command-inline {
   font-size: 11px;
-  background: #f0f0f0;
+  background: var(--panel2);
   padding: 2px 6px;
   border-radius: 3px;
+  border: 1px solid var(--border);
 }
 
 .passport-entity-header {
@@ -504,7 +614,7 @@
 .passport-entity-label {
   font-weight: bold;
   font-size: 13px;
-  color: #333;
+  color: var(--text);
 }
 
 .passport-tier-badge {
@@ -518,39 +628,39 @@
 
 .passport-entity-details {
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
 }
 
 .passport-score {
   font-family: 'Courier New', Courier, monospace;
-  color: #333;
+  color: var(--text);
 }
 
 .passport-empty {
   text-align: center;
   padding: 20px;
-  color: #999;
+  color: var(--muted);
   font-style: italic;
 }
 
 .passport-warnings {
   margin-top: 16px;
   padding: 12px;
-  background: #fff3cd;
-  border: 1px solid #ffc107;
+  background: rgba(242, 201, 76, 0.12);
+  border: 1px solid var(--warn);
   border-radius: 4px;
 }
 
 .passport-warnings-title {
   font-weight: bold;
   font-size: 12px;
-  color: #856404;
+  color: var(--warn);
   margin-bottom: 8px;
 }
 
 .passport-warning-item {
   font-size: 11px;
-  color: #856404;
+  color: var(--warn);
   margin-left: 16px;
   margin-bottom: 4px;
 }
@@ -558,14 +668,14 @@
 .passport-registry-note {
   margin-top: 16px;
   padding: 12px;
-  background: #e7f3ff;
-  border: 1px solid #b3d9ff;
+  background: rgba(79, 163, 255, 0.1);
+  border: 1px solid var(--accent);
   border-radius: 4px;
 }
 
 .passport-registry-text {
   font-size: 11px;
-  color: #004085;
+  color: var(--accent);
   margin-bottom: 8px;
 }
 
@@ -573,9 +683,10 @@
   display: block;
   font-size: 10px;
   font-family: 'Courier New', Courier, monospace;
-  background: #f0f0f0;
+  background: var(--panel2);
   padding: 8px;
   border-radius: 3px;
-  color: #333;
+  color: var(--text);
   word-break: break-all;
+  border: 1px solid var(--border);
 }

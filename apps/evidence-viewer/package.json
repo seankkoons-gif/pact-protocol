@@ -5,13 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json --noEmit && node ../../node_modules/vite/bin/vite.js build",
     "preview": "vite preview",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@pact/verifier": "workspace:*",
     "bs58": "^5.0.0",
     "jspdf": "^2.5.1",
     "jszip": "^3.10.1",

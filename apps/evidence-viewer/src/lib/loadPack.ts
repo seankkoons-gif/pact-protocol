@@ -1,5 +1,12 @@
 import type { AuditorPackData, Judgment, InsurerSummary, Manifest, GCView } from '../types';
-import { computePackIntegrity } from './packIntegrity';
+import { verifyAuditorPackFromBytes } from '@pact/verifier/core';
+import { verifierReportToIntegrityResult } from './verifierToIntegrity';
+import { computeSignatureCounts, type TranscriptLike } from './transcriptSignatures';
+
+// Standard constitution for pack verification (same as pact-verifier; bundled for offline).
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - Vite ?raw import
+import STANDARD_CONSTITUTION_CONTENT from '../../../../packages/verifier/resources/CONSTITUTION_v1.md?raw';
 
 type ZipInstance = Awaited<ReturnType<Awaited<typeof import('jszip')>['loadAsync']>>;
 
@@ -57,14 +64,21 @@ export async function loadPackFromFile(file: File): Promise<AuditorPackData> {
   const { default: JSZip } = await import('jszip');
   const zip = await JSZip.loadAsync(file);
   const paths = getAllPaths(zip);
+  const allFilesMap = new Map(paths.map((p) => [p, true]));
+  // eslint-disable-next-line no-console -- temporary debug
+  console.log('zip keys', [...allFilesMap.keys()].slice(0, 30));
+  // eslint-disable-next-line no-console -- temporary debug
+  console.log('has transcript', allFilesMap.has('input/transcript.json'));
+  // eslint-disable-next-line no-console -- temporary debug
+  console.log('has checksums', allFilesMap.has('checksums.sha256'));
 
-  // --- Transcript (required): canonical path input/transcript.json, fallback to transcript*.json
-  const transcriptPath =
-    paths.includes('input/transcript.json')
-      ? 'input/transcript.json'
-      : findPath(paths, null, /transcript.*\.json$/i, 'transcript.json');
+  // --- Transcript (required): always use canonical input/transcript.json; fallback only if missing
+  const canonicalTranscriptPath = 'input/transcript.json';
+  const transcriptPath = paths.includes(canonicalTranscriptPath)
+    ? canonicalTranscriptPath
+    : findPath(paths, null, /transcript.*\.json$/i, 'transcript.json');
   if (!transcriptPath) {
-    throw new Error(buildMissingError(['input/transcript.json or transcript.json'], paths));
+    throw new Error(buildMissingError(['input/transcript.json'], paths));
   }
   const transcriptRaw = await readText(zip, transcriptPath);
   let transcriptId = '';
@@ -108,7 +122,7 @@ export async function loadPackFromFile(file: File): Promise<AuditorPackData> {
   }
   const insurerSummary = (await readJson(zip, insurerSummaryPath)) as InsurerSummary;
 
-  // --- Checksums (optional; if absent, integrityResult.checksums.status will be UNAVAILABLE)
+  // --- Checksums: load checksums.sha256 text if present (optional)
   const checksumsPath = findPath(paths, 'checksums.sha256', 'checksums.sha256', /checksums?\.(sha256|txt)/i) ?? null;
   const checksumsText = checksumsPath ? await readText(zip, checksumsPath) : '';
 
@@ -125,16 +139,6 @@ export async function loadPackFromFile(file: File): Promise<AuditorPackData> {
   if (!transcriptId && gcView.subject?.transcript_id_or_hash) transcriptId = gcView.subject.transcript_id_or_hash;
   if (!transcriptId) transcriptId = 'UNKNOWN';
 
-  // Build allFilesMap (path -> ArrayBuffer) for integrity checksums verification
-  const allFilesMap = new Map<string, ArrayBuffer>();
-  for (const p of paths) {
-    const file = zip.file(p);
-    if (file && !file.dir) {
-      const buf = await file.async('arraybuffer');
-      allFilesMap.set(p, buf);
-    }
-  }
-
   // Optional: merkle digest
   let merkleDigest: AuditorPackData['merkleDigest'];
   const merklePath = findPath(paths, 'derived/merkle_digest.json', 'merkle_digest.json');
@@ -148,26 +152,58 @@ export async function loadPackFromFile(file: File): Promise<AuditorPackData> {
     merkleDigest = undefined;
   }
 
-  // Client-side integrity from pack contents only (input/transcript.json hash chain, checksums, signatures)
+  // Debug: what we found in the zip (for INDETERMINATE diagnosis).
+  const integrityDebug: AuditorPackData['integrityDebug'] = {
+    transcriptFound: !!transcriptPath,
+    transcriptPath: transcriptPath ?? null,
+    checksumsFound: !!checksumsPath,
+    checksumsPath: checksumsPath ?? null,
+    zipEntryCount: paths.length,
+  };
+
+  // Integrity: same code path as pact-verifier auditor-pack-verify (offline, no network).
   let integrityResult: AuditorPackData['integrityResult'];
   try {
-    if (!transcriptParsed) {
-      throw new Error('Transcript parse failed');
-    }
-    integrityResult = await computePackIntegrity({
-      transcript: transcriptParsed,
-      allFilesMap,
-      checksumsText: checksumsPath ? checksumsText : null,
+    const zipBytes = new Uint8Array(await file.arrayBuffer());
+    const sha256Async = async (data: string | Uint8Array): Promise<string> => {
+      const bytes: Uint8Array =
+        typeof data === 'string'
+          ? new TextEncoder().encode(data)
+          : data instanceof Uint8Array
+            ? data
+            : new Uint8Array(data);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', bytes.buffer as ArrayBuffer);
+      return Array.from(new Uint8Array(hashBuffer))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+    };
+    const report = await verifyAuditorPackFromBytes(zipBytes, {
+      sha256Async,
+      standardConstitutionContent: STANDARD_CONSTITUTION_CONTENT,
     });
+    integrityResult = verifierReportToIntegrityResult(report);
   } catch (e) {
+    const caughtMessage = e instanceof Error ? e.message : 'Failed to verify pack';
     integrityResult = {
       status: 'INDETERMINATE',
       checksums: { status: 'UNAVAILABLE', checkedCount: 0, totalCount: 0, failures: [] },
-      hashChain: { status: 'INVALID', details: 'Transcript parsing or integrity computation failed' },
-      signatures: { status: 'UNVERIFIABLE', verifiedCount: 0, totalCount: 0, failures: [] },
-      warnings: [e instanceof Error ? e.message : 'Failed to compute pack integrity'],
+      hashChain: { status: 'INVALID', details: 'Verification failed' },
+      signatures: { status: 'UNAVAILABLE', verifiedCount: 0, totalCount: 0, failures: [] },
+      warnings: [caughtMessage],
     };
   }
+
+  // Signatures: from input/transcript.json only (do not use derived/judgment).
+  const sigCounts = computeSignatureCounts(transcriptParsed as TranscriptLike | null);
+  integrityResult = {
+    ...integrityResult,
+    signatures: {
+      status: sigCounts.status,
+      verifiedCount: sigCounts.verifiedCount,
+      totalCount: sigCounts.totalCount,
+      failures: sigCounts.failures,
+    },
+  };
 
   return {
     manifest,
@@ -181,8 +217,9 @@ export async function loadPackFromFile(file: File): Promise<AuditorPackData> {
     zipFile: file,
     merkleDigest,
     integrityResult,
-    // Verify command path: demo loaders override with packs/<file>.zip; drag-drop keeps filename
-    packVerifyPath: file.name,
+    integrityDebug,
+    source: 'drag_drop',
+    fileName: file.name,
   };
 }
 

@@ -1,41 +1,77 @@
 .verdict-header {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 12px;
+  flex-direction: column;
+  gap: 6px;
   padding: 10px 14px;
   margin-bottom: 16px;
-  background: #f5f5f5;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--panel-shadow);
+  border-radius: 6px;
   font-size: 14px;
   font-weight: 500;
 }
 
+.verdict-header-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.verdict-integrity-subtext {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+  margin: 0;
+  line-height: 1.4;
+}
+
 .verdict-sep {
-  color: #999;
+  color: var(--muted);
   user-select: none;
 }
 
+.verdict-integrity {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.verdict-integrity::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 .verdict-integrity.verdict-VALID {
-  color: #006600;
+  color: var(--text);
+}
+
+.verdict-integrity.verdict-VALID::before {
+  background: var(--good);
 }
 
 .verdict-integrity.verdict-TAMPERED {
-  color: #CC0000;
-  font-weight: 600;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.verdict-integrity.verdict-TAMPERED::before {
+  background: var(--bad);
 }
 
 .verdict-integrity.verdict-INDETERMINATE {
-  color: #996600;
+  color: var(--muted);
 }
 
-.verdict-integrity.verdict-UNKNOWN,
-.verdict-integrity.verdict-unknown {
-  color: #666;
+.verdict-integrity.verdict-INDETERMINATE::before {
+  background: var(--warn);
 }
 
 .verdict-judgment,
 .verdict-confidence {
-  color: #333;
+  color: var(--text);
 }

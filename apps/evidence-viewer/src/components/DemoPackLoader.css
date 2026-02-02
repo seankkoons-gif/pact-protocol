@@ -8,21 +8,22 @@
 .demo-pack-label {
   font-size: 13px;
   font-weight: 500;
-  color: #555;
+  color: var(--muted);
 }
 
 .demo-pack-select {
   font-size: 13px;
   padding: 6px 10px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: white;
+  background: var(--panel2);
+  color: var(--text);
   min-width: 180px;
 }
 
 .demo-pack-select:focus {
   outline: none;
-  border-color: #006600;
+  border-color: var(--accent);
 }
 
 .demo-pack-select:disabled {

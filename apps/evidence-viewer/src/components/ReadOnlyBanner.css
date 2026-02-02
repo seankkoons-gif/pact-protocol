@@ -1,9 +1,11 @@
 .read-only-banner {
-  background: #f9f9f9;
-  border: 1px solid #ddd;
-  border-left: 4px solid #006600;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--panel-shadow);
+  border-left: 4px solid var(--good);
   padding: 16px 20px;
   margin-bottom: 24px;
+  border-radius: 6px;
 }
 
 .banner-header {
@@ -16,13 +18,29 @@
 .banner-title {
   font-size: 14px;
   font-weight: bold;
-  color: #000;
+  color: var(--text);
   margin: 0;
+}
+
+.banner-verdict-line {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  margin: 0 0 4px 0;
+  line-height: 1.4;
+}
+
+.banner-integrity-subtext {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+  margin: 0 0 8px 0;
+  line-height: 1.4;
 }
 
 .banner-text {
   font-size: 12px;
-  color: #333;
+  color: var(--muted);
   margin: 8px 0;
   line-height: 1.5;
 }
@@ -34,21 +52,21 @@
   gap: 6px;
   margin: 12px 0;
   padding: 8px 12px;
-  background: white;
-  border: 1px solid #ccc;
+  background: var(--panel2);
+  border: 1px solid var(--border);
   border-radius: 3px;
 }
 
 .verification-label {
   font-size: 11px;
-  color: #666;
+  color: var(--muted);
   font-weight: bold;
   white-space: nowrap;
 }
 
 .verification-readonly {
   font-size: 11px;
-  color: #666;
+  color: var(--muted);
   margin: 0;
   line-height: 1.4;
 }
@@ -56,14 +74,21 @@
 .verification-command {
   font-family: 'Courier New', Courier, monospace;
   font-size: 11px;
-  color: #000;
+  color: var(--text);
   background: transparent;
   width: 100%;
 }
 
+.verification-note {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 4px 0 0 0;
+  line-height: 1.4;
+}
+
 .banner-note {
   font-size: 11px;
-  color: #666;
+  color: var(--muted);
   font-style: italic;
   margin: 8px 0 0 0;
 }

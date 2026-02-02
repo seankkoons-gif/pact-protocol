@@ -21,8 +21,8 @@ export default function GenerateClaimsPackageButton({ packData }: GenerateClaims
       const zipBlob = await generateClaimsIntakePackage(packData);
       
       // Generate filename
-      const safeTranscriptId = packData.transcriptId === 'UNKNOWN' 
-        ? 'UNKNOWN' 
+      const safeTranscriptId = !packData.transcriptId || packData.transcriptId === 'UNKNOWN'
+        ? 'pack'
         : packData.transcriptId.replace(/[^a-zA-Z0-9-_]/g, '_').substring(0, 50);
       const filename = `PACT_CLAIMS_INTAKE_${safeTranscriptId}.zip`;
 

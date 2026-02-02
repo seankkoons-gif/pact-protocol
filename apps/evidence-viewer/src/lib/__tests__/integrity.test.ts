@@ -8,7 +8,7 @@ import {
   displayIntegrityOrFault,
   INDETERMINATE_TOOLTIP,
 } from '../integrity';
-import type { GCView, InsurerSummary, PackVerifyResultView, AuditorPackData } from '../../../types';
+import type { GCView, InsurerSummary, PackVerifyResultView, AuditorPackData } from '../../types';
 
 /**
  * Integrity is derived ONLY from pack_verify (auditor pack verification).

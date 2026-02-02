@@ -1,6 +1,6 @@
 import type { AuditorPackData } from '../types';
 import { formatConfidence } from './loadPack';
-import { getIntegrityStatusForPack, getWarningsAndExceptions, displayIntegrityOrFault, getVerdictSummaryLine, INDETERMINATE_TOOLTIP } from './integrity';
+import { getIntegrityStatusForPack, getWarningsAndExceptions, displayIntegrityOrFault, displayTranscriptId, getVerdictSummaryLine, INDETERMINATE_TOOLTIP, INDETERMINATE_VERIFY_VIA_CLI } from './integrity';
 
 /** Constructor type for jsPDF (default export is the class). */
 type JSPDFConstructor = new () => InstanceType<typeof import('jspdf').default>;
@@ -26,7 +26,7 @@ function generateGCSummaryPDF(packData: AuditorPackData, JSPDFClass: JSPDFConstr
   // Get data
   const { manifest, gcView, judgment, transcriptId } = packData;
   const status = gcView.executive_summary.status;
-  const faultDomainRaw = gcView.responsibility.judgment?.fault_domain || judgment.dblDetermination || 'UNKNOWN';
+  const faultDomainRaw = gcView.responsibility.judgment?.fault_domain || judgment.dblDetermination || '—';
   const faultDomain = displayIntegrityOrFault(faultDomainRaw);
   const requiredAction = gcView.responsibility.judgment?.required_action || judgment.requiredAction || 'NONE';
   const integrityStatusRaw = getIntegrityStatusForPack(packData);
@@ -50,7 +50,7 @@ function generateGCSummaryPDF(packData: AuditorPackData, JSPDFClass: JSPDFConstr
   };
 
   yPos += 5;
-  addLabelValue('Transcript ID', transcriptId, true);
+  addLabelValue('Transcript ID', displayTranscriptId(transcriptId), true);
   addLabelValue('Outcome', status);
   addLabelValue('Integrity', integrityStatus);
   addLabelValue('Fault Domain', faultDomain);
@@ -80,7 +80,7 @@ function generateREADME(packData: AuditorPackData): string {
   const { gcView, judgment, insurerSummary } = packData;
   const coverage = insurerSummary.coverage;
   const moneyMoved = gcView.executive_summary.money_moved;
-  const faultDomainRaw = gcView.responsibility.judgment?.fault_domain || judgment.dblDetermination || 'UNKNOWN';
+  const faultDomainRaw = gcView.responsibility.judgment?.fault_domain || judgment.dblDetermination || '—';
   const faultDomain = displayIntegrityOrFault(faultDomainRaw);
   const integrityStatusRaw = getIntegrityStatusForPack(packData);
   const integrityStatus = displayIntegrityOrFault(integrityStatusRaw);
@@ -121,7 +121,7 @@ function generateREADME(packData: AuditorPackData): string {
   lines.push('');
 
   // Money moved
-  const moneyMovedText = moneyMoved === true ? 'YES' : moneyMoved === false ? 'NO' : 'UNKNOWN';
+  const moneyMovedText = moneyMoved === true ? 'YES' : moneyMoved === false ? 'NO' : '—';
   lines.push(`Money moved: ${moneyMovedText}`);
   lines.push('');
 
@@ -158,7 +158,7 @@ function generateMetadata(packData: AuditorPackData): string {
   const { manifest, gcView, judgment, insurerSummary, transcriptId } = packData;
   const status = gcView.executive_summary.status;
   const coverage = insurerSummary.coverage;
-  const faultDomainRaw = gcView.responsibility.judgment?.fault_domain || judgment.dblDetermination || 'UNKNOWN';
+  const faultDomainRaw = gcView.responsibility.judgment?.fault_domain || judgment.dblDetermination || '—';
   const faultDomain = displayIntegrityOrFault(faultDomainRaw);
   const integrityStatusRaw = getIntegrityStatusForPack(packData);
   const integrityStatus = displayIntegrityOrFault(integrityStatusRaw);
@@ -166,7 +166,7 @@ function generateMetadata(packData: AuditorPackData): string {
 
   const metadata: Record<string, unknown> = {
     version: 'claims_intake/1.0',
-    transcript_id: transcriptId,
+    transcript_id: displayTranscriptId(transcriptId),
     outcome: status,
     coverage: coverage,
     fault_domain: faultDomain,
@@ -176,7 +176,7 @@ function generateMetadata(packData: AuditorPackData): string {
     tool: '@pact/evidence-viewer',
   };
   if (integrityStatus === 'INDETERMINATE') {
-    metadata.integrity_note = INDETERMINATE_TOOLTIP;
+    metadata.integrity_note = packData.integrityResult ? INDETERMINATE_TOOLTIP : INDETERMINATE_VERIFY_VIA_CLI;
   }
   if (faultDomain === 'INDETERMINATE') {
     metadata.fault_domain_note = INDETERMINATE_TOOLTIP;
@@ -366,7 +366,7 @@ async function generateInsurerPDFBlob(packData: AuditorPackData, JSPDFClass: JSP
     !!packData.replayVerifyResult,
     packData.integrityResult
   );
-  const faultDomainRaw = gcView.responsibility.judgment?.fault_domain || judgment.dblDetermination || 'UNKNOWN';
+  const faultDomainRaw = gcView.responsibility.judgment?.fault_domain || judgment.dblDetermination || '—';
   const faultDomain = displayIntegrityOrFault(faultDomainRaw);
   const riskFactors = insurerSummary.risk_factors || [];
   const surcharges = insurerSummary.surcharges || [];
@@ -405,7 +405,7 @@ async function generateInsurerPDFBlob(packData: AuditorPackData, JSPDFClass: JSP
   addBoxedNote('This document is a derived underwriting view. Verification requires the auditor pack.');
   yPos += 5;
 
-  addTableRow('Transcript ID', transcriptId, true);
+  addTableRow('Transcript ID', displayTranscriptId(transcriptId), true);
   addTableRow('Outcome', status);
   addTableRow('Coverage', coverage);
   addTableRow('Confidence Score', formatConfidence(confidence));
@@ -416,7 +416,8 @@ async function generateInsurerPDFBlob(packData: AuditorPackData, JSPDFClass: JSP
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(9);
     doc.setTextColor(100, 100, 100);
-    doc.text(INDETERMINATE_TOOLTIP, margin, yPos);
+    const indeterminateNote = packData.integrityResult ? INDETERMINATE_TOOLTIP : INDETERMINATE_VERIFY_VIA_CLI;
+    doc.text(indeterminateNote, margin, yPos);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(0, 0, 0);
     yPos += 7;
@@ -662,7 +663,7 @@ async function generateInsurerPDFBlob(packData: AuditorPackData, JSPDFClass: JSP
   doc.setFontSize(9);
   doc.text('• Auditor pack ZIP file', margin, yPos);
   yPos += 6;
-  doc.text(`• Transcript ID: ${transcriptId}`, margin, yPos);
+  doc.text(`• Transcript ID: ${displayTranscriptId(transcriptId)}`, margin, yPos);
   yPos += 6;
 
   if (yPos > pageHeight - 50) {

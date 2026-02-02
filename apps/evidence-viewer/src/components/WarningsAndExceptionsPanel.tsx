@@ -1,80 +1,35 @@
+import { getIntegrityStatusForPack, WARNINGS_VALID_SUBTEXT } from '../lib/integrity';
 import type { AuditorPackData } from '../types';
-import { getWarningsAndExceptions } from '../lib/integrity';
 import './Panel.css';
 
 interface WarningsAndExceptionsPanelProps {
   packData: AuditorPackData;
 }
 
+/**
+ * Lists pack.integrityResult.warnings only (e.g. claimed vs computed transcript hash mismatch).
+ * Shown only when there is at least one warning. Warnings never flip VALID → TAMPERED.
+ */
 export default function WarningsAndExceptionsPanel({ packData }: WarningsAndExceptionsPanelProps) {
-  const wa = getWarningsAndExceptions(
-    packData.packVerifyResult,
-    packData.gcView,
-    packData.insurerSummary,
-    !!packData.merkleDigest,
-    !!packData.replayVerifyResult,
-    packData.integrityResult
-  );
+  const warnings = packData.integrityResult?.warnings ?? [];
+  if (warnings.length === 0) return null;
 
-  const hasAny =
-    wa.packIntegrityWarnings.length > 0 ||
-    wa.hashMismatches.length > 0 ||
-    wa.nonstandardConstitution.length > 0 ||
-    wa.missingOptionalArtifacts.length > 0;
-
-  if (!hasAny) return null;
+  const integrityStatus = getIntegrityStatusForPack(packData);
+  const subtext =
+    integrityStatus === 'VALID' ? WARNINGS_VALID_SUBTEXT : 'Warnings are informational only. They do not affect the Integrity verdict.';
 
   return (
     <div className="panel warnings-and-exceptions-panel">
       <h2 className="panel-title">WARNINGS & EXCEPTIONS</h2>
       <div className="panel-content">
-        <p className="warnings-disclaimer">
-          Warnings are informational only. They do not affect the Integrity verdict (e.g. claimed vs computed transcript hash mismatch is shown here, not as tamper).
-        </p>
-
-        {wa.packIntegrityWarnings.length > 0 && (
-          <div className="warnings-group">
-            <div className="warnings-group-label">Pack integrity warnings</div>
-            <ul>
-              {wa.packIntegrityWarnings.map((w, i) => (
-                <li key={i}>{w}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {wa.hashMismatches.length > 0 && (
-          <div className="warnings-group">
-            <div className="warnings-group-label">Warnings: Claimed vs computed transcript hash</div>
-            <ul>
-              {wa.hashMismatches.map((w, i) => (
-                <li key={i}>{w}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {wa.nonstandardConstitution.length > 0 && (
-          <div className="warnings-group">
-            <div className="warnings-group-label">Warnings: Nonstandard constitution</div>
-            <ul>
-              {wa.nonstandardConstitution.map((w, i) => (
-                <li key={i}>{w}</li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {wa.missingOptionalArtifacts.length > 0 && (
-          <div className="warnings-group">
-            <div className="warnings-group-label">Warnings: Missing optional artifacts</div>
-            <ul>
-              {wa.missingOptionalArtifacts.map((w, i) => (
-                <li key={i}>{w}</li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <p className="warnings-disclaimer">{subtext}</p>
+        <div className="warnings-group">
+          <ul>
+            {warnings.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        </div>
       </div>
     </div>
   );

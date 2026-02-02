@@ -12,18 +12,18 @@
 .rounds-timeline-table td {
   padding: 8px 12px;
   text-align: left;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border);
 }
 
 .rounds-timeline-table th {
   font-weight: 600;
-  color: #555;
-  background: #f9f9f9;
+  color: var(--muted);
+  background: var(--panel2);
 }
 
 .rounds-timeline-table td.round-index {
   font-variant-numeric: tabular-nums;
-  color: #666;
+  color: var(--muted);
 }
 
 .rounds-timeline-table td.round-type {
@@ -31,15 +31,15 @@
 }
 
 .rounds-timeline-table .status-valid {
-  color: #006600;
+  color: var(--good);
 }
 
 .rounds-timeline-table .status-invalid {
-  color: #CC0000;
+  color: var(--bad);
   font-weight: 500;
 }
 
 .rounds-timeline-empty {
-  color: #666;
+  color: var(--muted);
   margin: 0;
 }

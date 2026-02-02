@@ -1,8 +1,22 @@
 .pack-status-container {
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.pack-status-row {
+  display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 16px;
+}
+
+.pack-status-hint {
+  font-size: 11px;
+  color: var(--warn);
+  margin: 0;
+  font-style: italic;
 }
 
 .pack-status-chip {
@@ -10,20 +24,28 @@
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  border-radius: 4px;
+  border-radius: 0 4px 4px 0;
   font-size: 12px;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
 }
 
-.pack-status-chip.loaded {
-  background: #e6f7e6;
-  border: 1px solid #006600;
-  color: #006600;
+.pack-status-chip.valid {
+  border-left-color: var(--good);
+  background: rgba(51, 209, 122, 0.08);
+  color: var(--text);
 }
 
 .pack-status-chip.tampered {
-  background: #ffe6e6;
-  border: 1px solid #CC0000;
-  color: #CC0000;
+  border-left-color: var(--bad);
+  background: rgba(255, 77, 77, 0.08);
+  color: var(--text);
+}
+
+.pack-status-chip.indeterminate {
+  border-left-color: var(--warn);
+  background: rgba(242, 201, 76, 0.06);
+  color: var(--text);
 }
 
 .status-label {
@@ -35,14 +57,19 @@
   font-weight: normal;
 }
 
+.status-integrity {
+  margin-left: 8px;
+  font-weight: 600;
+}
+
 .tamper-alert {
+  border-left: 4px solid var(--bad);
+  background: rgba(255, 77, 77, 0.08);
+  color: var(--text);
   padding: 6px 12px;
-  background: #CC0000;
-  color: white;
-  border-radius: 4px;
+  border-radius: 0 4px 4px 0;
   font-size: 12px;
-  font-weight: bold;
-  animation: pulse 2s infinite;
+  font-weight: 500;
 }
 
 @keyframes pulse {

@@ -3,23 +3,24 @@
 }
 
 .file-upload-area {
-  border: 2px dashed #ccc;
+  border: 2px dashed var(--border);
   border-radius: 8px;
   padding: 60px 20px;
   text-align: center;
   cursor: pointer;
-  background: white;
+  background: var(--panel);
+  box-shadow: var(--panel-shadow);
   transition: all 0.2s;
 }
 
 .file-upload-area:hover {
-  border-color: #666;
-  background: #fafafa;
+  border-color: var(--muted);
+  background: var(--panel2);
 }
 
 .file-upload-area.dragging {
-  border-color: #006600;
-  background: #f0f9f0;
+  border-color: var(--accent);
+  background: rgba(79, 163, 255, 0.08);
 }
 
 .file-upload-area.loading {
@@ -40,21 +41,21 @@
 
 .upload-text {
   font-size: 16px;
-  color: #333;
+  color: var(--text);
   margin: 0;
 }
 
 .upload-subtext {
   font-size: 12px;
-  color: #666;
+  color: var(--muted);
   margin: 0;
 }
 
 .upload-spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #f3f3f3;
-  border-top: 3px solid #006600;
+  border: 3px solid var(--panel2);
+  border-top: 3px solid var(--accent);
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }

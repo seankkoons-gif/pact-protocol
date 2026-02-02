@@ -4,7 +4,7 @@ export const DEMO_PACKS = [
   { label: 'Success', filename: 'auditor_pack_success.zip' },
   { label: 'Policy Abort 101', filename: 'auditor_pack_101.zip' },
   { label: 'Timeout 420', filename: 'auditor_pack_420.zip' },
-  { label: 'Tamper', filename: 'auditor_pack_semantic_tampered.zip' },
+  { label: 'Tamper (derived output altered)', filename: 'auditor_pack_semantic_tampered.zip' },
 ] as const;
 
 interface DemoPackLoaderProps {

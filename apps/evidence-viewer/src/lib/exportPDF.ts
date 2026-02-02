@@ -1,6 +1,17 @@
 import type { AuditorPackData } from '../types';
 import { formatDate, formatConfidence } from './loadPack';
-import { getIntegrityStatusForPack, getWarningsAndExceptions, displayIntegrityOrFault, getVerdictSummaryLine, INDETERMINATE_TOOLTIP } from './integrity';
+import {
+  getIntegrityStatusForPack,
+  getWarningsAndExceptions,
+  displayIntegrityOrFault,
+  displayTranscriptId,
+  getVerdictSummaryLine,
+  INTEGRITY_VALID_SUBTEXT,
+  INTEGRITY_TAMPERED_SUBTEXT,
+  INDETERMINATE_TOOLTIP,
+  INDETERMINATE_VERIFY_VIA_CLI,
+  WARNINGS_VALID_SUBTEXT,
+} from './integrity';
 
 /**
  * Export GC View as a legal PDF document.
@@ -86,18 +97,18 @@ export async function exportGCViewPDF(packData: AuditorPackData): Promise<void> 
     yPos += boxHeight + 5;
   };
 
-  // Helper to format money moved
+  // Helper to format money moved (no "UNKNOWN" in UI/PDF)
   const formatMoneyMoved = (moved: boolean | undefined): string => {
     if (moved === true) return 'YES';
     if (moved === false) return 'NO';
-    return 'UNKNOWN';
+    return '—';
   };
 
   // Get data
   const { manifest, gcView, judgment, insurerSummary, transcriptId, transcript } = packData;
   const status = gcView.executive_summary.status;
-  const approvalRisk = gcView.gc_takeaways?.approval_risk || 'UNKNOWN';
-  const faultDomainRaw = gcView.responsibility.judgment?.fault_domain || judgment.dblDetermination || 'UNKNOWN';
+  const approvalRisk = gcView.gc_takeaways?.approval_risk || '—';
+  const faultDomainRaw = gcView.responsibility.judgment?.fault_domain || judgment.dblDetermination || '—';
   const faultDomain = displayIntegrityOrFault(faultDomainRaw);
   const requiredAction = gcView.responsibility.judgment?.required_action || judgment.requiredAction || 'NONE';
   const requiredNextActor = gcView.responsibility.judgment?.required_next_actor || judgment.requiredNextActor || 'NONE';
@@ -119,7 +130,7 @@ export async function exportGCViewPDF(packData: AuditorPackData): Promise<void> 
   const verifyCommand = `pact-verifier auditor-pack-verify --zip <auditor_pack.zip>`;
   
   // Extract timestamp from transcript if available, otherwise use manifest
-  let timestamp = 'UNKNOWN';
+  let timestamp = '—';
   if (transcript) {
     try {
       const transcriptJson = JSON.parse(transcript);
@@ -130,7 +141,7 @@ export async function exportGCViewPDF(packData: AuditorPackData): Promise<void> 
       // Fall through to manifest timestamp
     }
   }
-  if (timestamp === 'UNKNOWN' && manifest.created_at_ms) {
+  if (timestamp === '—' && manifest.created_at_ms) {
     timestamp = formatDate(manifest.created_at_ms);
   }
 
@@ -155,7 +166,7 @@ export async function exportGCViewPDF(packData: AuditorPackData): Promise<void> 
   addBoxedNote('This document is a presentation layer. Verification requires the original auditor pack.');
   yPos += 5;
 
-  addLabelValue('Transcript ID', transcriptId, true);
+  addLabelValue('Transcript ID', displayTranscriptId(transcriptId), true);
   addLabelValue('Status', status);
   addLabelValue('Approval Risk', approvalRisk);
   addLabelValue('Fault Domain', faultDomain);
@@ -248,12 +259,18 @@ export async function exportGCViewPDF(packData: AuditorPackData): Promise<void> 
   yPos += 5;
 
   addLabelValue('Integrity (pack verification)', integrityStatus);
-  if (integrityStatus === 'INDETERMINATE') {
+  if (integrityStatus === 'VALID' || integrityStatus === 'TAMPERED' || integrityStatus === 'INDETERMINATE') {
     if (yPos > pageHeight - 25) addPage();
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(9);
     doc.setTextColor(100, 100, 100);
-    doc.text(INDETERMINATE_TOOLTIP, margin, yPos);
+    const subtext =
+      integrityStatus === 'VALID'
+        ? INTEGRITY_VALID_SUBTEXT
+        : integrityStatus === 'TAMPERED'
+          ? INTEGRITY_TAMPERED_SUBTEXT
+          : packData.integrityResult ? INDETERMINATE_TOOLTIP : INDETERMINATE_VERIFY_VIA_CLI;
+    doc.text(subtext, margin, yPos);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(0, 0, 0);
     yPos += 7;
@@ -280,7 +297,7 @@ export async function exportGCViewPDF(packData: AuditorPackData): Promise<void> 
   doc.text(verifyCommand, margin + 5, yPos + 5);
   yPos += 20;
 
-  // Warnings & Exceptions (do not affect Integrity verdict; claimed vs computed mismatch here, not tamper)
+  // Warnings & Exceptions (warnings never flip VALID → TAMPERED)
   const hasWa = wa.packIntegrityWarnings.length > 0 || wa.hashMismatches.length > 0 || wa.nonstandardConstitution.length > 0 || wa.missingOptionalArtifacts.length > 0;
   if (hasWa) {
     if (yPos > pageHeight - 50) {
@@ -294,7 +311,7 @@ export async function exportGCViewPDF(packData: AuditorPackData): Promise<void> 
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(9);
     doc.setTextColor(100, 100, 100);
-    doc.text('Warnings are informational only. They do not affect the Integrity verdict.', margin, yPos);
+    doc.text(integrityStatus === 'VALID' ? WARNINGS_VALID_SUBTEXT : 'Warnings are informational only. They do not affect the Integrity verdict.', margin, yPos);
     yPos += 8;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
@@ -426,8 +443,8 @@ export async function exportGCViewPDF(packData: AuditorPackData): Promise<void> 
 
   // Generate filename and download
   // Sanitize transcript ID for filename (remove invalid chars, limit length)
-  const safeTranscriptId = transcriptId === 'UNKNOWN' 
-    ? 'UNKNOWN' 
+  const safeTranscriptId = !transcriptId || transcriptId === 'UNKNOWN' || transcriptId === '—'
+    ? 'pack'
     : transcriptId.replace(/[^a-zA-Z0-9-_]/g, '_').substring(0, 50);
   const filename = `PACT_GC_VIEW_${safeTranscriptId}.pdf`;
   doc.save(filename);
@@ -573,7 +590,7 @@ export async function exportInsurerSummaryPDF(packData: AuditorPackData): Promis
     !!packData.replayVerifyResult,
     packData.integrityResult
   );
-  const faultDomainRaw = gcView.responsibility.judgment?.fault_domain || judgment.dblDetermination || 'UNKNOWN';
+  const faultDomainRaw = gcView.responsibility.judgment?.fault_domain || judgment.dblDetermination || '—';
   const faultDomain = displayIntegrityOrFault(faultDomainRaw);
   const riskFactors = insurerSummary.risk_factors || [];
   const surcharges = insurerSummary.surcharges || [];
@@ -616,18 +633,24 @@ export async function exportInsurerSummaryPDF(packData: AuditorPackData): Promis
   yPos += 5;
 
   // Table format for underwriting decision
-  addTableRow('Transcript ID', transcriptId, true);
+  addTableRow('Transcript ID', displayTranscriptId(transcriptId), true);
   addTableRow('Outcome', status);
   addTableRow('Coverage', coverage);
   addTableRow('Confidence Score', formatConfidence(confidence));
   addTableRow('Constitution Hash', constitutionHash.substring(0, 16) + '...', true);
   addTableRow('Integrity (pack verification)', integrityStatus);
-  if (integrityStatus === 'INDETERMINATE') {
+  if (integrityStatus === 'VALID' || integrityStatus === 'TAMPERED' || integrityStatus === 'INDETERMINATE') {
     if (yPos > pageHeight - 25) addPage();
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(9);
     doc.setTextColor(100, 100, 100);
-    doc.text(INDETERMINATE_TOOLTIP, margin, yPos);
+    const subtext =
+      integrityStatus === 'VALID'
+        ? INTEGRITY_VALID_SUBTEXT
+        : integrityStatus === 'TAMPERED'
+          ? INTEGRITY_TAMPERED_SUBTEXT
+          : packData.integrityResult ? INDETERMINATE_TOOLTIP : INDETERMINATE_VERIFY_VIA_CLI;
+    doc.text(subtext, margin, yPos);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(0, 0, 0);
     yPos += 7;
@@ -764,9 +787,9 @@ export async function exportInsurerSummaryPDF(packData: AuditorPackData): Promis
     yPos += 10;
   }
 
-  // Warnings & Exceptions (do not affect Integrity verdict; claimed vs computed mismatch here, not tamper)
-  const hasWa = wa.packIntegrityWarnings.length > 0 || wa.hashMismatches.length > 0 || wa.nonstandardConstitution.length > 0 || wa.missingOptionalArtifacts.length > 0;
-  if (hasWa) {
+  // Warnings & Exceptions (warnings never flip VALID → TAMPERED)
+  const hasWaInsurer = wa.packIntegrityWarnings.length > 0 || wa.hashMismatches.length > 0 || wa.nonstandardConstitution.length > 0 || wa.missingOptionalArtifacts.length > 0;
+  if (hasWaInsurer) {
     if (yPos > pageHeight - 50) {
       addPage();
     }
@@ -778,12 +801,12 @@ export async function exportInsurerSummaryPDF(packData: AuditorPackData): Promis
     doc.setFont('helvetica', 'italic');
     doc.setFontSize(9);
     doc.setTextColor(100, 100, 100);
-    doc.text('Warnings are informational only. They do not affect the Integrity verdict.', margin, yPos);
+    doc.text(integrityStatus === 'VALID' ? WARNINGS_VALID_SUBTEXT : 'Warnings are informational only. They do not affect the Integrity verdict.', margin, yPos);
     yPos += 8;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(0, 0, 0);
-    const addWaGroup = (label: string, items: string[]) => {
+    const addWaGroupInsurer = (label: string, items: string[]) => {
       if (items.length === 0) return;
       if (yPos > pageHeight - 30) {
         addPage();
@@ -802,10 +825,10 @@ export async function exportInsurerSummaryPDF(packData: AuditorPackData): Promis
       });
       yPos += 4;
     };
-    addWaGroup('Pack integrity', wa.packIntegrityWarnings);
-    addWaGroup('Claimed vs computed transcript hash', wa.hashMismatches);
-    addWaGroup('Nonstandard constitution', wa.nonstandardConstitution);
-    addWaGroup('Missing optional artifacts', wa.missingOptionalArtifacts);
+    addWaGroupInsurer('Pack integrity', wa.packIntegrityWarnings);
+    addWaGroupInsurer('Claimed vs computed transcript hash', wa.hashMismatches);
+    addWaGroupInsurer('Nonstandard constitution', wa.nonstandardConstitution);
+    addWaGroupInsurer('Missing optional artifacts', wa.missingOptionalArtifacts);
   }
 
   // Reason for exclusion (if EXCLUDED)
@@ -882,7 +905,7 @@ export async function exportInsurerSummaryPDF(packData: AuditorPackData): Promis
   doc.setFontSize(9);
   doc.text('• Auditor pack ZIP file', margin, yPos);
   yPos += 6;
-  doc.text(`• Transcript ID: ${transcriptId}`, margin, yPos);
+  doc.text(`• Transcript ID: ${displayTranscriptId(transcriptId)}`, margin, yPos);
   yPos += 6;
 
   // Determinism disclaimer
@@ -894,9 +917,9 @@ export async function exportInsurerSummaryPDF(packData: AuditorPackData): Promis
 
   addFooter();
 
-  // Generate filename and download
-  const safeTranscriptId = transcriptId === 'UNKNOWN' 
-    ? 'UNKNOWN' 
+  // Generate filename and download (never "UNKNOWN" in filename)
+  const safeTranscriptId = !transcriptId || transcriptId === 'UNKNOWN' || transcriptId === '—'
+    ? 'pack'
     : transcriptId.replace(/[^a-zA-Z0-9-_]/g, '_').substring(0, 50);
   const filename = `PACT_INSURER_VIEW_${safeTranscriptId}.pdf`;
   doc.save(filename);

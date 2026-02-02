@@ -1,5 +1,6 @@
 import type { Manifest, GCView } from '../types';
 import { formatDate, truncateHash } from '../lib/loadPack';
+import { displayTranscriptId } from '../lib/integrity';
 import CopyTranscriptIdButton from './CopyTranscriptIdButton';
 import './CaseHeader.css';
 
@@ -28,8 +29,9 @@ function getStatusColor(status: string): string {
 export default function CaseHeader({ manifest, gcView, transcriptId }: CaseHeaderProps) {
   const status = gcView.executive_summary.status;
   const statusColor = getStatusColor(status);
-  const displayId = transcriptId === 'UNKNOWN' ? 'UNKNOWN' : truncateHash(transcriptId, 24);
-  const fullId = transcriptId === 'UNKNOWN' ? 'UNKNOWN' : transcriptId;
+  const transcriptIdDisplay = displayTranscriptId(transcriptId);
+  const displayId = transcriptIdDisplay === '—' ? '—' : truncateHash(transcriptId, 24);
+  const fullId = transcriptIdDisplay;
 
   return (
     <div className="case-header">
