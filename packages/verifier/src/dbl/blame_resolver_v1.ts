@@ -24,10 +24,8 @@ import type {
   TranscriptRound,
   ReplayResult,
 } from "../util/transcript_types.js";
-import { 
-  replayTranscriptV4,
-} from "../util/replay.js";
-import { appendFileSync } from "node:fs";
+import type { Sha256Async } from "../util/replay.js";
+import { replayTranscriptV4 } from "../util/replay.js";
 
 // Use local ReplayResult type
 type ReplayResultV4 = ReplayResult;
@@ -400,7 +398,7 @@ function hasValidAccept(validRounds: TranscriptRound[]): boolean {
  * Returns false and notes should indicate infra exception not applicable.
  */
 function hasProofOfAttempt(
-  lvsh: LVSHState
+  _lvsh: LVSHState
 ): { hasProof: boolean; note?: string } {
   // v4 schema round types: INTENT | ASK | BID | COUNTER | ACCEPT | REJECT | ABORT
   // No settlement attempt types exist, so we cannot constitutionally verify proof-of-attempt
@@ -514,20 +512,20 @@ function collectTrustedEvidenceRefs(
  * - If actor roles cannot be determined, returns INDETERMINATE
  */
 export async function resolveBlameV1(
-  transcriptPathOrObject: string | TranscriptV4
+  transcriptPathOrObject: string | TranscriptV4,
+  options?: { sha256Async?: Sha256Async }
 ): Promise<JudgmentArtifact> {
-  // Load transcript
+  // Load transcript (path string only in Node; browser must pass transcript object so we never load node:fs)
   let transcript: TranscriptV4;
   if (typeof transcriptPathOrObject === "string") {
-    const fs = await import("node:fs");
-    const content = fs.readFileSync(transcriptPathOrObject, "utf-8");
-    transcript = JSON.parse(content);
+    const { loadTranscriptFromPath } = await import("./load_transcript_node.js");
+    transcript = loadTranscriptFromPath(transcriptPathOrObject);
   } else {
     transcript = transcriptPathOrObject;
   }
 
   // Use canonical replay verifier (single verification kernel)
-  const replayResult = await replayTranscriptV4(transcript);
+  const replayResult = await replayTranscriptV4(transcript, options);
 
   // Extract LVSH from replay result
   const lvsh = extractLVSH(transcript, replayResult);
@@ -583,17 +581,14 @@ export async function resolveBlameV1(
     
     // State machine: SUCCESS => terminal=true, required_next_actor=NONE
     const stateMachine = determineStateMachineFields("OK", null, false, null);
-    artifact.requiredNextActor = stateMachine.requiredNextActor;
-    artifact.requiredAction = stateMachine.requiredAction;
+    artifact.requiredNextActor = stateMachine.requiredNextActor ?? 'NONE';
+    artifact.requiredAction = stateMachine.requiredAction ?? '';
     artifact.terminal = stateMachine.terminal;
     
     return artifact;
   }
 
   const failureCode = transcript.failure_event?.code;
-  // #region agent log
-  try { appendFileSync("/Users/seankoons/Desktop/pact/.cursor/debug.log", JSON.stringify({location:"blame_resolver_v1.ts:576",message:"Failure code extracted",data:{failureCode,failureCode_type:typeof failureCode,failureCode_length:failureCode?.length,failureCode_equals_PACT420:failureCode === "PACT-420",hasIntegrityFailure,failure_event_code:transcript.failure_event?.code},timestamp:Date.now(),sessionId:"debug-session",runId:"run1",hypothesisId:"A"})+"\n"); } catch(e) {}
-  // #endregion
 
   // SPECIAL CASE: PACT-420 (provider unreachable) should be handled BEFORE integrity check
   // PACT-420 is deterministic and doesn't depend on transcript integrity
@@ -613,8 +608,8 @@ export async function resolveBlameV1(
     
     // State machine: PACT-420 => required_next_actor=PROVIDER, terminal=true, required_action="RETRY"
     const stateMachine420 = determineStateMachineFields("FAILED", "PACT-420", false, "PROVIDER");
-    artifact.requiredNextActor = stateMachine420.requiredNextActor;
-    artifact.requiredAction = stateMachine420.requiredAction;
+    artifact.requiredNextActor = stateMachine420.requiredNextActor ?? 'NONE';
+    artifact.requiredAction = stateMachine420.requiredAction ?? '';
     artifact.terminal = stateMachine420.terminal;
     
     return artifact;
@@ -638,8 +633,8 @@ export async function resolveBlameV1(
     
     // State machine: PACT-421 => required_next_actor=PROVIDER, terminal=true, required_action="RETRY"
     const stateMachine421 = determineStateMachineFields("FAILED", "PACT-421", false, "PROVIDER");
-    artifact.requiredNextActor = stateMachine421.requiredNextActor;
-    artifact.requiredAction = stateMachine421.requiredAction;
+    artifact.requiredNextActor = stateMachine421.requiredNextActor ?? 'NONE';
+    artifact.requiredAction = stateMachine421.requiredAction ?? '';
     artifact.terminal = stateMachine421.terminal;
     
     return artifact;
@@ -648,9 +643,6 @@ export async function resolveBlameV1(
   // Check for integrity failure (terminal state)
   // NOTE: PACT-420 is handled above, so it won't hit this check
   if (hasIntegrityFailure) {
-    // #region agent log
-    try { appendFileSync("/Users/seankoons/Desktop/pact/.cursor/debug.log", JSON.stringify({location:"blame_resolver_v1.ts:604",message:"Integrity failure detected",data:{failureCode,hasIntegrityFailure},timestamp:Date.now(),sessionId:"debug-session",runId:"run1",hypothesisId:"B"})+"\n"); } catch(e) {}
-    // #endregion
     artifact.status = "FAILED";
     artifact.dblDetermination = "INDETERMINATE_TAMPER";
     artifact.confidence = 0.0;
@@ -659,9 +651,9 @@ export async function resolveBlameV1(
     artifact.notes = "Hash chain or signature verification failed";
     
     // State machine: INTEGRITY failure => terminal=true, required_next_actor=NONE
-    const stateMachine = determineStateMachineFields("FAILED", failureCode, true, null);
-    artifact.requiredNextActor = stateMachine.requiredNextActor;
-    artifact.requiredAction = stateMachine.requiredAction;
+    const stateMachine = determineStateMachineFields("FAILED", failureCode ?? null, true, null);
+    artifact.requiredNextActor = stateMachine.requiredNextActor ?? 'NONE';
+    artifact.requiredAction = stateMachine.requiredAction ?? '';
     artifact.terminal = stateMachine.terminal;
     
     return artifact;
@@ -684,8 +676,8 @@ export async function resolveBlameV1(
     
     // State machine: PACT-101 => required_next_actor=BUYER, terminal=false
     const stateMachine = determineStateMachineFields("FAILED", "PACT-101", false, "BUYER");
-    artifact.requiredNextActor = stateMachine.requiredNextActor;
-    artifact.requiredAction = stateMachine.requiredAction;
+    artifact.requiredNextActor = stateMachine.requiredNextActor ?? 'NONE';
+    artifact.requiredAction = stateMachine.requiredAction ?? '';
     artifact.terminal = stateMachine.terminal;
     
     return artifact;
@@ -732,8 +724,8 @@ export async function resolveBlameV1(
     
     // State machine: PACT-331 => terminal=true (policy violation, no retry)
     const stateMachine = determineStateMachineFields("FAILED", "PACT-331", false, null);
-    artifact.requiredNextActor = stateMachine.requiredNextActor;
-    artifact.requiredAction = stateMachine.requiredAction;
+    artifact.requiredNextActor = stateMachine.requiredNextActor ?? 'NONE';
+    artifact.requiredAction = stateMachine.requiredAction ?? '';
     artifact.terminal = stateMachine.terminal;
     
     // claimedEvidenceRefs already set from failure_event.evidence_refs
@@ -781,8 +773,8 @@ export async function resolveBlameV1(
     
     // State machine: PACT-330 => terminal=true (policy violation, no retry)
     const stateMachine330 = determineStateMachineFields("FAILED", "PACT-330", false, null);
-    artifact.requiredNextActor = stateMachine330.requiredNextActor;
-    artifact.requiredAction = stateMachine330.requiredAction;
+    artifact.requiredNextActor = stateMachine330.requiredNextActor ?? 'NONE';
+    artifact.requiredAction = stateMachine330.requiredAction ?? '';
     artifact.terminal = stateMachine330.terminal;
     
     // claimedEvidenceRefs already set from failure_event.evidence_refs
@@ -810,9 +802,9 @@ export async function resolveBlameV1(
     ];
     
     // State machine: INDETERMINATE => terminal=false, required_next_actor=NONE
-    const stateMachine = determineStateMachineFields("INDETERMINATE", failureCode, false, null);
-    artifact.requiredNextActor = stateMachine.requiredNextActor;
-    artifact.requiredAction = stateMachine.requiredAction;
+    const stateMachine = determineStateMachineFields("INDETERMINATE", failureCode ?? null, false, null);
+    artifact.requiredNextActor = stateMachine.requiredNextActor ?? 'NONE';
+    artifact.requiredAction = stateMachine.requiredAction ?? '';
     artifact.terminal = stateMachine.terminal;
     
     return artifact;
@@ -838,9 +830,9 @@ export async function resolveBlameV1(
     ];
     
     // State machine: INDETERMINATE => terminal=false, required_next_actor=NONE
-    const stateMachine = determineStateMachineFields("INDETERMINATE", failureCode, false, null);
-    artifact.requiredNextActor = stateMachine.requiredNextActor;
-    artifact.requiredAction = stateMachine.requiredAction;
+    const stateMachine = determineStateMachineFields("INDETERMINATE", failureCode ?? null, false, null);
+    artifact.requiredNextActor = stateMachine.requiredNextActor ?? 'NONE';
+    artifact.requiredAction = stateMachine.requiredAction ?? '';
     artifact.terminal = stateMachine.terminal;
     
     return artifact;
@@ -897,8 +889,8 @@ export async function resolveBlameV1(
     // For PACT-404, the required actor is typically PROVIDER (settlement timeout)
     const p404RequiredActor = requiredNextActor === "PROVIDER" ? "PROVIDER" : requiredNextActor || "PROVIDER";
     const stateMachine404 = determineStateMachineFields("FAILED", "PACT-404", false, p404RequiredActor);
-    artifact.requiredNextActor = stateMachine404.requiredNextActor;
-    artifact.requiredAction = stateMachine404.requiredAction;
+    artifact.requiredNextActor = stateMachine404.requiredNextActor ?? 'NONE';
+    artifact.requiredAction = stateMachine404.requiredAction ?? '';
     artifact.terminal = stateMachine404.terminal;
     
     return artifact;
@@ -940,8 +932,8 @@ export async function resolveBlameV1(
     
     // State machine: PACT-505 => terminal=false, use state machine requiredNextActor
     const stateMachine505 = determineStateMachineFields("FAILED", "PACT-505", false, requiredNextActor);
-    artifact.requiredNextActor = stateMachine505.requiredNextActor;
-    artifact.requiredAction = stateMachine505.requiredAction;
+    artifact.requiredNextActor = stateMachine505.requiredNextActor ?? 'NONE';
+    artifact.requiredAction = stateMachine505.requiredAction ?? '';
     artifact.terminal = stateMachine505.terminal;
     
     return artifact;
@@ -972,9 +964,9 @@ export async function resolveBlameV1(
   }
 
   // State machine: Default continuity rule => terminal=false, use state machine requiredNextActor
-  const stateMachine = determineStateMachineFields(artifact.status, failureCode, false, requiredNextActor);
-  artifact.requiredNextActor = stateMachine.requiredNextActor;
-  artifact.requiredAction = stateMachine.requiredAction;
+  const stateMachine = determineStateMachineFields(artifact.status, failureCode ?? null, false, requiredNextActor);
+  artifact.requiredNextActor = stateMachine.requiredNextActor ?? 'NONE';
+  artifact.requiredAction = stateMachine.requiredAction ?? '';
   artifact.terminal = stateMachine.terminal;
 
   // Final override: If PACT-420, ALWAYS ensure dblDetermination is PROVIDER_AT_FAULT
@@ -989,8 +981,8 @@ export async function resolveBlameV1(
     artifact.recommendation = "Provider unreachable during quote request";
     // Ensure state machine fields are correct for PACT-420
     const stateMachine420 = determineStateMachineFields("FAILED", "PACT-420", false, "PROVIDER");
-    artifact.requiredNextActor = stateMachine420.requiredNextActor;
-    artifact.requiredAction = stateMachine420.requiredAction;
+    artifact.requiredNextActor = stateMachine420.requiredNextActor ?? 'NONE';
+    artifact.requiredAction = stateMachine420.requiredAction ?? '';
     artifact.terminal = stateMachine420.terminal;
   }
 
@@ -998,9 +990,6 @@ export async function resolveBlameV1(
   // This is the last thing before return, so nothing can override it
   // Check artifact.failureCode directly (most reliable since it's what the test checks)
   const finalCheckCode = artifact.failureCode;
-  // #region agent log
-  try { appendFileSync("/Users/seankoons/Desktop/pact/.cursor/debug.log", JSON.stringify({location:"blame_resolver_v1.ts:977",message:"Final check before return",data:{finalCheckCode,finalCheckCode_type:typeof finalCheckCode,finalCheckCode_equals_PACT420:finalCheckCode === "PACT-420",dblDetermination_before:artifact.dblDetermination},timestamp:Date.now(),sessionId:"debug-session",runId:"run1",hypothesisId:"K"})+"\n"); } catch(e) {}
-  // #endregion
   if (finalCheckCode === "PACT-420") {
     artifact.dblDetermination = "PROVIDER_AT_FAULT";
     artifact.status = "FAILED";
@@ -1010,14 +999,10 @@ export async function resolveBlameV1(
     artifact.passportImpact = -0.05;
     artifact.recommendation = "Provider unreachable during quote request";
     const stateMachine420 = determineStateMachineFields("FAILED", "PACT-420", false, "PROVIDER");
-    artifact.requiredNextActor = stateMachine420.requiredNextActor;
-    artifact.requiredAction = stateMachine420.requiredAction;
+    artifact.requiredNextActor = stateMachine420.requiredNextActor ?? 'NONE';
+    artifact.requiredAction = stateMachine420.requiredAction ?? '';
     artifact.terminal = stateMachine420.terminal;
   }
-
-  // #region agent log
-  try { appendFileSync("/Users/seankoons/Desktop/pact/.cursor/debug.log", JSON.stringify({location:"blame_resolver_v1.ts:977",message:"Final return artifact",data:{dblDetermination:artifact.dblDetermination,failureCode,artifact_failureCode:artifact.failureCode,status:artifact.status,requiredNextActor:artifact.requiredNextActor,fault_domain:transcript.failure_event?.fault_domain},timestamp:Date.now(),sessionId:"debug-session",runId:"run1",hypothesisId:"D"})+"\n"); } catch(e) {}
-  // #endregion
 
   return artifact;
 }
