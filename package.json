@@ -55,6 +55,7 @@
     "judge:v4": "node packages/verifier/dist/cli/judge_v4.js",
     "evidence:bundle": "tsx packages/sdk/src/cli/evidence_bundle.ts",
     "evidence:verify": "tsx packages/verifier/src/cli/evidence_verify.ts",
+    "evidence-viewer:dev": "pnpm --filter @pact/evidence-viewer dev",
     "pact:replay": "tsx packages/sdk/src/cli/replay.ts",
     "pact:explain": "tsx packages/sdk/src/cli/explain.ts",
     "doctor": "node scripts/doctor.mjs",
