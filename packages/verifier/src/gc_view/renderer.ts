@@ -5,106 +5,37 @@
  * Outputs a single JSON document that can be read in <5 minutes.
  */
 
-import type { TranscriptV4, TranscriptRound, FailureEvent } from "../util/transcript_types.js";
+import type { TranscriptV4, FailureEvent } from "../util/transcript_types.js";
 import type { JudgmentArtifact } from "../dbl/blame_resolver_v1.js";
+import type { Sha256Async } from "../util/replay.js";
 import { replayTranscriptV4 } from "../util/replay.js";
 import { resolveBlameV1 } from "../dbl/blame_resolver_v1.js";
-import { hashCanonicalHex } from "../util/canonical.js";
-import { readFileSync, existsSync } from "node:fs";
-import { join, dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { sha256Hex } from "../util/sha256.js";
+import { stableCanonicalize } from "../util/canonical_pure.js";
 import { isAcceptedConstitutionHash } from "../util/constitution_hashes.js";
 
-/** Transcript hash excluding final_hash (same as SDK computeTranscriptHash). */
-function computeTranscriptHash(transcript: TranscriptV4): string {
-  const { final_hash: _fh, ...rest } = transcript;
-  return hashCanonicalHex(rest);
+/** Human-readable description from FailureEvent (type has no message; use code/stage). */
+function failureEventDescription(f?: FailureEvent): string {
+  if (!f) return "";
+  return [f.code, f.stage].filter(Boolean).join(" - ") || "";
 }
 
-/**
- * Load and hash the Constitution v1 document.
- * @param constitutionPath - Optional path to constitution file (for testing/debugging)
- * @returns Object with version and hash
- */
-function loadConstitution(constitutionPath?: string): { version: "constitution/1.0"; hash: string } {
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = dirname(__filename);
-  
-  // Try paths in order of priority:
-  // 1. Explicit path (testing/debugging)
-  // 2. Package-relative: resources/CONSTITUTION_v1.md (installed as npm package)
-  // 3. Monorepo: packages/verifier/resources/CONSTITUTION_v1.md
-  // 4. Monorepo: docs/CONSTITUTION_v1.md
-  
-  let path: string | undefined;
-  
-  if (constitutionPath && existsSync(constitutionPath)) {
-    path = constitutionPath;
-  }
-  
-  // Check package-relative path (for npm package installations)
-  // From dist/cli or dist/bin, go up to package root then into resources
-  if (!path) {
-    const packageResourcePath = resolve(__dirname, "..", "resources", "CONSTITUTION_v1.md");
-    if (existsSync(packageResourcePath)) {
-      path = packageResourcePath;
-    }
-  }
-  
-  // From dist/gc_view (when built separately), try parent resources
-  if (!path) {
-    const altPackageResourcePath = resolve(__dirname, "..", "..", "resources", "CONSTITUTION_v1.md");
-    if (existsSync(altPackageResourcePath)) {
-      path = altPackageResourcePath;
-    }
-  }
-  
-  // Monorepo fallbacks - resolve repo root
-  if (!path) {
-    let repoRoot: string;
-    if (__dirname.includes("dist")) {
-      // Compiled: dist/cli -> go up to repo root
-      repoRoot = resolve(__dirname, "..", "..", "..", "..");
-    } else {
-      // Source: src/gc_view -> go up to repo root
-      repoRoot = resolve(__dirname, "..", "..", "..", "..");
-    }
-    
-    // Try monorepo locations
-    const monoRepoResourcePath = join(repoRoot, "packages", "verifier", "resources", "CONSTITUTION_v1.md");
-    if (existsSync(monoRepoResourcePath)) {
-      path = monoRepoResourcePath;
-    } else {
-      const docsPath = join(repoRoot, "docs", "CONSTITUTION_v1.md");
-      if (existsSync(docsPath)) {
-        path = docsPath;
-      }
-    }
-  }
-  
-  if (!path) {
-    throw new Error("Could not find CONSTITUTION_v1.md in any expected location");
-  }
-  
-  // Read constitution content
-  const content = readFileSync(path, "utf8");
-  
-  // Canonicalize: normalize line endings to LF, remove trailing whitespace
-  const canonicalContent = content
+/** Canonicalize constitution content (LF, trim trailing whitespace per line). */
+function canonicalizeConstitutionContent(content: string): string {
+  return content
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
     .split("\n")
     .map((line) => line.replace(/\s+$/, ""))
     .join("\n");
-  
-  // Compute SHA-256 hash
-  const hash = sha256Hex(canonicalContent);
-  
-  return {
-    version: "constitution/1.0",
-    hash,
-  };
+}
+
+/** Transcript hash excluding final_hash (same as SDK). Uses hashFn when provided (async path). */
+async function computeTranscriptHashAsync(
+  transcript: TranscriptV4,
+  hashFn: (obj: unknown) => Promise<string>
+): Promise<string> {
+  const { final_hash: _fh, ...rest } = transcript;
+  return hashFn(rest);
 }
 
 /**
@@ -115,7 +46,7 @@ function determineRulesApplied(
   integrity: GCView["integrity"],
   judgment: JudgmentArtifact | null,
   evidenceIndex: GCView["evidence_index"],
-  hasPolicy: boolean,
+  _hasPolicy: boolean,
   passportGatingUsed: boolean
 ): string[] {
   const rules: string[] = [];
@@ -338,8 +269,6 @@ function determineStatus(transcript: TranscriptV4, replayResult: Awaited<ReturnT
   // Check for critical integrity failures (hash chain broken or signatures invalid)
   const hashChainBroken = replayResult.errors.some((e) => e.type === "HASH_CHAIN_BROKEN");
   const signatureInvalid = replayResult.errors.some((e) => e.type === "SIGNATURE_INVALID");
-  const finalHashMismatch = replayResult.errors.some((e) => e.type === "FINAL_HASH_MISMATCH");
-  
   // Only fail integrity if hash chain is broken or signatures are invalid
   // Final hash mismatch alone doesn't fail the transaction (it's a warning)
   if (hashChainBroken || signatureInvalid || (!replayResult.ok && replayResult.integrity_status === "INVALID")) {
@@ -388,23 +317,28 @@ function generateWhatHappened(transcript: TranscriptV4, status: GCView["executiv
   }
   
   if (status === "ABORTED_POLICY") {
-    return `Transaction aborted due to policy violation. ${transcript.failure_event?.message || "Policy constraints were not satisfied."}`;
+    const detail = failureEventDescription(transcript.failure_event) || "Policy constraints were not satisfied.";
+    return `Transaction aborted due to policy violation. ${detail}`;
   }
   
   if (status === "FAILED_TIMEOUT") {
-    return `Transaction failed due to timeout or SLA violation. ${transcript.failure_event?.message || "Settlement deadline was not met."}`;
+    const detail = failureEventDescription(transcript.failure_event) || "Settlement deadline was not met.";
+    return `Transaction failed due to timeout or SLA violation. ${detail}`;
   }
   
   if (status === "FAILED_PROVIDER_UNREACHABLE") {
-    return `Provider unreachable during quote request; negotiation could not be completed. ${transcript.failure_event?.message || "Network failure or provider endpoint unavailable."}`;
+    const detail = failureEventDescription(transcript.failure_event) || "Network failure or provider endpoint unavailable.";
+    return `Provider unreachable during quote request; negotiation could not be completed. ${detail}`;
   }
   
   if (status === "FAILED_PROVIDER_API_MISMATCH") {
-    return `Provider API mismatch - /pact endpoint not found; provider endpoint exists but does not implement Pact protocol. ${transcript.failure_event?.message || "HTTP 404 on /pact route."}`;
+    const detail = failureEventDescription(transcript.failure_event) || "HTTP 404 on /pact route.";
+    return `Provider API mismatch - /pact endpoint not found; provider endpoint exists but does not implement Pact protocol. ${detail}`;
   }
   
   if (status === "DISPUTED") {
-    return `Transaction resulted in dispute. ${transcript.failure_event?.message || "Parties disagreed on outcome."}`;
+    const detail = failureEventDescription(transcript.failure_event) || "Parties disagreed on outcome.";
+    return `Transaction resulted in dispute. ${detail}`;
   }
   
   if (status === "FAILED_INTEGRITY") {
@@ -495,16 +429,17 @@ function extractAssetAndAmount(transcript: TranscriptV4): { asset?: string; amou
 
 /**
  * Extract evidence references from transcript and judgment.
+ * hashFn is used for deterministic ids (runtime-agnostic when sha256Async provided).
  */
-function extractEvidenceIndex(
+async function extractEvidenceIndex(
   transcript: TranscriptV4,
-  judgment: JudgmentArtifact | null
-): GCView["evidence_index"] {
+  judgment: JudgmentArtifact | null,
+  hashFn: (obj: unknown) => Promise<string>
+): Promise<GCView["evidence_index"]> {
   const trusted: GCView["evidence_index"]["trusted"] = [];
   const claimed: GCView["evidence_index"]["claimed"] = [];
   const missingExpected: string[] = [];
-  
-  // Add round hashes as trusted evidence
+
   for (const round of transcript.rounds) {
     if (round.round_hash) {
       trusted.push({
@@ -514,51 +449,50 @@ function extractEvidenceIndex(
       });
     }
   }
-  
-  // Add judgment evidence refs as trusted
+
   if (judgment?.evidenceRefs) {
     for (const ref of judgment.evidenceRefs) {
       if (!trusted.some((e) => e.hash === ref)) {
+        const idHash = (await hashFn(ref)).slice(0, 8);
         trusted.push({
-          id: `evidence-${hashCanonicalHex(ref).slice(0, 8)}`,
+          id: `evidence-${idHash}`,
           type: "evidence_ref",
           hash: ref,
         });
       }
     }
   }
-  
-  // Add claimed evidence from failure event
+
   if (transcript.failure_event) {
     const failure = transcript.failure_event as Record<string, unknown>;
     if ("evidence_refs" in failure && Array.isArray(failure.evidence_refs)) {
       for (const ref of failure.evidence_refs as string[]) {
+        const idHash = (await hashFn(ref)).slice(0, 8);
         claimed.push({
-          id: `claimed-${hashCanonicalHex(ref).slice(0, 8)}`,
+          id: `claimed-${idHash}`,
           type: "claimed_evidence",
           hash: ref,
         });
       }
     }
   }
-  
-  // Add judgment claimed evidence refs
+
   if (judgment?.claimedEvidenceRefs) {
     for (const ref of judgment.claimedEvidenceRefs) {
       if (!claimed.some((e) => e.hash === ref)) {
+        const idHash = (await hashFn(ref)).slice(0, 8);
         claimed.push({
-          id: `claimed-${hashCanonicalHex(ref).slice(0, 8)}`,
+          id: `claimed-${idHash}`,
           type: "claimed_evidence",
           hash: ref,
         });
       }
     }
   }
-  
-  // Sort for determinism
+
   trusted.sort((a, b) => a.id.localeCompare(b.id));
   claimed.sort((a, b) => a.id.localeCompare(b.id));
-  
+
   return { trusted, claimed, missing_expected: missingExpected };
 }
 
@@ -631,7 +565,7 @@ function extractPolicyFailures(transcript: TranscriptV4): GCView["policy"]["poli
     if (code.startsWith("PACT-1") || code === "PASSPORT_REQUIRED") {
       failures.push({
         code,
-        message: failure.message || `Policy violation: ${code}`,
+        message: failureEventDescription(failure) || `Policy violation: ${code}`,
         evidence_refs: [],
       });
     }
@@ -747,7 +681,7 @@ function generateGCTakeaways(
       } else if (integrity.final_hash_validation === "MISMATCH") {
         why.push("Hash chain and signatures are valid (final_hash mismatch is a container-level warning)");
       }
-    } else if (judgment?.dblDetermination && judgment.dblDetermination !== "NO_FAULT") {
+    } else if (judgment?.dblDetermination && (judgment.dblDetermination as string) !== "NO_FAULT") {
       approval_risk = "MEDIUM";
       why.push(`Transaction completed but DBL indicates: ${judgment.dblDetermination}`);
       open_questions.push("Should completed transaction with fault be approved?");
@@ -859,19 +793,18 @@ function generateGCTakeaways(
 /**
  * Generate chain of custody information.
  */
-function generateChainOfCustody(
+async function generateChainOfCustody(
   transcript: TranscriptV4,
   replayResult: Awaited<ReturnType<typeof replayTranscriptV4>>,
   evidenceIndex: GCView["evidence_index"],
+  hashFn: (obj: unknown) => Promise<string>,
   bundlePath?: string
-): GCView["chain_of_custody"] {
+): Promise<GCView["chain_of_custody"]> {
   const transcriptHash = transcript.final_hash || transcript.transcript_id || "";
-  
-  // Compute evidence bundle hash if bundle path provided
+
   let evidenceBundleHash: string | undefined;
   if (bundlePath) {
-    // Use hashCanonicalHex to compute deterministic hash of bundle path
-    evidenceBundleHash = hashCanonicalHex({ bundle_path: bundlePath, transcript_hash: transcriptHash });
+    evidenceBundleHash = await hashFn({ bundle_path: bundlePath, transcript_hash: transcriptHash });
   }
   
   // Determine signature verification status
@@ -1014,16 +947,18 @@ export async function renderGCView(
     transcriptPath?: string;
     bundlePath?: string;
     constitutionPath?: string;
+    /** When provided with constitutionContent, used for constitution hash (browser/runtime-agnostic). */
+    constitutionContent?: string;
+    /** When provided, passed to replay and used for hashing (no Node crypto). */
+    sha256Async?: Sha256Async;
   } = {}
 ): Promise<GCView> {
-  // Verify transcript integrity using real replay verifier (signatures + hash chain)
-  // Cast transcript to SDK type (they're compatible)
-  const replayResult = await replayTranscriptV4(transcript as any);
-  
-  // Get DBL judgment
+  const replayOptions = options.sha256Async ? { sha256Async: options.sha256Async } : undefined;
+  const replayResult = await replayTranscriptV4(transcript as any, replayOptions);
+
   let judgment: JudgmentArtifact | null = null;
   try {
-    judgment = await resolveBlameV1(transcript);
+    judgment = await resolveBlameV1(transcript, replayOptions);
   } catch (error) {
     // Judgment computation failed, continue without it
   }
@@ -1042,29 +977,32 @@ export async function renderGCView(
   
   // Extract policy failures
   const policyFailures = extractPolicyFailures(transcript);
-  
-  // Extract evidence index
-  const evidenceIndex = extractEvidenceIndex(transcript, judgment);
-  
-  // Build integrity section
-  // Hash chain is valid if no HASH_CHAIN_BROKEN errors (final_hash validation is separate)
+
+  const hashFn: (obj: unknown) => Promise<string> =
+    options.sha256Async != null
+      ? (obj) => options.sha256Async!(stableCanonicalize(obj))
+      : async (obj) => {
+          const canonical = stableCanonicalize(obj);
+          const crypto = await import("node:crypto");
+          const h = crypto.createHash("sha256");
+          h.update(canonical, "utf8");
+          return h.digest("hex");
+        };
+
+  const evidenceIndex = await extractEvidenceIndex(transcript, judgment, hashFn);
+
   const hashChainBroken = replayResult.errors.some((e) => e.type === "HASH_CHAIN_BROKEN");
-  
-  // Tri-state final hash validation:
-  // - UNVERIFIABLE: transcript-only (no bundle), or missing claimed final_hash, or missing material to recompute
-  // - MATCH: have both claimed + material, recompute matches claimed
-  // - MISMATCH: have both, they differ
   let finalHashValidation: "MATCH" | "MISMATCH" | "UNVERIFIABLE";
   let finalHashMismatch: boolean | null;
   const transcriptOnly = !options.bundlePath;
   const hasClaimedFinalHash = transcript.final_hash !== undefined && transcript.final_hash !== null && String(transcript.final_hash).length > 0;
   const canRecompute = transcript.rounds.length > 0;
-  
+
   if (transcriptOnly || !hasClaimedFinalHash || !canRecompute) {
     finalHashValidation = "UNVERIFIABLE";
     finalHashMismatch = null;
   } else {
-    const computed = computeTranscriptHash(transcript);
+    const computed = await computeTranscriptHashAsync(transcript, hashFn);
     const claimed = String(transcript.final_hash!);
     if (computed === claimed) {
       finalHashValidation = "MATCH";
@@ -1074,7 +1012,7 @@ export async function renderGCView(
       finalHashMismatch = true;
     }
   }
-  
+
   const integrity: GCView["integrity"] = {
     hash_chain: hashChainBroken ? "INVALID" : "VALID",
     signatures_verified: {
@@ -1085,9 +1023,16 @@ export async function renderGCView(
     final_hash_validation: finalHashValidation,
     notes: [...replayResult.warnings],
   };
-  
-  // Load and hash constitution
-  const constitution = loadConstitution(options.constitutionPath);
+
+  let constitution: { version: "constitution/1.0"; hash: string };
+  if (options.constitutionContent != null && options.sha256Async != null) {
+    const canonicalContent = canonicalizeConstitutionContent(options.constitutionContent);
+    const hash = await options.sha256Async(canonicalContent);
+    constitution = { version: "constitution/1.0", hash };
+  } else {
+    const { loadConstitution } = await import("../load_constitution_node.js");
+    constitution = loadConstitution(options.constitutionPath);
+  }
   
   // Determine which rules are applied
   const hasPolicy = !!transcript.policy_hash;
@@ -1106,7 +1051,7 @@ export async function renderGCView(
       version: constitution.version,
       hash: constitution.hash,
     }),
-    chain_of_custody: generateChainOfCustody(transcript, replayResult, evidenceIndex, options.bundlePath),
+    chain_of_custody: await generateChainOfCustody(transcript, replayResult, evidenceIndex, hashFn, options.bundlePath),
     subject: {
       transcript_id_or_hash: transcriptId,
       intent_fingerprint: transcript.intent_id || undefined,

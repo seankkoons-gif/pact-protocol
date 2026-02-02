@@ -10,6 +10,8 @@ import { join, resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { createHash } from "crypto";
 import JSZip from "jszip";
+import { verifyAuditorPackFromBytes, findConstitutionInZip } from "../../verify_auditor_pack_core.js";
+import { getConstitutionContent } from "../../load_constitution_node.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -656,6 +658,73 @@ describe("Auditor Pack Verify CLI", () => {
       expect(report.recompute_ok).toBe(false);
       expect(report.mismatches.some((m: string) => m.includes("NON_STANDARD_RULES"))).toBe(true);
       expect(report.mismatches.some((m: string) => m.includes("constitution hash mismatch"))).toBe(true);
+    });
+  });
+
+  describe("Constitution lookup (normalized zip names)", () => {
+    it("findConstitutionInZip finds constitution at primary path constitution/CONSTITUTION_v1.md", async () => {
+      const zip = new JSZip();
+      zip.file("constitution/CONSTITUTION_v1.md", "# Constitution v1\nVersion: constitution/1.0");
+      const zipBytes = await zip.generateAsync({ type: "arraybuffer" });
+      const z = await JSZip.loadAsync(zipBytes);
+      const file = findConstitutionInZip(z);
+      expect(file).toBeDefined();
+      const content = await file!.async("string");
+      expect(content).toContain("constitution/1.0");
+    });
+
+    it("findConstitutionInZip finds constitution when entry has backslashes or leading ./", async () => {
+      const zip = new JSZip();
+      zip.file("constitution\\CONSTITUTION_v1.md", "# Constitution v1\nVersion: constitution/1.0");
+      const zipWithBackslash = await zip.generateAsync({ type: "arraybuffer" });
+      const z1 = await JSZip.loadAsync(zipWithBackslash);
+      expect(findConstitutionInZip(z1)).toBeDefined();
+
+      const zip2 = new JSZip();
+      zip2.file("./constitution/CONSTITUTION_v1.md", "# Constitution v1\nVersion: constitution/1.0");
+      const zipWithLeadingDot = await zip2.generateAsync({ type: "arraybuffer" });
+      const z2 = await JSZip.loadAsync(zipWithLeadingDot);
+      expect(findConstitutionInZip(z2)).toBeDefined();
+
+      const zip3 = new JSZip();
+      zip3.file("CONSTITUTION_v1.md", "# Constitution v1\nVersion: constitution/1.0");
+      const zipRootConstitution = await zip3.generateAsync({ type: "arraybuffer" });
+      const z3 = await JSZip.loadAsync(zipRootConstitution);
+      expect(findConstitutionInZip(z3)).toBeDefined();
+    });
+  });
+
+  describe("Design partner bundle pack", () => {
+    it("loads auditor_pack_success.zip, finds constitution, and hash matches manifest", async () => {
+      const packPath = resolve(__dirname, "../../../../../..", "design_partner_bundle", "packs", "auditor_pack_success.zip");
+      if (!existsSync(packPath)) {
+        return; // skip if bundle not present (e.g. in CI)
+      }
+      const zipBuffer = readFileSync(packPath);
+      const zipBytes = new Uint8Array(zipBuffer);
+
+      const sha256Async = async (data: string | Uint8Array): Promise<string> => {
+        const buf = typeof data === "string" ? Buffer.from(data, "utf8") : Buffer.from(data);
+        return createHash("sha256").update(buf).digest("hex");
+      };
+      const standardConstitutionContent = getConstitutionContent();
+
+      const report = await verifyAuditorPackFromBytes(zipBytes, {
+        sha256Async,
+        standardConstitutionContent,
+      });
+
+      expect(report.ok).toBe(true);
+      expect(report.checksums_ok).toBe(true);
+      expect(report.recompute_ok).toBe(true);
+      expect(report.mismatches).toHaveLength(0);
+
+      const zip = await JSZip.loadAsync(zipBuffer);
+      const manifestContent = await zip.file("manifest.json")!.async("string");
+      const manifest = JSON.parse(manifestContent);
+      expect(manifest.constitution_hash).toBeDefined();
+      expect(manifest.constitution_hash).toMatch(/^[a-f0-9]{64}$/);
+      expect(manifest.constitution_version).toBe("constitution/1.0");
     });
   });
 });

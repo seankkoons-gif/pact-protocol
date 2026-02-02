@@ -7,10 +7,18 @@
   "bin": {
     "pact-verifier": "./dist/bin/pact-verifier.js"
   },
+  "exports": {
+    "./core": "./src/verify_auditor_pack_core.ts",
+    "./constitution": "./resources/CONSTITUTION_v1.md"
+  },
   "files": [
     "dist",
     "README.md",
-    "resources"
+    "resources",
+    "src/verify_auditor_pack_core.ts",
+    "src/util/canonical_pure.ts",
+    "src/auditor_pack_verify_shared.ts",
+    "src/load_constitution_node.ts"
   ],
   "scripts": {
     "build": "pnpm run clean && pnpm run build:cli && pnpm run build:bin",

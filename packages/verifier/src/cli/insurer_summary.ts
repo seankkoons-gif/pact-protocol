@@ -21,6 +21,7 @@ import { renderGCView } from "../gc_view/renderer.js";
 import { resolveBlameV1 } from "../dbl/blame_resolver_v1.js";
 import { stableCanonicalize } from "../util/canonical.js";
 import { isAcceptedConstitutionHash } from "../util/constitution_hashes.js";
+import { findConstitutionInZip } from "../verify_auditor_pack_core.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -392,8 +393,8 @@ async function computeConstitutionHashFromPack(packPath: string): Promise<string
 
     const zipBuffer = readFileSync(resolved);
     const zip = await JSZip.loadAsync(zipBuffer);
-    
-    const constitutionFile = zip.file("constitution/CONSTITUTION_v1.md");
+
+    const constitutionFile = findConstitutionInZip(zip);
     if (!constitutionFile) {
       return null;
     }
