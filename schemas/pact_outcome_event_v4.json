@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pact-outcome-event/4.0/schema.json",
+  "title": "Pact Outcome Event Schema v4",
+  "description": "Append-only outcome artifact for post-settlement events. Does not mutate the original transcript. Enables time-decoupled evidence (e.g. T+30, T+180). Multiple outcome events may exist for the same transcript_id, including conflicting claims. Don records only; Boxer may interpret.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "outcome_event_id",
+    "transcript_id",
+    "timestamp_ms",
+    "outcome_type",
+    "signer_public_key_b58",
+    "signature_b58"
+  ],
+  "properties": {
+    "outcome_event_id": {
+      "type": "string",
+      "pattern": "^outcome-[a-f0-9]{64}$",
+      "description": "Unique outcome event identifier. Format: 'outcome-' prefix followed by SHA-256 hash (hex) of canonical outcome payload (excluding signature fields). Enables deduplication and verification."
+    },
+    "transcript_id": {
+      "type": "string",
+      "pattern": "^transcript-[a-f0-9]{64}$",
+      "description": "Transcript this outcome event refers to. MUST match an existing terminal transcript (transcript_id). Outcome events are append-only and do not mutate the transcript."
+    },
+    "timestamp_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix timestamp (milliseconds) when the outcome was reported. Enables time-decoupled evidence (e.g. post-settlement at T+30, T+180)."
+    },
+    "outcome_window": {
+      "type": "string",
+      "description": "Optional normalized window label for analytics (e.g. T+30, T+180). Display/query only; does not affect verification."
+    },
+    "relative_ms_from_terminal": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Optional milliseconds from transcript terminal event (settlement or failure_event) to this outcome. Enables normalized analytics without inferring from timestamps."
+    },
+    "outcome_type": {
+      "type": "string",
+      "description": "Type of outcome. Examples: delivery_quality, authenticity_confirmed, refund_requested, satisfaction_hash, compliance_audit, third_party_oracle. Extensible; verifier/Boxer may interpret.",
+      "examples": ["delivery_quality", "authenticity_confirmed", "refund_requested", "satisfaction_hash", "compliance_audit", "third_party_oracle"]
+    },
+    "claim": {
+      "type": "string",
+      "description": "Human- or machine-readable claim summary. Optional. Does not affect verification; signature is over canonical payload."
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Optional references to evidence artifacts (docs, photos, report hashes). Enables verifiable linkage to supporting evidence."
+    },
+    "signer_public_key_b58": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Base58-encoded Ed25519 public key of the outcome reporter (verifier, auditor, buyer, third-party oracle). MUST match key used to verify signature_b58."
+    },
+    "signature_b58": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Base58-encoded Ed25519 signature over the canonical serialization of this outcome event (excluding signature_b58 and optional claim/evidence_refs if excluded from signed payload). Signature scope MUST be defined by implementation (typically: all fields except signature_b58)."
+    },
+    "signed_at_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix timestamp (milliseconds) when the outcome event was signed. Optional; timestamp_ms may be used as signing time if omitted."
+    },
+    "scheme": {
+      "type": "string",
+      "enum": ["ed25519"],
+      "default": "ed25519",
+      "description": "Signature scheme. v4 supports Ed25519 only."
+    }
+  }
+}

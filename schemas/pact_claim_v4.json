@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pact-claim/4.0/schema.json",
+  "title": "Pact Claim (Assessment) Schema v4",
+  "description": "Standard evidence object for claims/assessments with optional confidence. Can be attached to transcript rounds. Don records only; Don never interprets confidence. Boxer may use for calibration and disagreement metrics.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "claim_type",
+    "subject",
+    "value",
+    "signer_public_key_b58",
+    "signature_b58"
+  ],
+  "properties": {
+    "claim_type": {
+      "type": "string",
+      "description": "Type of claim. Examples: classification, estimate, recommendation. Extensible.",
+      "examples": ["classification", "estimate", "recommendation"]
+    },
+    "subject": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What the claim is about (e.g. intent_id, round_ref, resource_id)."
+    },
+    "value": {
+      "description": "Claim value. May be string, number, boolean, or object. Don does not interpret; Boxer may use for calibration."
+    },
+    "confidence": {
+      "oneOf": [
+        { "type": "number", "minimum": 0, "maximum": 1, "description": "Scalar confidence in [0, 1]. Tight validation to avoid schema slop." },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["p"],
+          "properties": {
+            "p": { "type": "number", "minimum": 0, "maximum": 1, "description": "Point estimate in [0, 1]. Required when using object form." },
+            "interval": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "items": { "type": "number", "minimum": 0, "maximum": 1 },
+              "description": "Optional [low, high] interval; both bounds MUST be in [0, 1]."
+            },
+            "calibration_hint": { "type": "string", "description": "Optional hint for calibration (e.g. model_id, dataset)." }
+          },
+          "description": "Structured confidence: p required and bounded; interval if present must be [0,1]-bounded."
+        }
+      ],
+      "description": "Optional confidence. Tight validation: number in [0,1]; object must have p in [0,1] and interval bounded. Don never interprets; Boxer uses for calibration and disagreement metrics."
+    },
+    "model_id": {
+      "type": "string",
+      "description": "Optional model or service identifier (e.g. gpt-4.2, claude-3.5). Ties into agent/model versioning."
+    },
+    "signer_public_key_b58": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Base58-encoded Ed25519 public key of the claim signer. MUST match key used to verify signature_b58."
+    },
+    "signature_b58": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Base58-encoded Ed25519 signature over the canonical serialization of this claim (excluding signature_b58). Signature scope MUST be defined by implementation."
+    },
+    "signed_at_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix timestamp (milliseconds) when the claim was signed."
+    },
+    "claim_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Optional SHA-256 hash (hex) of canonical claim payload (excluding signature_b58). Enables verification and deduplication."
+    }
+  }
+}
