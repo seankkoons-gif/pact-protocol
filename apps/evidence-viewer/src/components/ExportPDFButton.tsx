@@ -5,14 +5,14 @@ interface ExportPDFButtonProps {
   packData: AuditorPackData;
 }
 
-const PAGE_HEIGHT = 297; // A4
 const MARGIN = 20;
 const MARGIN_BOTTOM = 25;
 const HEADER_ROOM = 20; // Min lines to keep with section header
 const LINE_HEIGHT = 6;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- jsPDF.text() returns this, not number
 function addSection(
-  doc: { internal: { pageSize: { height: number } }; addPage: () => void; setFontSize: (n: number) => void; setFont: (a: string, b: string) => void; text: (s: string, x: number, y: number) => number; splitTextToSize: (text: string, width: number) => string[] },
+  doc: any,
   y: { current: number },
   title: string,
   content: Array<{ label?: string; value: string }>,

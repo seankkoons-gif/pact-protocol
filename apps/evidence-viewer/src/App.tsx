@@ -19,7 +19,7 @@ import ExportPDFButton from './components/ExportPDFButton';
 import ExportInsurerPDFButton from './components/ExportInsurerPDFButton';
 import GenerateClaimsPackageButton from './components/GenerateClaimsPackageButton';
 import { loadPackFromFile } from './lib/loadPack';
-import type { AuditorPackData } from './types';
+import type { AuditorPackData, PackVerifyResultView, ReplayVerifyResultView } from './types';
 import './App.css';
 
 function App() {
@@ -115,8 +115,8 @@ function App() {
                 <OutcomePanel gcView={packData.gcView} />
                 <RoundsTimeline
                   transcriptJson={packData.transcript}
-                  replayVerifyResult={packData.replayVerifyResult}
-                  packVerifyResult={packData.packVerifyResult}
+                  replayVerifyResult={packData.replayVerifyResult as ReplayVerifyResultView | null | undefined}
+                  packVerifyResult={packData.packVerifyResult as PackVerifyResultView | null | undefined}
                 />
               </div>
               <div className="panels-right">
