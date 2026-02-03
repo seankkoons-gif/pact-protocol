@@ -1,0 +1,8 @@
+{
+  "version": "auditor_pack_verify/1.0",
+  "ok": false,
+  "checksums_ok": true,
+  "recompute_ok": true,
+  "mismatches": ["Claimed transcript hash mismatch: final_hash does not match"],
+  "tool_version": "0.0.0"
+}

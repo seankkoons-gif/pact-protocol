@@ -1,0 +1,8 @@
+{
+  "version": "auditor_pack_verify/1.0",
+  "ok": false,
+  "checksums_ok": false,
+  "recompute_ok": false,
+  "mismatches": ["derived/gc_view.json mismatch after canonicalization (recomputed: abc..., original: def...)"],
+  "tool_version": "0.0.0"
+}
