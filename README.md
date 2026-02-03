@@ -79,4 +79,26 @@ The release gate:
 - Skips SDK/examples by design
 - Verifies evidence only
 
+### Verified command set (version-pinned)
+
+Use this exact sequence from repo root for a reproducible run:
+
+```bash
+pnpm install
+pnpm -C packages/verifier build
+
+./design_partner_bundle/verify_all.sh
+
+node packages/verifier/dist/bin/pact-verifier.js auditor-pack-verify --zip design_partner_bundle/packs/auditor_pack_101.zip
+node packages/verifier/dist/bin/pact-verifier.js auditor-pack-verify --zip design_partner_bundle/packs/auditor_pack_420.zip
+node packages/verifier/dist/bin/pact-verifier.js auditor-pack-verify --zip design_partner_bundle/demo/h5-golden/tamper/auditor_pack_semantic_tampered.zip
+
+pnpm --filter @pact/evidence-viewer build
+pnpm --filter @pact/evidence-viewer dev
+```
+
+Then open the URL Vite prints (e.g. http://localhost:5173) for the Evidence Viewer.
+
+**Run viewer dev from the same repo root** where you built/verified—not from a different clone. Avoids port conflicts and wrong-repo confusion. See [docs/WORKFLOW_CONVENTIONS.md](docs/WORKFLOW_CONVENTIONS.md).
+
 For agent integration, SDK usage, and example workflows, see **pact-examples**.

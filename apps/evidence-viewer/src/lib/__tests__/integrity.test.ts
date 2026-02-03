@@ -14,8 +14,7 @@ import type { GCView, InsurerSummary, PackVerifyResultView, AuditorPackData } fr
  * Integrity is derived ONLY from pack_verify (auditor pack verification).
  * - recompute_ok === true → VALID
  * - recompute_ok === false → TAMPERED
- * - ok === false (recompute unknown) → INDETERMINATE
- * - Otherwise → UNKNOWN
+ * - Verifier could not compute (recompute_ok undefined) → INDETERMINATE
  */
 
 const PACK_VERIFY_VALID: PackVerifyResultView = {
@@ -75,13 +74,13 @@ describe('integrityFromPackVerify', () => {
     expect(integrityFromPackVerify(PACK_VERIFY_TAMPERED)).toBe('TAMPERED');
   });
 
-  it('returns INDETERMINATE when ok === false but recompute_ok !== false', () => {
-    expect(integrityFromPackVerify(PACK_VERIFY_INDETERMINATE)).toBe('INDETERMINATE');
-    expect(integrityFromPackVerify(PACK_VERIFY_HASH_MISMATCH_BUT_RECOMPUTE_OK)).toBe('INDETERMINATE');
+  it('returns VALID when recompute_ok === true (warnings do not alter integrity)', () => {
+    expect(integrityFromPackVerify(PACK_VERIFY_INDETERMINATE)).toBe('VALID');
+    expect(integrityFromPackVerify(PACK_VERIFY_HASH_MISMATCH_BUT_RECOMPUTE_OK)).toBe('VALID');
   });
 
-  it('returns UNKNOWN when ok === true but recompute_ok not true', () => {
-    expect(integrityFromPackVerify(PACK_VERIFY_UNKNOWN)).toBe('UNKNOWN');
+  it('returns INDETERMINATE when recompute_ok is undefined (verifier could not compute)', () => {
+    expect(integrityFromPackVerify(PACK_VERIFY_UNKNOWN)).toBe('INDETERMINATE');
   });
 
   it('returns null when pack_verify is missing or not an object', () => {
@@ -89,8 +88,8 @@ describe('integrityFromPackVerify', () => {
     expect(integrityFromPackVerify(undefined)).toBe(null);
   });
 
-  it('returns UNKNOWN for empty or invalid object (no recompute_ok)', () => {
-    expect(integrityFromPackVerify({})).toBe('UNKNOWN');
+  it('returns INDETERMINATE for empty or invalid object (no recompute_ok)', () => {
+    expect(integrityFromPackVerify({})).toBe('INDETERMINATE');
   });
 });
 
@@ -98,15 +97,15 @@ describe('getIntegrityStatus', () => {
   it('returns status from pack_verify when present', () => {
     expect(getIntegrityStatus(PACK_VERIFY_VALID)).toBe('VALID');
     expect(getIntegrityStatus(PACK_VERIFY_TAMPERED)).toBe('TAMPERED');
-    expect(getIntegrityStatus(PACK_VERIFY_INDETERMINATE)).toBe('INDETERMINATE');
-    expect(getIntegrityStatus(PACK_VERIFY_UNKNOWN)).toBe('UNKNOWN');
+    expect(getIntegrityStatus(PACK_VERIFY_INDETERMINATE)).toBe('VALID');
+    expect(getIntegrityStatus(PACK_VERIFY_UNKNOWN)).toBe('INDETERMINATE');
   });
 
-  it('returns UNKNOWN when pack_verify absent or invalid', () => {
-    expect(getIntegrityStatus(null)).toBe('UNKNOWN');
-    expect(getIntegrityStatus(undefined)).toBe('UNKNOWN');
-    expect(getIntegrityStatus({})).toBe('UNKNOWN');
-    expect(getIntegrityStatus(gcViewHashMismatch)).toBe('UNKNOWN');
+  it('returns INDETERMINATE when pack_verify absent or invalid (never UNKNOWN)', () => {
+    expect(getIntegrityStatus(null)).toBe('INDETERMINATE');
+    expect(getIntegrityStatus(undefined)).toBe('INDETERMINATE');
+    expect(getIntegrityStatus({})).toBe('INDETERMINATE');
+    expect(getIntegrityStatus(gcViewHashMismatch)).toBe('INDETERMINATE');
   });
 });
 
@@ -147,9 +146,9 @@ describe('integrity mapping (fixture JSON)', () => {
     expect(integrityFromPackVerify(fixture.default)).toBe('TAMPERED');
   });
 
-  it('INDETERMINATE from pack_verify_indeterminate_hash_mismatch.json', async () => {
+  it('VALID from pack_verify_indeterminate_hash_mismatch.json (recompute_ok true; warnings do not alter integrity)', async () => {
     const fixture = await import('../__fixtures__/pack_verify_indeterminate_hash_mismatch.json');
-    expect(integrityFromPackVerify(fixture.default)).toBe('INDETERMINATE');
+    expect(integrityFromPackVerify(fixture.default)).toBe('VALID');
     expect(getIntegrityWarnings(fixture.default, undefined)).toEqual([
       'Claimed transcript hash mismatch: final_hash does not match',
     ]);
@@ -203,8 +202,8 @@ describe('displayIntegrityOrFault and INDETERMINATE_TOOLTIP', () => {
     expect(displayIntegrityOrFault('TAMPERED')).toBe('TAMPERED');
   });
 
-  it('INDETERMINATE_TOOLTIP explains without "tamper" as accusation', () => {
-    expect(INDETERMINATE_TOOLTIP).toBe('Insufficient evidence to classify as VALID or TAMPERED.');
+  it('INDETERMINATE_TOOLTIP explains verify via CLI', () => {
+    expect(INDETERMINATE_TOOLTIP).toBe('Unable to verify in-browser. Run the CLI command above.');
   });
 });
 

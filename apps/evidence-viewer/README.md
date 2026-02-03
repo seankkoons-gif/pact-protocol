@@ -25,12 +25,34 @@ Read-only evidence viewer for Auditor Packs (ZIP archives).
 
 ## Development
 
+**Run from the same repo root** where you built and verified. Running from a different clone can cause port conflicts and wrong-repo confusion. See [docs/WORKFLOW_CONVENTIONS.md](../../docs/WORKFLOW_CONVENTIONS.md).
+
+From **repo root**, use this exact set (version-pinned):
+
 ```bash
 pnpm install
-pnpm -C apps/evidence-viewer dev
+pnpm -C packages/verifier build
+
+./design_partner_bundle/verify_all.sh
+
+node packages/verifier/dist/bin/pact-verifier.js auditor-pack-verify --zip design_partner_bundle/packs/auditor_pack_101.zip
+node packages/verifier/dist/bin/pact-verifier.js auditor-pack-verify --zip design_partner_bundle/packs/auditor_pack_420.zip
+node packages/verifier/dist/bin/pact-verifier.js auditor-pack-verify --zip design_partner_bundle/demo/h5-golden/tamper/auditor_pack_semantic_tampered.zip
+
+pnpm --filter @pact/evidence-viewer build
+pnpm --filter @pact/evidence-viewer dev
 ```
 
-Open http://localhost:5173 in your browser.
+Open the URL Vite prints (e.g. http://localhost:5173) in your browser.
+
+Minimal (viewer only, after verifier is built):
+
+```bash
+pnpm install
+pnpm -C packages/verifier build
+pnpm --filter @pact/evidence-viewer build
+pnpm --filter @pact/evidence-viewer dev
+```
 
 ## Demo Packs
 

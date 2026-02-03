@@ -56,6 +56,7 @@
     "evidence:bundle": "tsx packages/sdk/src/cli/evidence_bundle.ts",
     "evidence:verify": "tsx packages/verifier/src/cli/evidence_verify.ts",
     "evidence-viewer:dev": "pnpm --filter @pact/evidence-viewer dev",
+    "evidence-viewer:regen-packs": "pnpm verifier:build && ./scripts/regenerate-pack-gc-view.sh apps/evidence-viewer/public/packs/auditor_pack_101.zip apps/evidence-viewer/public/packs/auditor_pack_420.zip apps/evidence-viewer/public/packs/auditor_pack_success.zip",
     "pact:replay": "tsx packages/sdk/src/cli/replay.ts",
     "pact:explain": "tsx packages/sdk/src/cli/explain.ts",
     "doctor": "node scripts/doctor.mjs",

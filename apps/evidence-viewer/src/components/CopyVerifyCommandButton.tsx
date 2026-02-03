@@ -2,16 +2,17 @@ import { useState, useCallback } from 'react';
 import type { AuditorPackData } from '../types';
 
 interface CopyVerifyCommandButtonProps {
-  packData: AuditorPackData;
+  packData: AuditorPackData | null;
   variant?: 'panel' | 'inline';
 }
 
-function buildVerifyCommand(packData: AuditorPackData): string {
-  const path =
-    packData.source === 'demo_public' && packData.demoPublicPath
-      ? `apps/evidence-viewer/public/${packData.demoPublicPath}`
-      : packData.zipFile?.name ?? '<path-to-pack.zip>';
-  return `pact-verifier auditor-pack-verify --zip ${path}`;
+function buildVerifyCommand(packData: AuditorPackData | null): string {
+  if (!packData) return 'pact-verifier auditor-pack-verify --zip <path-to-pack.zip>';
+  if (packData.source === 'demo_public' && packData.demoPublicPath) {
+    return `pact-verifier auditor-pack-verify --zip apps/evidence-viewer/public/${packData.demoPublicPath}`;
+  }
+  const fileName = packData.zipFile?.name ?? '<file>';
+  return `pact-verifier auditor-pack-verify --zip ${fileName}`;
 }
 
 export default function CopyVerifyCommandButton({ packData, variant = 'inline' }: CopyVerifyCommandButtonProps) {

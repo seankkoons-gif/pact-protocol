@@ -7,8 +7,9 @@ interface ExportPDFButtonProps {
 
 const MARGIN = 20;
 const MARGIN_BOTTOM = 25;
-const HEADER_ROOM = 20; // Min lines to keep with section header
 const LINE_HEIGHT = 6;
+const HEADER_LINE_HEIGHT = 8;   // section header (font 12) + spacing
+const MIN_FIRST_BLOCK_HEIGHT = 35; // keep header with at least first content block
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- jsPDF.text() returns this, not number
 function addSection(
@@ -18,7 +19,7 @@ function addSection(
   content: Array<{ label?: string; value: string }>,
 ) {
   const pageHeight = doc.internal.pageSize.height;
-  const minYForHeader = pageHeight - MARGIN_BOTTOM - HEADER_ROOM - 15;
+  const minYForHeader = pageHeight - MARGIN_BOTTOM - HEADER_LINE_HEIGHT - MIN_FIRST_BLOCK_HEIGHT;
   if (y.current > minYForHeader) {
     doc.addPage();
     y.current = MARGIN;

@@ -121,7 +121,7 @@ auditor_pack.zip
   - `manifest.json`
 
 #### 7. "Verify Locally" CTA
-- **Action:** Execute `pact-verifier auditor-pack-verify --zip <pack_path>`
+- **Action:** Execute `node packages/verifier/dist/bin/pact-verifier.js auditor-pack-verify --zip <pack_path>` (from repo root; do not use global `pact-verifier`)
 - **Display:** Show JSON output or parse and display key fields
 - **Status:** Green if `ok=true`, red if `ok=false`
 
@@ -232,7 +232,7 @@ auditor_pack.zip
 **Layout:** Floating action button or prominent button in header
 
 **Action:**
-1. Execute: `pact-verifier auditor-pack-verify --zip <pack_path>`
+1. Execute: `node packages/verifier/dist/bin/pact-verifier.js auditor-pack-verify --zip <pack_path>`
 2. Parse JSON output
 3. Display results:
    - **Status Badge:** Green if `ok=true`, red if `ok=false`
@@ -297,7 +297,7 @@ auditor_pack.zip
 - **Lazy-loaded heavy libraries:** PDF (jsPDF) and ZIP (JSZip) libraries are loaded on demand when the user first exports a PDF, generates the claims package, or loads/downloads from a pack. This keeps the initial bundle smaller and improves first-load performance. Export and download actions may show a brief loading state while the chunk loads; failures to load (e.g. network) should be surfaced to the user.
 
 ### Verification Integration
-- Viewer must have `pact-verifier` CLI available in PATH
+- Viewer displays the verify command; run it from repo root via `node packages/verifier/dist/bin/pact-verifier.js` (see [WORKFLOW_CONVENTIONS.md](../WORKFLOW_CONVENTIONS.md))
 - Execute verification as subprocess
 - Capture stdout (JSON) and stderr (errors) separately
 - Parse JSON output for display

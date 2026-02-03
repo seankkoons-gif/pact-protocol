@@ -22,7 +22,7 @@ export default function ResponsibilityPanel({ judgment, gcView }: Responsibility
   return (
     <div className="responsibility-panel panel">
       <h3>Responsibility</h3>
-      <dl>
+      <dl className="case-meta">
         <dt>Fault Domain</dt>
         <dd>
           <span className="badge">{faultDomain}</span>
