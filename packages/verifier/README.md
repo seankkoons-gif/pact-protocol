@@ -2,10 +2,20 @@
 
 Pact v4 Transcript Verifier and Default Blame Logic (DBL) - Standalone CLI.
 
-## Installation
+## From monorepo (recommended for docs/workflows)
+
+**Do not use global `pact-verifier`** in monorepo docs or workflows. Always run via:
 
 ```bash
-# Install globally
+node packages/verifier/dist/bin/pact-verifier.js <subcommand> [args...]
+```
+
+See [docs/WORKFLOW_CONVENTIONS.md](../../docs/WORKFLOW_CONVENTIONS.md).
+
+## Installation (published package)
+
+```bash
+# Install globally (when using published npm package)
 npm install -g @pact/verifier
 
 # Or use npx (no install required)
@@ -17,12 +27,20 @@ npx @pact/verifier gc-view --transcript transcript.json
 ### Verify a Transaction (Offline)
 
 ```bash
+# From monorepo:
+node packages/verifier/dist/bin/pact-verifier.js gc-view --transcript transcript.json
+
+# Or if installed globally:
 pact-verifier gc-view --transcript transcript.json
 ```
 
 ### Verify an Auditor Pack (Offline)
 
 ```bash
+# From monorepo:
+node packages/verifier/dist/bin/pact-verifier.js auditor-pack-verify --zip auditor_pack.zip
+
+# Or if installed globally:
 pact-verifier auditor-pack-verify --zip auditor_pack.zip
 ```
 

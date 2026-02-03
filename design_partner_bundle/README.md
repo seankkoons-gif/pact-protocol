@@ -58,19 +58,37 @@ Each scenario includes:
 - Node.js 18+ and npm
 - jq (for JSON parsing)
 
-### Option 1: Install Verifier Globally (if published)
+**Recommended:** Use the verifier from the repo via `node packages/verifier/dist/bin/pact-verifier.js` (see "Verify Everything" below). Do **not** use global `pact-verifier` in docs or workflows—it may point to a different version. See [docs/WORKFLOW_CONVENTIONS.md](../docs/WORKFLOW_CONVENTIONS.md).
 
-```bash
-npm install -g @pact/verifier
-```
-
-### Option 2: Use Included Tarball (recommended for review)
-
-The bundle includes a pre-built verifier tarball. The verification script will automatically use it.
+The bundle includes a pre-built verifier tarball (`verifier/pact-verifier-0.2.0.tgz`). The verification script will use it when run from this directory.
 
 ---
 
 ## Verify Everything
+
+### From repo root (version-pinned)
+
+Run this exact set from the **repository root** for a reproducible run:
+
+```bash
+pnpm install
+pnpm -C packages/verifier build
+
+./design_partner_bundle/verify_all.sh
+
+node packages/verifier/dist/bin/pact-verifier.js auditor-pack-verify --zip design_partner_bundle/packs/auditor_pack_101.zip
+node packages/verifier/dist/bin/pact-verifier.js auditor-pack-verify --zip design_partner_bundle/packs/auditor_pack_420.zip
+node packages/verifier/dist/bin/pact-verifier.js auditor-pack-verify --zip design_partner_bundle/demo/h5-golden/tamper/auditor_pack_semantic_tampered.zip
+
+pnpm --filter @pact/evidence-viewer build
+pnpm --filter @pact/evidence-viewer dev
+```
+
+Then open the URL Vite prints for the Evidence Viewer.
+
+**Important:** Run viewer dev from the **same repo root** where you built and verified. Running from a different clone can cause port conflicts and wrong-repo confusion. See [docs/WORKFLOW_CONVENTIONS.md](../docs/WORKFLOW_CONVENTIONS.md).
+
+### From this directory
 
 Run the verification script from this directory:
 
@@ -195,15 +213,14 @@ unzip -p packs/auditor_pack_success.zip source/transcript.json | jq .
 unzip -p packs/auditor_pack_success.zip manifest.json | jq .
 ```
 
-To verify with the CLI:
+To verify with the CLI (from repo root; do **not** use global `pact-verifier`):
 
 ```bash
-# Install verifier from tarball
-npm install -g ./verifier/pact-verifier-0.2.0.tgz
-
-# Verify a pack
-pact-verifier auditor-pack-verify --zip packs/auditor_pack_success.zip
+# From repo root, after: pnpm -C packages/verifier build
+node packages/verifier/dist/bin/pact-verifier.js auditor-pack-verify --zip design_partner_bundle/packs/auditor_pack_success.zip
 ```
+
+See [docs/WORKFLOW_CONVENTIONS.md](../docs/WORKFLOW_CONVENTIONS.md) for conventions.
 
 ---
 

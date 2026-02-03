@@ -2,6 +2,10 @@
 
 Complete index of all PACT documentation for easy reference.
 
+## Workflow Conventions
+
+- **[WORKFLOW_CONVENTIONS.md](./WORKFLOW_CONVENTIONS.md)** - Never use global `pact-verifier`; always `node packages/verifier/dist/bin/pact-verifier.js`. Run Evidence Viewer dev from the same repo you built/verified.
+
 ## Quick Start
 
 **New to PACT?** Start here:
@@ -174,14 +178,14 @@ Complete index of all PACT documentation for easy reference.
 3. Publish packages
 
 **Evidence Viewer (Auditor Packs):**
-1. Run `pnpm -C apps/evidence-viewer dev` and open http://localhost:5173
-2. Load an Auditor Pack ZIP (upload or demo mode)
+1. From repo root, use the **verified command set (version-pinned)** in [README.md](../README.md#verified-command-set-version-pinned): `pnpm install` → `pnpm -C packages/verifier build` → `./design_partner_bundle/verify_all.sh` → manual pack verify commands → `pnpm --filter @pact/evidence-viewer build` → `pnpm --filter @pact/evidence-viewer dev`. Run viewer dev from the **same repo root** (see [WORKFLOW_CONVENTIONS.md](./WORKFLOW_CONVENTIONS.md)).
+2. Open the URL Vite prints (e.g. http://localhost:5173); load an Auditor Pack ZIP (upload or demo mode)
 3. Use Copy Transcript ID; Export GC View / Insurer Summary PDFs; Generate Claims Intake Package; view Passport Panel
 4. See [gc/EVIDENCE_VIEWER_SPEC.md](./gc/EVIDENCE_VIEWER_SPEC.md) and repo root `apps/evidence-viewer/README.md`
 
 **Passport Registry (multi-source ready):**
-1. Recompute from multiple transcript directories: `pact-verifier passport-v1-recompute --transcripts-dir dir1 --transcripts-dir dir2`
-2. Query local registry: `pact-verifier passport-v1-query --signer <pubkey> [--registry registry.json]`
+1. Recompute from multiple transcript directories: `node packages/verifier/dist/bin/pact-verifier.js passport-v1-recompute --transcripts-dir dir1 --transcripts-dir dir2`
+2. Query local registry: `node packages/verifier/dist/bin/pact-verifier.js passport-v1-query --signer <pubkey> [--registry registry.json]`
 3. See [passport/PASSPORT_REGISTRY_CONTRACT.md](./passport/PASSPORT_REGISTRY_CONTRACT.md)
 
 **Production Readiness:**
