@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 pnpm -C packages/verifier build >/dev/null
+pnpm -C packages/boxer build >/dev/null 2>&1 || true
 #
 # Design Partner Bundle - Verification Script
 #
